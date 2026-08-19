@@ -131,6 +131,8 @@
       let sawSignal = false;
       let lastLevel = 0;
       let lastTrackState = '';
+      let mutedSince = 0;
+      let mutedWarned = false;
 
       deviceChangeHandler = () => {
         // A troca/mute físico do dispositivo pode alterar a faixa fornecida pelo driver.
@@ -164,16 +166,28 @@
         if (level >= 4 || peak >= 0.08) sawSignal = true;
         setLevel(level);
 
-        const trackState = `${track.readyState}:${track.enabled}:${track.muted}`;
+        // MediaStreamTrack.muted é uma flag do navegador que pode vir "true"
+        // momentaneamente logo após o getUserMedia() (antes do primeiro frame real
+        // chegar), sem que o microfone esteja de fato mutado. Só tratamos como
+        // silenciado de verdade se a flag ficar persistente por um tempo mínimo
+        // E nenhum sinal de áudio real tiver sido detectado nesse intervalo.
+        if (track.muted && level < 3) {
+          if (!mutedSince) mutedSince = now;
+          if (!mutedWarned && now - mutedSince > 700) {
+            mutedWarned = true;
+            if (status) status.textContent = 'O navegador marcou o microfone como silenciado. Desative o mute físico e fale para testar novamente.';
+          }
+        } else {
+          mutedSince = 0;
+          mutedWarned = false;
+        }
+
+        const trackState = `${track.readyState}:${track.enabled}`;
         if (trackState !== lastTrackState) {
           lastTrackState = trackState;
           if (track.readyState === 'ended') {
             if (status) status.textContent = 'O dispositivo de microfone parou de fornecer áudio. Verifique o mute físico ou o dispositivo selecionado.';
             setLevel(0);
-          } else if (track.muted && !sawSignal && now - started > 2200) {
-            if (status) status.textContent = 'O navegador sinalizou o dispositivo como temporariamente silenciado. O medidor ainda é a referência principal; fale para verificar a entrada.';
-          } else if (!track.muted && sawSignal) {
-            if (status && now - started < 9000) status.textContent = 'Microfone funcionando — sinal de áudio detectado.';
           }
         }
 
