@@ -1,6 +1,9 @@
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 const session = require('express-session');
+const SqliteSessionStore = require('./session/SqliteSessionStore');
+const { UPLOAD_DIR } = require('./storage');
 const http = require('http');
 const { Server: SocketIOServer } = require('socket.io');
 
@@ -18,21 +21,22 @@ const { initSockets } = require('./sockets');
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me';
-
 if (NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
   throw new Error('SESSION_SECRET é obrigatório em produção.');
 }
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 
 // Ativa o primeiro administrador através da variável ADMIN_USERNAME
 bootstrapAdmin();
 
 const app = express();
+if (NODE_ENV === 'production') app.set('trust proxy', 1);
 const server = http.createServer(app);
 const io = new SocketIOServer(server);
 app.set('io', io);
 
 const sessionMiddleware = session({
+  store: new SqliteSessionStore(),
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
@@ -46,7 +50,7 @@ const sessionMiddleware = session({
 app.use(express.json({ limit: '3mb' }));
 app.use(sessionMiddleware);
 app.use(express.static(path.join(__dirname, '..', 'client')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { maxAge: '7d', index: false }));
+app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d', index: false }));
 
 app.use('/api/auth', authRouter);
 app.use('/api/friends', friendsRouter);

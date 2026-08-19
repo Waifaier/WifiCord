@@ -1,0 +1,24 @@
+# Example Render Blueprint fragment.
+# This is intentionally an example, not a drop-in service definition, because
+# the existing WifiCord service name/plan should remain under the user's control.
+#
+# service:
+#   type: web
+#   env: node
+#   buildCommand: npm ci
+#   startCommand: npm start
+#   envVars:
+#     - key: NODE_ENV
+#       value: production
+#     - key: ADMIN_USERNAME
+#       value: waifaier
+#     - key: SESSION_SECRET
+#       sync: false
+#     - key: SQLITE_PATH
+#       value: /var/data/chat.db
+#     - key: UPLOAD_DIR
+#       value: /var/data/uploads
+#   disk:
+#     name: wificord-data
+#     mountPath: /var/data
+#     sizeGB: 1

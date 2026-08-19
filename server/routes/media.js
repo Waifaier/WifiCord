@@ -5,9 +5,9 @@ const crypto = require('crypto');
 const db = require('../database/db');
 const User = require('../models/User');
 const { requireAuth } = require('./auth');
+const { UPLOAD_DIR } = require('../storage');
 
 const router = express.Router();
-const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 const MAX_BYTES = 4 * 1024 * 1024 * 1024;
 const ALLOWED = new Set([
   'image/png','image/jpeg','image/gif','image/webp','image/avif',

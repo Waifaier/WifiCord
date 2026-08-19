@@ -1,6 +1,8 @@
 node_modules/
-server/database/*.db
-server/database/*.db-journal
-server/database/*.db-wal
-server/database/*.db-shm
 .env
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+server/uploads/*
+!server/uploads/.gitkeep

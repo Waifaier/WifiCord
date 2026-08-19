@@ -1,8 +1,7 @@
-const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
+const { SQLITE_PATH } = require('../storage');
 
-const dbPath = path.join(__dirname, 'chat.db');
-const db = new DatabaseSync(dbPath);
+const db = new DatabaseSync(SQLITE_PATH);
 
 db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
@@ -164,6 +163,12 @@ CREATE TABLE IF NOT EXISTS user_local_nicknames (
   FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY(target_user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS sessions (
+  sid TEXT PRIMARY KEY,
+  sess TEXT NOT NULL,
+  expire_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions(expire_at);
 `);
 
 for (const [table, column, definition] of [

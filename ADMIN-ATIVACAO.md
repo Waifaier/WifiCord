@@ -1,27 +1,38 @@
-# Ativar o administrador
+# Ativação do administrador
 
-A ativação inicial é deliberadamente local: nenhum usuário consegue se promover a administrador pelo navegador.
+A ativação inicial continua sendo controlada pelo servidor. Nenhum usuário consegue se promover pelo navegador.
 
-1. Crie sua conta normalmente e feche o servidor.
-2. No terminal, dentro da pasta `WifiCord`, execute:
+## Render
+
+Configure a Environment Variable:
+
+```text
+ADMIN_USERNAME=waifaier
+```
+
+Depois:
+
+1. Faça o deploy.
+2. Se `waifaier` ainda não existir, o log mostrará que o usuário ainda não existe.
+3. Crie normalmente a conta `waifaier`.
+4. Faça um novo **Restart** ou **Deploy** do serviço.
+5. O bootstrap encontrará a conta e a promoverá automaticamente.
+6. O próximo restart não criará outro administrador, porque já haverá um admin.
+
+Se já existir qualquer administrador, `ADMIN_USERNAME` não promove automaticamente outra conta.
+
+## Local
+
+Depois de criar uma conta:
 
 ```bash
-npm install
 npm run admin:setup -- SEU_USUARIO
 ```
 
-3. Inicie novamente:
+O comando só funciona enquanto não houver administrador.
 
-```bash
-npm start
-```
+## Segurança
 
-4. Entre na conta promovida. O botão 🛡️ **Admin** aparecerá na interface.
+`ADMIN_USERNAME` é lido exclusivamente de `process.env` no servidor. Alterações feitas pelo navegador não podem alterar Environment Variables do Render.
 
-O comando só funciona se ainda não existir nenhum administrador. Depois da primeira ativação, ele não pode ser usado para criar outro administrador. Administradores podem conceder/remover a função pela própria área administrativa.
-
-## Moderação
-
-O painel possui pontos, WFNA, funções, mute de chat/voz, castigo, ban temporário/permanente, desbloqueio, encerramento de chamada e efeitos reversíveis como Rainbow e Susto.
-
-O mute de voz é aplicado ao cliente e também impede novas chamadas pelo servidor. Como a chamada usa WebRTC P2P, a mídia de uma conexão já estabelecida não passa pelo servidor; por isso o painel também envia o bloqueio ao cliente e encerra chamadas quando solicitado.
+O segredo da sessão (`SESSION_SECRET`) também deve existir somente nas Environment Variables do ambiente de produção.
