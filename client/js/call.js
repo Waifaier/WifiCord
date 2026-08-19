@@ -105,7 +105,7 @@ function pcCreate(){
   el.callBar?.classList.add('has-remote');refreshParticipants();
  };
  pc.onconnectionstatechange=()=>{
-  if(pc.connectionState==='connected'){window.Sounds?.play('call-join');state._iceRestarted=false;}
+  if(pc.connectionState==='connected'){window.Sounds?.stopLoop();window.Sounds?.play('call-join');state._iceRestarted=false;}
   if(pc.connectionState==='disconnected'){
    setTimeout(()=>{if(state.pc===pc&&pc.connectionState==='disconnected'&&!state._iceRestarted){state._iceRestarted=true;negotiate(true);}},1500);
   }
@@ -134,14 +134,14 @@ async function startCall(target,type){
  if(!target)return window.App?.toast('Selecione um amigo para ligar.','error');
  if(state.inCall||state.pendingOffer)return;
  try{await prepare(target,type);const offer=await state.pc.createOffer();await state.pc.setLocalDescription(offer);
- window.ChatSocket.sendCallOffer({toUserId:target,sdp:state.pc.localDescription,callType:type,renegotiation:false});}
- catch(e){window.App?.toast(e.message||'Não foi possível iniciar a chamada.','error');endCall(false);}
+ window.ChatSocket.sendCallOffer({toUserId:target,sdp:state.pc.localDescription,callType:type,renegotiation:false});window.Sounds?.startLoop('ringback');}
+ catch(e){window.Sounds?.stopLoop();window.App?.toast(e.message||'Não foi possível iniciar a chamada.','error');endCall(false);}
 }
 function handleOffer(data){
  if(!data?.fromUserId||!data.sdp)return;
  if(state.inCall&&state.targetUserId&&String(state.targetUserId)===String(data.fromUserId)&&data.renegotiation){handleRenegotiate(data);return;}
  if(state.inCall||state.pendingOffer){window.ChatSocket.sendCallHangup({toUserId:data.fromUserId});return;}
- state.pendingOffer=data;window.Sounds?.play('call-incoming');
+ state.pendingOffer=data;window.Sounds?.startLoop('incoming');
  if(el.incomingText)el.incomingText.textContent=`${friendName(data.fromUserId)} está te ligando (${data.callType==='audio'?'voz':'vídeo'}).`;
  document.getElementById('modal-overlay')?.classList.remove('hidden');el.incomingModal?.classList.remove('hidden');
 }
@@ -151,17 +151,18 @@ async function handleRenegotiate(data){
  window.ChatSocket.sendCallAnswer({toUserId:data.fromUserId,sdp:state.pc.localDescription,renegotiation:true});}catch(e){console.error(e);}
 }
 async function accept(){
- const d=state.pendingOffer;if(!d)return;closeModals();
+ const d=state.pendingOffer;if(!d)return;window.Sounds?.stopLoop();closeModals();
  try{await prepare(d.fromUserId,d.callType||'video');await state.pc.setRemoteDescription(new RTCSessionDescription(d.sdp));await flushCandidates();
  const a=await state.pc.createAnswer();await state.pc.setLocalDescription(a);window.ChatSocket.sendCallAnswer({toUserId:d.fromUserId,sdp:state.pc.localDescription,renegotiation:false});state.pendingOffer=null;}
  catch(e){window.App?.toast(e.message||'Não foi possível atender.','error');state.pendingOffer=null;endCall(true);}
 }
-function reject(){if(state.pendingOffer)window.ChatSocket.sendCallHangup({toUserId:state.pendingOffer.fromUserId});state.pendingOffer=null;closeModals();window.Sounds?.play('call-leave');}
+function reject(){window.Sounds?.stopLoop();if(state.pendingOffer)window.ChatSocket.sendCallHangup({toUserId:state.pendingOffer.fromUserId});state.pendingOffer=null;closeModals();window.Sounds?.play('call-leave');}
 async function answer(data){if(!state.pc||!data?.sdp)return;try{await state.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));await flushCandidates();}catch(e){console.error(e);}}
 async function ice(data){if(!data?.candidate)return;const expected=state.targetUserId||state.pendingOffer?.fromUserId;if(!expected||String(data.fromUserId)!==String(expected))return;
  if(!state.pc||!state.pc.remoteDescription){state.pendingCandidates.push(data.candidate);return;}try{await state.pc.addIceCandidate(data.candidate);}catch(_){}}
-function handleHangup(data){if(state.pendingOffer&&(!data||String(data.fromUserId)===String(state.pendingOffer.fromUserId))){state.pendingOffer=null;closeModals();}if(state.inCall&&(!data||String(data.fromUserId)===String(state.targetUserId)))endCall(false);}
+function handleHangup(data){window.Sounds?.stopLoop();if(state.pendingOffer&&(!data||String(data.fromUserId)===String(state.pendingOffer.fromUserId))){state.pendingOffer=null;closeModals();}if(state.inCall&&(!data||String(data.fromUserId)===String(state.targetUserId)))endCall(false);}
 function endCall(notify){
+ window.Sounds?.stopLoop();
  if(state.groupMode){window.ChatSocket.leaveServerCall({serverId:state.groupServerId,channelId:state.groupChannelId});for(const id of [...state.groupPeers.keys()])removeGroupPeer(id);state.groupPeers.clear();state.groupMode=false;state.groupServerId=null;state.groupChannelId=null;}
  const target=state.targetUserId;if(notify&&target)window.ChatSocket.sendCallHangup({toUserId:target});
  try{state.pc?.close()}catch(_){}

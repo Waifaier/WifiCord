@@ -85,8 +85,10 @@
       const email = loginForm.email.value.trim();
       const password = loginForm.password.value;
       const submitBtn = loginForm.querySelector('button[type="submit"]');
+      const originalLabel = submitBtn.textContent;
 
       submitBtn.disabled = true;
+      submitBtn.textContent = 'Entrando...';
       try {
         const data = await api('/api/auth/login', {
           method: 'POST',
@@ -97,6 +99,7 @@
         toast(err.message || 'Erro ao entrar.', 'error');
       } finally {
         submitBtn.disabled = false;
+        submitBtn.textContent = originalLabel;
       }
     });
   }
@@ -110,8 +113,10 @@
       const email = registerForm.email.value.trim();
       const password = registerForm.password.value;
       const submitBtn = registerForm.querySelector('button[type="submit"]');
+      const originalLabel = submitBtn.textContent;
 
       submitBtn.disabled = true;
+      submitBtn.textContent = 'Criando conta...';
       try {
         const data = await api('/api/auth/register', {
           method: 'POST',
@@ -122,6 +127,7 @@
         toast(err.message || 'Erro ao criar conta.', 'error');
       } finally {
         submitBtn.disabled = false;
+        submitBtn.textContent = originalLabel;
       }
     });
   }

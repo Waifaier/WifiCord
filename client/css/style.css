@@ -90,6 +90,14 @@ input:focus, textarea:focus, select:focus {
 }
 .btn:hover { background: var(--bg-elevated); box-shadow: var(--shadow-md); transform: translateY(-1px); }
 .btn:active { transform: translateY(0) scale(0.97); box-shadow: var(--shadow-sm); }
+/* Estado desabilitado consistente para qualquer botão (antes só .btn-primary e .btn-icon do header tinham). */
+button:disabled, .btn:disabled, .btn.disabled {
+  opacity: .5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none;
+  pointer-events: none;
+}
 
 .btn-primary {
   background: linear-gradient(135deg, var(--accent-primary-start), var(--accent-primary-end));
@@ -1380,3 +1388,14 @@ body { min-height:100vh; }
   transition: background var(--transition-base);
 }
 *::-webkit-scrollbar-thumb:hover { background: var(--accent-primary-end); }
+
+/* Corrige imagens de mensagem (sticker, upload, etc.) que renderizam no tamanho original do arquivo */
+#messages-list .message-content img:not(.avatar-img) {
+  max-width: min(420px, 100%) !important;
+  max-height: 420px !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  display: block !important;
+  border-radius: 12px;
+}
