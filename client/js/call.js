@@ -2,10 +2,20 @@
 // indicadores de voz, participantes e tela cheia.
 (function(){
 'use strict';
-const RTC_CONFIG={iceServers:[
+const FALLBACK_RTC_CONFIG={iceServers:[
  {urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']},
  {urls:'stun:stun.cloudflare.com:3478'}
 ]};
+let RTC_CONFIG=FALLBACK_RTC_CONFIG;
+let rtcConfigPromise=null;
+async function loadRtcConfig(){
+ if(rtcConfigPromise) return rtcConfigPromise;
+ rtcConfigPromise=fetch('/api/config/rtc',{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():null).then(cfg=>{
+   if(cfg?.iceServers?.length) RTC_CONFIG={iceServers:cfg.iceServers};
+   return RTC_CONFIG;
+ }).catch(()=>RTC_CONFIG);
+ return rtcConfigPromise;
+}
 const state={pc:null,localStream:null,screenStream:null,screenSender:null,targetUserId:null,callType:'video',
  micEnabled:true,camEnabled:false,inCall:false,pendingOffer:null,pendingCandidates:[],makingOffer:false,
  localAudioCtx:null,remoteAudioCtx:null,speakingTimer:null,remoteSpeakingTimer:null,fullscreen:false,adminVoiceMutedUntil:0,shareResolution:720,shareType:'screen',shareSystemAudio:false,headphonesOff:false,groupMode:false,groupServerId:null,groupChannelId:null,groupType:'audio',groupPeers:new Map()};
@@ -90,9 +100,27 @@ function pcCreate(){
   }
   el.callBar?.classList.add('has-remote');refreshParticipants();
  };
+ let recoveryTimer=null;
+ let recoveryAttempts=0;
+ const recoverIce=async()=>{
+  if(state.pc!==pc||!state.inCall||!state.targetUserId)return;
+  if(pc.signalingState!=='stable')return;
+  if(recoveryAttempts>=3){
+   window.App?.toast('A conexão de voz perdeu a rota de mídia. Tentando novamente…','error');
+   return;
+  }
+  recoveryAttempts++;
+  try{
+   const offer=await pc.createOffer({iceRestart:true});
+   await pc.setLocalDescription(offer);
+   window.ChatSocket.sendCallOffer({toUserId:state.targetUserId,sdp:pc.localDescription,callType:state.callType,renegotiation:true});
+  }catch(e){console.warn('Falha ao reiniciar ICE:',e);}
+ };
  pc.onconnectionstatechange=()=>{
-  if(pc.connectionState==='connected'){window.Sounds?.play('call-join');}
-  if(['failed','disconnected'].includes(pc.connectionState)){setTimeout(()=>{if(state.pc===pc&&['failed','disconnected'].includes(pc.connectionState))endCall(true);},2500);}
+  if(pc.connectionState==='connected'){recoveryAttempts=0;if(recoveryTimer){clearTimeout(recoveryTimer);recoveryTimer=null;}window.Sounds?.play('call-join');}
+  else if(['failed','disconnected'].includes(pc.connectionState)){
+   if(!recoveryTimer) recoveryTimer=setTimeout(()=>{recoveryTimer=null;recoverIce();}, pc.connectionState==='failed'?700:1200);
+  }
  };
  return pc;
 }
@@ -104,6 +132,7 @@ async function negotiate(){
  catch(e){console.error(e)}finally{state.makingOffer=false;}
 }
 async function prepare(target,type){
+ await loadRtcConfig();
  state.targetUserId=target;state.callType=type;state.localStream=await getLocalStream(type==='video');
  state.inCall=true;state.micEnabled=true;state.camEnabled=type==='video';el.callBar?.classList.toggle('audio-call',type==='audio');
  state.pc=pcCreate();state.localStream.getTracks().forEach(t=>{if(t.kind==='audio')t.enabled=true;const sender=t.kind==='video'?state.pc.getTransceivers().find(x=>x.receiver?.track?.kind==='video')?.sender:null;if(sender) sender.replaceTrack(t); else state.pc.addTrack(t,state.localStream);});
@@ -236,7 +265,7 @@ function createGroupPeer(peerId,initiator){const id=String(peerId);if(groupPeerP
  try { pc.addTransceiver('video',{direction:'sendrecv'}); } catch (_) {}
  const peer={pc,video:null,audios:[]};state.groupPeers.set(id,peer);state.localStream?.getTracks().forEach(t=>{const sender=t.kind==='video'?pc.getTransceivers().find(x=>x.receiver?.track?.kind==='video')?.sender:null;if(sender)sender.replaceTrack(t);else pc.addTrack(t,state.localStream);});pc.onicecandidate=e=>{if(e.candidate)window.ChatSocket.sendServerCallIce({toUserId:Number(id),serverId:state.groupServerId,channelId:state.groupChannelId,candidate:e.candidate});};pc.ontrack=e=>{if(e.track.kind==='video'){if(!(peer.video instanceof MediaStream))peer.video=new MediaStream();if(!peer.video.getTracks().some(t=>t.id===e.track.id))peer.video.addTrack(e.track);renderGroupTiles();}else{const a=document.createElement('audio');a.autoplay=true;a.playsInline=true;a.srcObject=new MediaStream([e.track]);a.volume=1;document.body.appendChild(a);peer.audios.push(a);a.play?.().catch(()=>{});}};pc.onconnectionstatechange=()=>{if(['failed','disconnected','closed'].includes(pc.connectionState))removeGroupPeer(id);};state.groupPeers.set(id,peer);if(initiator)pc.createOffer().then(o=>pc.setLocalDescription(o)).then(()=>window.ChatSocket.sendServerCallOffer({toUserId:Number(id),serverId:state.groupServerId,channelId:state.groupChannelId,callType:state.groupType,sdp:pc.localDescription})).catch(()=>{});return peer;}
 function removeGroupPeer(id){const p=state.groupPeers.get(String(id));if(!p)return;p.pc.close();p.audios?.forEach(a=>a.remove());state.groupPeers.delete(String(id));renderGroupTiles();}
-async function startServerCall(serverId,channelId,type){if(state.inCall)return;try{state.groupMode=true;state.groupServerId=serverId;state.groupChannelId=channelId;state.groupType=type;state.localStream=await getLocalStream(type==='video');state.inCall=true;state.micEnabled=true;state.camEnabled=type==='video';state.pc=null;el.callBar?.classList.toggle('audio-call',type==='audio');openBar();renderGroupTiles();window.ChatSocket.joinServerCall({serverId,channelId,callType:type},r=>{if(r?.error){window.App?.toast(r.error,'error');endCall(false);return;}for(const id of (r?.peers||[]))createGroupPeer(id,true);});window.Sounds?.play('call-join');}catch(e){state.groupMode=false;window.App?.toast(e.message||'Não foi possível entrar na chamada.','error');endCall(false);}}
+async function startServerCall(serverId,channelId,type){if(state.inCall)return;try{await loadRtcConfig();state.groupMode=true;state.groupServerId=serverId;state.groupChannelId=channelId;state.groupType=type;state.localStream=await getLocalStream(type==='video');state.inCall=true;state.micEnabled=true;state.camEnabled=type==='video';state.pc=null;el.callBar?.classList.toggle('audio-call',type==='audio');openBar();renderGroupTiles();window.ChatSocket.joinServerCall({serverId,channelId,callType:type},r=>{if(r?.error){window.App?.toast(r.error,'error');endCall(false);return;}for(const id of (r?.peers||[]))createGroupPeer(id,true);});window.Sounds?.play('call-join');}catch(e){state.groupMode=false;window.App?.toast(e.message||'Não foi possível entrar na chamada.','error');endCall(false);}}
 async function handleServerOffer(d){if(!state.groupMode||Number(d?.serverId)!==Number(state.groupServerId)||Number(d?.channelId)!==Number(state.groupChannelId))return;const p=createGroupPeer(d.fromUserId,false);try{await p.pc.setRemoteDescription(new RTCSessionDescription(d.sdp));await flushGroupCandidates(p);const a=await p.pc.createAnswer();await p.pc.setLocalDescription(a);window.ChatSocket.sendServerCallAnswer({toUserId:Number(d.fromUserId),serverId:state.groupServerId,channelId:state.groupChannelId,sdp:p.pc.localDescription});}catch(e){console.error(e)}}
 async function handleServerAnswer(d){const p=groupPeerPc(d?.fromUserId);if(!p)return;try{await p.pc.setRemoteDescription(new RTCSessionDescription(d.sdp));await flushGroupCandidates(p);}catch(_){} }
 async function handleServerIce(d){if(!state.groupMode)return;const p=groupPeerPc(d?.fromUserId)||createGroupPeer(d.fromUserId,false);p._pending=p._pending||[];if(p.pc.remoteDescription)p.pc.addIceCandidate(d.candidate).catch(()=>{});else p._pending.push(d.candidate);}
@@ -251,6 +280,6 @@ function bind(){
  el.acceptBtn?.addEventListener('click',accept);el.rejectBtn?.addEventListener('click',reject);el.callFullscreen?.addEventListener('click',fullscreen); el.miniMic?.addEventListener('click',toggleMic); el.miniCam?.addEventListener('click',toggleCam); el.miniScreen?.addEventListener('click',screenShare); el.miniHangup?.addEventListener('click',()=>endCall(true)); el.miniHeadphones?.addEventListener('click',()=>{state.headphonesOff=!state.headphonesOff; if(el.remoteAudio)el.remoteAudio.muted=state.headphonesOff; if(el.remoteVideo)el.remoteVideo.muted=state.headphonesOff; el.miniHeadphones.textContent=state.headphonesOff?'🔇':'🎧';});
  document.addEventListener('fullscreenchange',()=>{state.fullscreen=!!document.fullscreenElement;});
 }
-function init(){cache();bind();updateButtons();}
+function init(){cache();bind();updateButtons();loadRtcConfig();}
 window.Call={init,handleOffer,handleAnswer:answer,handleIceCandidate:ice,handleHangup,handleSpeaking:remoteSpeaking,updateCallButtonsState:updateButtons,getState:()=>state,applyAdminVoiceMute,endFromAdmin,syncContext,startServerCall,handleServerOffer,handleServerAnswer,handleServerIce,handleServerUserJoined,handleServerUserLeft};
 })();

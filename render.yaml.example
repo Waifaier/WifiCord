@@ -1,24 +1,30 @@
-# Example Render Blueprint fragment.
-# This is intentionally an example, not a drop-in service definition, because
-# the existing WifiCord service name/plan should remain under the user's control.
-#
-# service:
-#   type: web
-#   env: node
-#   buildCommand: npm ci
-#   startCommand: npm start
-#   envVars:
-#     - key: NODE_ENV
-#       value: production
-#     - key: ADMIN_USERNAME
-#       value: waifaier
-#     - key: SESSION_SECRET
-#       sync: false
-#     - key: SQLITE_PATH
-#       value: /var/data/chat.db
-#     - key: UPLOAD_DIR
-#       value: /var/data/uploads
-#   disk:
-#     name: wificord-data
-#     mountPath: /var/data
-#     sizeGB: 1
+# Render settings for a persistent SQLite deployment.
+# If you already have a Render service, configure the same values in its
+# Environment/Disk settings rather than creating a second service.
+services:
+  - type: web
+    name: wificord
+    env: node
+    buildCommand: npm ci
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ADMIN_USERNAME
+        value: waifaier
+      - key: SESSION_SECRET
+        sync: false
+      - key: SQLITE_PATH
+        value: /var/data/chat.db
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: TURN_URLS
+        sync: false
+      - key: TURN_USERNAME
+        sync: false
+      - key: TURN_CREDENTIAL
+        sync: false
+    disk:
+      name: wificord-data
+      mountPath: /var/data
+      sizeGB: 1

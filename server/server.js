@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
@@ -34,6 +36,27 @@ if (NODE_ENV === 'production') app.set('trust proxy', 1);
 const server = http.createServer(app);
 const io = new SocketIOServer(server);
 app.set('io', io);
+
+// WebRTC ICE configuration is intentionally served from the server so TURN
+// credentials never need to be hard-coded into the client bundle.
+app.get('/api/config/rtc', (req, res) => {
+  const urls = String(process.env.TURN_URLS || '')
+    .split(/[\s,]+/)
+    .map(v => v.trim())
+    .filter(Boolean);
+  const iceServers = [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    { urls: 'stun:stun.cloudflare.com:3478' }
+  ];
+  if (urls.length) {
+    const server = { urls };
+    if (process.env.TURN_USERNAME) server.username = process.env.TURN_USERNAME;
+    if (process.env.TURN_CREDENTIAL) server.credential = process.env.TURN_CREDENTIAL;
+    iceServers.push(server);
+  }
+  res.set('Cache-Control', 'no-store');
+  res.json({ iceServers });
+});
 
 const sessionMiddleware = session({
   store: new SqliteSessionStore(),
