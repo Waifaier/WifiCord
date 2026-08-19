@@ -1,0 +1,33 @@
+WIFICORD - versão corrigida
+
+Principais correções:
+- WebRTC 1:1 com áudio e vídeo.
+- Compartilhamento de tela em chamadas de voz e vídeo, incluindo preview local.
+- Renegociação de WebRTC ao adicionar/remover a tela.
+- Buffer de ICE candidates para evitar perda de candidatos antes do atendimento.
+- Seleção de microfone, câmera e saída de áudio.
+- Teste de câmera e microfone nas configurações.
+- Apagar mensagens próprias em tempo real e no banco.
+- Alteração de avatar com PNG/JPG/GIF/WebP.
+- Sons opcionais e pequenas animações.
+- Logo/favicon do WifiCord.
+- Validação dos eventos Socket.IO de chamadas.
+
+Para executar no Windows:
+1. Abra o PowerShell dentro desta pasta.
+2. Se necessário, execute: npm install
+3. Execute: npm start
+4. Abra: http://localhost:3000
+
+Importante:
+- As chamadas são P2P e usam STUN. Redes muito restritivas podem exigir TURN para conexão garantida.
+- Para testar chamadas, use duas contas de amigos em dois navegadores/janelas.
+- O microfone/câmera precisam ser autorizados pelo navegador.
+
+
+ATUALIZAÇÃO FUNCIONAL
+- Banco SQLite permanece em server/database/chat.db e não deve ser apagado durante deploy/update.
+- Não envie node_modules entre máquinas: execute npm install para baixar binários compatíveis.
+- WebRTC funciona P2P e usa STUN; para redes NAT restritivas é necessário configurar um servidor TURN em produção.
+- O primeiro usuário pode ser promovido manualmente para admin no SQLite (role='admin'); depois o painel/API administrativa protege as operações no servidor.
+- Troca de microfone/câmera durante a chamada usa replaceTrack, sem sair da call.

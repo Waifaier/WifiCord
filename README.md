@@ -1,165 +1,50 @@
-# 🌐 WifiCord
+# WifiCord
 
-### Conecte. Converse. Compartilhe.
+Aplicativo de comunicação em tempo real com chat, amizades, perfis, loja, pontos, WFNA e chamadas WebRTC.
 
-Um aplicativo de comunicação em tempo real criado para reunir comunidades, amigos e conversas em um único lugar.
+## Executar
 
-[![Node.js](https://img.shields.io/badge/Node.js-20+-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
-[![Express.js](https://img.shields.io/badge/Express.js-Backend-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com/)
-[![Socket.IO](https://img.shields.io/badge/Socket.IO-Realtime-010101?style=for-the-badge&logo=socket.io&logoColor=white)](https://socket.io/)
-[![JavaScript](https://img.shields.io/badge/JavaScript-Frontend-F7DF1E?style=for-the-badge&logo=javascript&logoColor=000)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-[![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/HTML5)
-[![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/CSS3)
+Requisitos: Node.js 22.5+ (22 LTS recomendado).
 
----
+```bash
+npm install
+npm start
+```
 
-> 💬 **WifiCord** é uma plataforma de comunicação online focada em comunidades, grupos e conversas em tempo real.
+Abra `http://localhost:3000`.
 
-🚧 **Em desenvolvimento**## 🌐 Sobre o WifiCord
+## Ativar o primeiro administrador
 
-O **WifiCord** é uma plataforma de comunicação em tempo real criada para aproximar pessoas através de conversas, comunidades e espaços personalizados.
+A promoção inicial é feita **localmente no terminal**. Não existe botão no navegador para alguém se promover, e o comando só funciona enquanto não houver nenhum administrador.
 
-A plataforma utiliza como referência a experiência proporcionada por aplicativos modernos de comunicação, trazendo conceitos como **servidores, canais, amizades e mensagens em tempo real**, mas construindo sua própria identidade e arquitetura.
+```bash
+npm run admin:setup -- SEU_USUARIO
+```
 
-O objetivo é oferecer um ambiente simples, rápido e organizado para que pessoas possam criar comunidades, conversar com amigos e participar de diferentes grupos.
+Exemplo:
 
-### 💡 A ideia
+```bash
+npm run admin:setup -- wifier
+```
 
-Imagine ter um espaço onde você pode:
+Depois reinicie o servidor e entre nessa conta. O botão de administração aparece na interface.
 
-> 👥 Adicionar seus amigos  
-> 🏠 Criar comunidades  
-> 📢 Organizar canais  
-> 💬 Conversar em tempo real  
-> 🌐 Participar de diferentes servidores
+Consulte `ADMIN-ATIVACAO.md` para os detalhes.
 
-Tudo dentro de uma única plataforma.
+## Persistência
 
----
+Os dados ficam em `server/database/chat.db` e sobrevivem a reinicializações e atualizações dos arquivos. O banco original enviado com o projeto foi preservado neste pacote; as migrações novas são aplicadas automaticamente.
 
-## ⚡ Comunicação em tempo real
+## Chamadas
 
-O WifiCord foi desenvolvido pensando em comunicação instantânea.
+As chamadas usam WebRTC P2P com STUN. Para produção entre redes que não conseguem estabelecer P2P diretamente, configure um servidor TURN no bloco `RTC_CONFIG` de `client/js/call.js`.
 
-As mensagens são transmitidas em tempo real entre os usuários através de uma arquitetura baseada em comunicação persistente entre cliente e servidor, proporcionando uma experiência muito mais dinâmica do que uma aplicação tradicional baseada apenas em requisições HTTP.
+## Observação sobre Node 22+
 
----
+O projeto usa o SQLite integrado de Node (`node:sqlite`) para evitar binários nativos de SQLite incompatíveis entre sistemas. Isso requer Node 22.5+.
 
-## 🎯 Nossa proposta
 
-Criar uma plataforma de comunicação **simples, moderna e acessível**, permitindo que qualquer pessoa possa criar seu próprio espaço e reunir sua comunidade.
-
-O WifiCord está sendo desenvolvido continuamente e novas funcionalidades podem ser adicionadas ao longo do tempo.## ✨ Funcionalidades
-
-### 👤 Usuários
-
-- 🔐 Sistema de autenticação
-- 👤 Perfis de usuários
-- 🤝 Sistema de amizades
-- 💬 Comunicação entre usuários
-- 🟢 Estrutura preparada para presença/status
-
-### 🏠 Servidores
-
-- 🏠 Criação de servidores
-- 👥 Comunidades independentes
-- 📢 Organização através de canais
-- 🔧 Estrutura preparada para gerenciamento de comunidades
-
-### 📢 Canais
-
-Os servidores podem ser organizados através de canais, permitindo separar diferentes assuntos e conversas.
-
-```text
-🏠 Meu Servidor
-│
-├── 📢 geral
-├── 💬 conversa
-├── 🎮 jogos
-└── 🔊 ...
-### 4. Tecnologias
-
-```markdown
-## 🛠️ Tecnologias
-
-O WifiCord utiliza tecnologias web modernas para construir sua experiência de comunicação.
-
-| Tecnologia | Utilização |
-|---|---|
-| 🟨 JavaScript | Lógica da aplicação |
-| 🟧 HTML5 | Estrutura da interface |
-| 🟦 CSS3 | Estilização e responsividade |
-| 🟢 Node.js | Ambiente do servidor |
-| ⚫ Express.js | API e servidor web |
-| 🔌 Socket.IO | Comunicação em tempo real |
-| 🗄️ SQLite | Persistência dos dados |
-| 📦 npm | Gerenciamento de dependências |
-| 🐙 Git | Controle de versão |
-
-### 🏗️ Arquitetura
-
-```text
-                 ┌─────────────────┐
-                 │     WifiCord    │
-                 └────────┬────────┘
-                          │
-                 ┌────────▼────────┐
-                 │    Frontend     │
-                 │ HTML CSS JS     │
-                 └────────┬────────┘
-                          │
-                    Socket.IO
-                          │
-                 ┌────────▼────────┐
-                 │     Backend     │
-                 │    Node.js      │
-                 │    Express      │
-                 └────────┬────────┘
-                          │
-                 ┌────────▼────────┐
-                 │    Database     │
-                 │     SQLite      │
-                 └─────────────────┘
-### 6. Como funciona
-
-```markdown
-## 🧩 Como funciona
-
-O WifiCord é dividido em diferentes áreas responsáveis pela experiência da plataforma.
-
-### 👤 Usuário
-
-Cada usuário possui sua própria identidade dentro da plataforma, podendo interagir com outros usuários e participar de comunidades.
-
-### 🏠 Servidores
-
-Servidores funcionam como espaços independentes onde grupos podem se reunir.
-
-Um servidor pode representar:
-
-- 🎮 Uma comunidade gamer
-- 👨‍💻 Uma comunidade de programação
-- 🎵 Um grupo de música
-- 📚 Uma comunidade de estudos
-- 👥 Um grupo privado de amigos
-
-### 📢 Canais
-
-Dentro de cada servidor, os canais ajudam a organizar as conversas.
-
-Isso evita que diferentes assuntos fiquem misturados em uma única conversa.
-
-### 💬 Comunicação
-
-Quando um usuário envia uma mensagem, o sistema utiliza comunicação em tempo real para transmitir a informação aos outros usuários conectados ao mesmo espaço.
-
-```text
-Usuário A
-    │
-    │ envia mensagem
-    ▼
-WifiCord Server
-    │
-    │ Socket.IO
-    ▼
-Usuário B ──── Usuário C
+## Administradores
+Para promover: `node scripts/admin-role.js <username> admin`
+Para remover: `node scripts/admin-role.js <username> user`
+O script impede remover o último administrador.
