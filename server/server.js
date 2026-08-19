@@ -9,6 +9,7 @@ const friendsRouter = require('./routes/friends');
 const serversRouter = require('./routes/servers');
 const messagesRouter = require('./routes/messages');
 const economyRouter = require('./routes/economy');
+const bootstrapAdmin = require('../scripts/admin-bootstrap');
 const adminRouter = require('./routes/admin');
 const mediaRouter = require('./routes/media');
 const gamesRouter = require('./routes/games');
@@ -22,6 +23,9 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me';
 if (NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
   throw new Error('SESSION_SECRET é obrigatório em produção.');
 }
+
+// Ativa o primeiro administrador através da variável ADMIN_USERNAME
+bootstrapAdmin();
 
 const app = express();
 const server = http.createServer(app);
