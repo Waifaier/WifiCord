@@ -170,8 +170,10 @@
           if (track.readyState === 'ended') {
             if (status) status.textContent = 'O dispositivo de microfone parou de fornecer áudio. Verifique o mute físico ou o dispositivo selecionado.';
             setLevel(0);
-          } else if (track.muted) {
-            if (status) status.textContent = 'O navegador marcou o microfone como silenciado. Desative o mute físico e fale para testar novamente.';
+          } else if (track.muted && !sawSignal && now - started > 2200) {
+            if (status) status.textContent = 'O navegador sinalizou o dispositivo como temporariamente silenciado. O medidor ainda é a referência principal; fale para verificar a entrada.';
+          } else if (!track.muted && sawSignal) {
+            if (status && now - started < 9000) status.textContent = 'Microfone funcionando — sinal de áudio detectado.';
           }
         }
 

@@ -230,6 +230,7 @@
         <button type="button" class="settings-tab" data-settings-tab="chat">Chat</button>
         <button type="button" class="settings-tab" data-settings-tab="advanced">Avançado</button>
         <button type="button" class="settings-tab" data-settings-tab="accessibility">Acessibilidade</button>
+        <button type="button" class="settings-tab" data-settings-tab="creator">💜 Apoiar um criador</button>
         <button type="button" class="settings-tab settings-tab-danger" data-settings-tab="logout">Sair da conta</button>
       </nav>
       <div class="settings-content">
@@ -303,6 +304,13 @@
           <label>Sensibilidade da voz<input id="settings-voice-sensitivity" type="range" min="1" max="100" value="45"></label>
           <button type="button" id="settings-save-accessibility" class="btn btn-primary">Salvar acessibilidade</button>
         </div>
+        <div class="settings-pane" data-settings-pane="creator">
+          <h4>💜 Apoiar um criador</h4>
+          <p class="text-muted">Digite o código recebido do criador. Se o código não for válido, nada é aplicado.</p>
+          <label>Código do criador<input type="text" id="creator-code-input" maxlength="64" autocomplete="off" spellcheck="false" placeholder="Digite o código"></label>
+          <button type="button" id="creator-code-submit" class="btn btn-primary">Ativar benefício</button>
+          <p id="creator-code-status" class="creator-code-status"></p>
+        </div>
         <div class="settings-pane" data-settings-pane="logout">
           <h4>Sair da conta</h4>
           <p class="text-muted">Você será desconectado do WifiCord neste dispositivo.</p>
@@ -340,7 +348,17 @@
     <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Cancelar</button><button id="share-screen-confirm" class="btn btn-primary">Começar apresentação</button></div>
   </div>
 
-  <div id="modal-media" class="modal modal-media hidden"><div class="media-header"><div><h3>Mídia</h3><p class="text-muted">Fotos, vídeos, GIFs, áudios e arquivos. Até 4 GB por arquivo.</p></div><button id="media-upload-btn" class="btn btn-primary">Enviar mídia</button><input id="media-file-input" type="file" multiple hidden accept="image/*,video/*,audio/*,.pdf,.zip,.7z,.rar,.txt,.json"></div><div class="media-tabs"><button class="media-tab active" data-media-filter="all">Tudo</button><button class="media-tab" data-media-filter="image">Fotos</button><button class="media-tab" data-media-filter="video">Vídeos</button><button class="media-tab" data-media-filter="audio">Áudios</button><button class="media-tab" data-media-filter="other">Arquivos</button></div><div id="media-upload-progress" class="media-upload-progress hidden"><span></span></div><div id="media-library-grid" class="media-library-grid"></div><div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Fechar</button></div></div>
+  <div id="modal-wipaint" class="modal modal-wipaint hidden">
+  <div class="wipaint-header"><div><h3>🎨 WiPaint</h3><p class="text-muted">Editor de imagem e desenho do WifiCord.</p></div><div class="wipaint-actions"><button id="wipaint-open-image" class="btn btn-small">Abrir</button><button id="wipaint-save" class="btn btn-small">Exportar PNG</button><button data-close-modal class="btn btn-ghost">Fechar</button></div></div>
+  <input id="wipaint-file-input" type="file" hidden accept="image/png,image/jpeg,image/webp,image/gif">
+  <div class="wipaint-toolbar">
+    <label>Ferramenta<select id="wipaint-tool"><option value="brush">Pincel</option><option value="pixel">Pincel Pixel</option><option value="eraser">Borracha</option><option value="line">Linha</option><option value="rect">Retângulo</option><option value="circle">Círculo</option><option value="text">Texto</option><option value="eyedropper">Conta-gotas</option><option value="fill">Balde</option></select></label>
+    <label>Cor<input id="wipaint-color" type="color" value="#ffffff"></label><label>Tamanho<input id="wipaint-size" type="range" min="1" max="80" value="12"></label><output id="wipaint-size-value">12 px</output><label>Opacidade<input id="wipaint-opacity" type="range" min="1" max="100" value="100"></label><label>Zoom<input id="wipaint-zoom" type="range" min="25" max="200" value="100"></label>
+    <button id="wipaint-undo" class="btn btn-small">↶ Desfazer</button><button id="wipaint-redo" class="btn btn-small">↷ Refazer</button><button id="wipaint-clear" class="btn btn-small">🗑 Limpar</button><button id="wipaint-grid" class="btn btn-small">▦ Grade</button>
+  </div>
+  <div class="wipaint-workspace"><div class="wipaint-canvas-wrap"><canvas id="wipaint-canvas" width="1000" height="650"></canvas></div><aside class="wipaint-side"><h4>Camadas</h4><div id="wipaint-layers"></div><button id="wipaint-add-layer" class="btn btn-small">+ Camada</button><button id="wipaint-delete-layer" class="btn btn-small">− Camada</button><p class="text-muted">Pincel Pixel usa blocos quadrados. Arraste no canvas para desenhar.</p></aside></div>
+</div>
+<div id="modal-media" class="modal modal-media hidden"><div class="media-header"><div><h3>Mídia</h3><p class="text-muted">Fotos, vídeos, GIFs, áudios e arquivos. Até 4 GB por arquivo.</p></div><button id="wipaint-open-btn" class="btn btn-small">🎨 WiPaint</button><button id="media-upload-btn" class="btn btn-primary">Enviar mídia</button><input id="media-file-input" type="file" multiple hidden accept="image/*,video/*,audio/*,.pdf,.zip,.7z,.rar,.txt,.json"></div><div class="media-tabs"><button class="media-tab active" data-media-filter="all">Tudo</button><button class="media-tab" data-media-filter="image">Fotos</button><button class="media-tab" data-media-filter="video">Vídeos</button><button class="media-tab" data-media-filter="audio">Áudios</button><button class="media-tab" data-media-filter="other">Arquivos</button></div><div id="media-upload-progress" class="media-upload-progress hidden"><span></span></div><div id="media-library-grid" class="media-library-grid"></div><div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Fechar</button></div></div>
 
 <div id="modal-games" class="modal modal-games hidden">
     <div class="games-header"><div><h3>🎮 Minigames</h3><p>Jogue para ganhar pontos. Jogue quantas vezes quiser e acumule pontos.</p></div><span id="game-cooldown" class="game-cooldown">Disponível</span></div>
@@ -392,8 +410,10 @@
 <script src="/js/socket.js"></script>
 <script src="/js/sounds.js"></script>
 <script src="/js/settings.js"></script>
+<script src="/js/creator.js"></script>
 <script src="/js/extras.js"></script>
 <script src="/js/media.js"></script>
+<script src="/js/wipaint.js"></script>
 <script src="/js/server-settings.js"></script>
 <script src="/js/features.js"></script>
 <script src="/js/games.js"></script>

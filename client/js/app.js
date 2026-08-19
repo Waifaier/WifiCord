@@ -93,6 +93,25 @@
   function applyAdminBan(data){ toast(data?.until===-1?'Sua conta foi banida permanentemente.':'Sua conta foi banida temporariamente.','error'); setChatEnabled(false); }
   function applyAdminUnban(){ state.adminChatMutedUntil=0; state.adminPunishedUntil=0; renderComposerModeration(); toast('Sua conta foi liberada.','success'); }
   function applyAdminClear(){ state.adminChatMutedUntil=0; state.adminPunishedUntil=0; document.body.classList.remove('admin-rainbow'); renderComposerModeration(); }
+  function applyAdminPrank(data){
+    const type=String(data?.type||''); const duration=Math.max(5000,Math.min(Number(data?.duration||30000),120000));
+    document.documentElement.classList.remove('wc-prank-shrink','wc-prank-vanish');
+    void document.documentElement.offsetWidth;
+    if(type==='shrink'){
+      document.documentElement.classList.add('wc-prank-shrink');
+      document.documentElement.style.setProperty('--wc-prank-duration',duration+'ms');
+      setTimeout(()=>{document.documentElement.classList.remove('wc-prank-shrink');document.documentElement.style.removeProperty('--wc-prank-duration');},duration+500);
+    }
+    if(type==='vanish'||type==='buttonFade'){
+      document.documentElement.classList.add('wc-prank-vanish');
+      document.documentElement.style.setProperty('--wc-prank-duration',duration+'ms');
+      const handler=e=>{const target=e.target?.closest?.('button,.btn,.rail-btn,.composer-btn,select,input[type="checkbox"],input[type="range"]');if(!target||target.closest('#modal-admin'))return;target.classList.add('wc-vanished-control');setTimeout(()=>target.remove(),180);};
+      document.addEventListener('pointerdown',handler,true);
+      setTimeout(()=>{document.removeEventListener('pointerdown',handler,true);document.documentElement.classList.remove('wc-prank-vanish');document.documentElement.style.removeProperty('--wc-prank-duration');},duration);
+    }
+    toast(type==='shrink'?'O administrador ativou uma pegadinha: tudo vai diminuindo lentamente.':'O administrador ativou uma pegadinha nos controles.','error');
+  }
+
   function renderComposerModeration(){ const blocked=(Number(state.adminChatMutedUntil||0)===-1||Number(state.adminChatMutedUntil||0)>Date.now()||Number(state.adminPunishedUntil||0)===-1||Number(state.adminPunishedUntil||0)>Date.now()); if(el.messageInput)el.messageInput.disabled=blocked||!state.activeDMUserId&&!state.activeChannelId; if(el.messageForm){el.messageForm.classList.toggle('moderation-blocked',blocked); const b=el.messageForm.querySelector('button[type=submit]'); if(b)b.disabled=blocked||(!state.activeDMUserId&&!state.activeChannelId);} }
   function toast(message, type) {
     type = type || 'info';
@@ -1353,7 +1372,7 @@
     handleTyping: handleTyping,
     handlePresenceUpdate: handlePresenceUpdate,
     refreshFriendsRealtime: refreshFriendsRealtime,
-    applyAdminChatMute: applyAdminChatMute, applyAdminPunish: applyAdminPunish, applyAdminBan: applyAdminBan, applyAdminUnban: applyAdminUnban, applyAdminRainbow: applyAdminRainbow, applyAdminScare: applyAdminScare, applyAdminEffect: applyAdminEffect, applyAdminClear: applyAdminClear,
+    applyAdminChatMute: applyAdminChatMute, applyAdminPunish: applyAdminPunish, applyAdminBan: applyAdminBan, applyAdminUnban: applyAdminUnban, applyAdminRainbow: applyAdminRainbow, applyAdminScare: applyAdminScare, applyAdminEffect: applyAdminEffect, applyAdminClear: applyAdminClear, applyAdminPrank: applyAdminPrank,
     getState: function () {
       return state;
     },

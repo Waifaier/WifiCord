@@ -88,6 +88,15 @@ CREATE TABLE IF NOT EXISTS message_reactions (
   UNIQUE(message_id, user_id, emoji)
 );
 CREATE INDEX IF NOT EXISTS idx_message_reactions_message ON message_reactions(message_id);
+CREATE TABLE IF NOT EXISTS creator_redemptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  reward TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(user_id, reward)
+);
+CREATE INDEX IF NOT EXISTS idx_creator_redemptions_user ON creator_redemptions(user_id);
 CREATE TABLE IF NOT EXISTS point_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,

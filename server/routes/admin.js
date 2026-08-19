@@ -53,6 +53,16 @@ router.post('/users/:id/effect',(req,res)=>{
   logAction(req.session.userId,id,'effect',{effect,duration}); emitToUser(req,id,'admin:effect',{effect,duration,nonce:crypto.randomUUID()}); res.json({ok:true,effect,duration});
 });
 router.post('/users/:id/scare',(req,res)=>{const id=Number(req.params.id),u=User.findById(id);if(!u)return res.status(404).json({error:'Usuário não encontrado.'});logAction(req.session.userId,id,'scare',{duration:3});emitToUser(req,id,'admin:scare',{duration:3,nonce:crypto.randomUUID()});res.json({ok:true});});
+router.post('/users/:id/prank', (req,res)=>{
+  const id=Number(req.params.id),u=User.findById(id); if(!u)return res.status(404).json({error:'Usuário não encontrado.'});
+  const type=String(req.body?.type||'');
+  const allowed={shrink:{duration:60000},vanish:{duration:45000},buttonFade:{duration:30000}};
+  if(!allowed[type])return res.status(400).json({error:'Pegadinha inválida.'});
+  const duration=Math.max(5000,Math.min(Number(req.body?.duration||allowed[type].duration),120000));
+  logAction(req.session.userId,id,'prank',{type,duration});
+  emitToUser(req,id,'admin:prank',{type,duration,nonce:crypto.randomUUID()});
+  res.json({ok:true,type,duration});
+});
 router.post('/users/:id/disconnect-call',(req,res)=>{const id=Number(req.params.id);if(!User.findById(id))return res.status(404).json({error:'Usuário não encontrado.'});logAction(req.session.userId,id,'disconnect_call');emitToUser(req,id,'admin:disconnect-call');res.json({ok:true});});
 router.post('/users/:id/clear',(req,res)=>{const id=Number(req.params.id),u=User.findById(id);if(!u)return res.status(404).json({error:'Usuário não encontrado.'});const updated=User.clearModeration(id);logAction(req.session.userId,id,'clear_moderation');emitToUser(req,id,'admin:clear');res.json({user:publicAdminUser(updated)});});
 

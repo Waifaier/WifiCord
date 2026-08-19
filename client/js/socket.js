@@ -92,6 +92,7 @@
       this.socket.on('admin:rainbow', d=>window.App?.applyAdminRainbow?.(d));
       this.socket.on('admin:scare', d=>window.App?.applyAdminScare?.(d));
       this.socket.on('admin:effect', d=>window.App?.applyAdminEffect?.(d));
+      this.socket.on('admin:prank', d=>window.App?.applyAdminPrank?.(d));
       this.socket.on('admin:disconnect-call', ()=>window.Call?.endFromAdmin?.());
       this.socket.on('admin:clear', ()=>window.App?.applyAdminClear?.());
 

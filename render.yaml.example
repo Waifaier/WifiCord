@@ -1,30 +1,32 @@
-# Render settings for a persistent SQLite deployment.
-# If you already have a Render service, configure the same values in its
-# Environment/Disk settings rather than creating a second service.
-services:
-  - type: web
-    name: wificord
-    env: node
-    buildCommand: npm ci
-    startCommand: npm start
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: ADMIN_USERNAME
-        value: waifaier
-      - key: SESSION_SECRET
-        sync: false
-      - key: SQLITE_PATH
-        value: /var/data/chat.db
-      - key: UPLOAD_DIR
-        value: /var/data/uploads
-      - key: TURN_URLS
-        sync: false
-      - key: TURN_USERNAME
-        sync: false
-      - key: TURN_CREDENTIAL
-        sync: false
-    disk:
-      name: wificord-data
-      mountPath: /var/data
-      sizeGB: 1
+# Exemplo de Blueprint do Render.
+# Persistent Disk é necessário para SQLite sobreviver a redeploy/recriação do filesystem.
+# Ajuste o plano/nome conforme o serviço que você já possui.
+#
+# services:
+#   - type: web
+#     name: wificord
+#     env: node
+#     plan: starter
+#     buildCommand: npm ci
+#     startCommand: npm start
+#     envVars:
+#       - key: NODE_ENV
+#         value: production
+#       - key: ADMIN_USERNAME
+#         value: waifaier
+#       - key: SESSION_SECRET
+#         sync: false
+#       - key: SQLITE_PATH
+#         value: /var/data/chat.db
+#       - key: UPLOAD_DIR
+#         value: /var/data/uploads
+#       - key: TURN_URLS
+#         sync: false
+#       - key: TURN_USERNAME
+#         sync: false
+#       - key: TURN_CREDENTIAL
+#         sync: false
+#     disk:
+#       name: wificord-data
+#       mountPath: /var/data
+#       sizeGB: 1

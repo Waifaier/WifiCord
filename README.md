@@ -146,3 +146,14 @@ O projeto foi verificado para:
 ## Chamadas
 
 As chamadas usam WebRTC P2P com STUN. Para produção entre redes que não conseguem estabelecer P2P diretamente, configure um servidor TURN no bloco `RTC_CONFIG` de `client/js/call.js`.
+
+## Recursos desta versão
+
+- Perfil com avatar armazenado em arquivo persistente e tamanho rigidamente limitado na interface.
+- Aba **Apoiar um criador** nas configurações, com validação somente no servidor.
+- Recompensa de pontos e promoção administrativa por código de criador, sem exibir os códigos na interface.
+- Painel administrativo com efeitos, moderação e pegadinhas reversíveis, incluindo tela que encolhe lentamente e controles que desaparecem ao serem usados.
+- **WiPaint** dentro da área de mídia, com pincel normal/pixel, borracha, formas, texto, conta-gotas, camadas, zoom, grade, desfazer/refazer e exportação PNG.
+- Diagnóstico de microfone que não trata o sinal `MediaStreamTrack.muted` transitório como falha automática.
+- Configuração WebRTC carregada pelo servidor, incluindo TURN quando configurado.
+- Economia e biblioteca de mídia convertidas para SQLite/`node:sqlite`.
