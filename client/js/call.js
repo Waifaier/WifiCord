@@ -220,6 +220,7 @@ async function startScreenShareWithQuality(resolution,type,systemAudio){
   const wfna=!!window.App?.getState?.()?.currentUser?.wfna; if(!wfna)resolution=Math.min(720,Number(resolution)||720); else resolution=Number(resolution)||1080; state.shareResolution=resolution;
   const height=resolution,width=Math.round(height*16/9);
   const video={frameRate:{ideal:30,max:60},cursor:'motion',width:{ideal:width,max:width},height:{ideal:height,max:height},displaySurface:type};
+  if(!navigator.mediaDevices.getDisplayMedia){const e=new Error('getDisplayMedia indisponível neste ambiente (comum em apps Electron sem handler de captura de tela configurado no processo principal).');e.name='NotSupportedError';throw e;}
   const ss=await navigator.mediaDevices.getDisplayMedia({video,audio:systemAudio}); const track=ss.getVideoTracks()[0]; if(track)track.contentHint='detail';
   state.screenStream=ss;
   if(state.groupMode){for(const p of state.groupPeers.values()){let sender=p.pc.getSenders().find(s=>s.track?.kind==='video') || p.pc.getTransceivers().find(t=>t.receiver?.track?.kind==='video')?.sender;if(!sender)sender=p.pc.addTrack(track,ss);else await sender.replaceTrack(track);}state.screenSender=null;}

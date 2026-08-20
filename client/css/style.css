@@ -1208,7 +1208,7 @@ body { min-height:100vh; }
 /* Screen share: both presenter and viewer get a visible video surface. */
 .call-bar.sharing .call-stage #local-video.is-screen-preview { display:block!important; width:100%!important; height:100%!important; max-width:none!important; max-height:none!important; right:0!important; bottom:0!important; object-fit:contain!important; z-index:2!important; background:#050609!important; }
 .call-bar.sharing .call-stage #remote-video { display:block!important; position:absolute!important; inset:0!important; width:100%!important; height:100%!important; object-fit:contain!important; z-index:1!important; }
-.call-bar.sharing .call-local-avatar, .call-bar.sharing .call-remote-avatar { z-index:7!important; }
+.call-bar.sharing .call-local-avatar, .call-bar.sharing .call-remote-avatar { display:none!important; }
 .call-stage video { background:#050609; }
 @media(max-width:760px){#modal-profile .profile-card{width:calc(100vw - 24px)!important}#modal-profile .profile-card-body{padding:14px 18px 24px!important}#modal-profile .profile-avatar{margin-left:18px!important}}
 
