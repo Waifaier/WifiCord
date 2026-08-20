@@ -229,6 +229,7 @@
       dmPanel: $('dm-panel'),
       channelsPanel: $('channels-panel'),
       messagesList: $('messages-list'),
+      scrollToBottomBtn: $('scroll-to-bottom-btn'),
       messageForm: $('message-form'),
       messageInput: $('message-input'),
       chatTitle: $('chat-title'),
@@ -533,6 +534,26 @@
 
   function scrollMessagesToBottom() {
     if (el.messagesList) el.messagesList.scrollTop = el.messagesList.scrollHeight;
+    hideScrollToBottomBtn();
+  }
+
+  function isNearMessagesBottom() {
+    if (!el.messagesList) return true;
+    const gap = el.messagesList.scrollHeight - el.messagesList.scrollTop - el.messagesList.clientHeight;
+    return gap < 120;
+  }
+
+  function showScrollToBottomBtn() {
+    if (el.scrollToBottomBtn) el.scrollToBottomBtn.classList.add('visible');
+  }
+
+  function hideScrollToBottomBtn() {
+    if (el.scrollToBottomBtn) el.scrollToBottomBtn.classList.remove('visible');
+  }
+
+  function handleMessagesScroll() {
+    if (isNearMessagesBottom()) hideScrollToBottomBtn();
+    else showScrollToBottomBtn();
   }
 
   function messageAlreadyRendered(messageId) {
@@ -546,9 +567,17 @@
     const emptyState = el.messagesList.querySelector('.empty-state');
     if (emptyState) el.messagesList.innerHTML = '';
 
+    const own = state.currentUser && msg.author && String(msg.author.id) === String(state.currentUser.id);
+    const wasNearBottom = isNearMessagesBottom();
+
     el.messagesList.insertAdjacentHTML('beforeend', messageItemHtml(msg));
     maybeSuperEffect(msg.content);
-    scrollMessagesToBottom();
+
+    if (own || wasNearBottom) {
+      scrollMessagesToBottom();
+    } else {
+      showScrollToBottomBtn();
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -992,11 +1021,17 @@
       return v.name;
     });
     if (!names.length) {
-      el.typingIndicator.textContent = '';
+      el.typingIndicator.innerHTML = '';
+      el.typingIndicator.classList.remove('active');
       return;
     }
-    const verb = names.length === 1 ? 'está digitando...' : 'estão digitando...';
-    el.typingIndicator.textContent = names.join(', ') + ' ' + verb;
+    const verb = names.length === 1 ? 'está digitando' : 'estão digitando';
+    el.typingIndicator.innerHTML =
+      '<span class="typing-bubble">' +
+      '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>' +
+      '</span>' +
+      '<span class="typing-names">' + escapeHtml(names.join(', ')) + ' ' + verb + '</span>';
+    el.typingIndicator.classList.add('active');
   }
 
   function clearTypingIndicator() {
@@ -1253,6 +1288,13 @@
       el.logoutBtn.addEventListener('click', function () {
         window.Auth && window.Auth.logout();
       });
+    }
+
+    if (el.messagesList) {
+      el.messagesList.addEventListener('scroll', handleMessagesScroll, { passive: true });
+    }
+    if (el.scrollToBottomBtn) {
+      el.scrollToBottomBtn.addEventListener('click', scrollMessagesToBottom);
     }
 
     if (el.settingsBtn) el.settingsBtn.addEventListener('click', openSettingsModal);
