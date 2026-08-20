@@ -313,6 +313,65 @@ function initSockets(io) {
       callback({ ok: true, messageId });
     });
 
+    socket.on('message:edit', (data, callback) => {
+      callback = typeof callback === 'function' ? callback : () => {};
+      const messageId = Number(data && data.messageId);
+      let content = data && typeof data.content === 'string' ? data.content.trim() : '';
+      if (!Number.isInteger(messageId) || messageId <= 0 || !content) {
+        return callback({ error: 'Mensagem inválida.' });
+      }
+      if (content.length > MAX_MESSAGE_LENGTH) return callback({ error: 'Mensagem muito longa.' });
+
+      const message = Message.findById(messageId);
+      if (!message || Number(message.from_user_id) !== Number(userId)) {
+        return callback({ error: 'Você só pode editar suas próprias mensagens.' });
+      }
+      if (String(message.content).startsWith('__MEDIA__:') || String(message.content).startsWith('__STICKER__:') || String(message.content).startsWith('__SUPER__:')) {
+        return callback({ error: 'Esse tipo de mensagem não pode ser editado.' });
+      }
+      if (!canAccessMessage(userId, message)) return callback({ error: 'Não autorizado.' });
+
+      const updated = Message.toPublic(Message.editContent(messageId, content));
+      updated.reactions = Message.getReactionSummary(messageId, userId);
+      const payload = { messageId, content: updated.content, editedAt: updated.editedAt };
+
+      if (message.channel_id) {
+        io.to(channelRoom(message.channel_id)).emit('message:edited', payload);
+      } else {
+        io.to(dmRoom(message.from_user_id, message.to_user_id)).emit('message:edited', payload);
+        io.to(userRoom(message.from_user_id)).emit('message:edited', payload);
+        io.to(userRoom(message.to_user_id)).emit('message:edited', payload);
+      }
+      callback({ ok: true, message: updated });
+    });
+
+    socket.on('message:pin', (data, callback) => {
+      callback = typeof callback === 'function' ? callback : () => {};
+      const messageId = Number(data && data.messageId);
+      const pinned = !!(data && data.pinned);
+      if (!Number.isInteger(messageId) || messageId <= 0) return callback({ error: 'Mensagem inválida.' });
+
+      const message = Message.findById(messageId);
+      if (!message || !canAccessMessage(userId, message)) return callback({ error: 'Não autorizado.' });
+
+      const updated = Message.toPublic(Message.setPinned(messageId, pinned, userId));
+      const payload = { messageId, pinnedAt: updated.pinnedAt, message: updated };
+
+      if (message.channel_id) {
+        io.to(channelRoom(message.channel_id)).emit('message:pin-changed', payload);
+      } else {
+        io.to(dmRoom(message.from_user_id, message.to_user_id)).emit('message:pin-changed', payload);
+      }
+      callback({ ok: true, ...payload });
+    });
+
+    // Confirmação de leitura simples em DMs: efêmera, sem persistência.
+    socket.on('dm:seen', (data) => {
+      const otherId = Number(data && data.toUserId);
+      if (!otherId || !Friendship.areFriends(userId, otherId)) return;
+      io.to(userRoom(otherId)).emit('dm:seen', { byUserId: userId, forUserId: otherId });
+    });
+
     socket.on('presence:set', (data) => {
       const status = data && data.status;
       if (!['online', 'away', 'offline'].includes(status)) return;

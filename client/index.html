@@ -57,6 +57,7 @@
 <section id="app-screen" class="screen hidden">
 
   <button id="mobile-menu-btn" type="button" aria-label="Abrir menu">☰</button>
+  <div id="mobile-nav-backdrop" class="mobile-nav-backdrop"></div>
 
   <nav id="server-rail">
     <button type="button" id="home-btn" data-action="home" class="rail-btn active" title="Início">🏠</button>
@@ -114,6 +115,7 @@
   </aside>
 
   <aside id="members-panel" class="members-panel hidden">
+    <button type="button" id="members-panel-close" class="btn-icon members-panel-close" title="Fechar" aria-label="Fechar membros">✕</button>
     <div class="members-panel-header"><span>Membros</span><span id="members-count">0</span></div>
     <div id="server-members-list" class="server-members-list"></div>
   </aside>
@@ -122,11 +124,23 @@
     <header id="chat-header">
       <div id="chat-peer-avatar" class="chat-peer-avatar hidden"></div><h2 id="chat-title">Selecione uma conversa</h2>
       <div id="chat-header-actions" class="chat-header-actions">
+        <button type="button" id="message-search-btn" class="btn-icon" title="Buscar mensagens (Ctrl+F)">🔍</button>
+        <button type="button" id="pinned-messages-btn" class="btn-icon" title="Mensagens fixadas">📌</button>
         <button type="button" id="start-voice-call-btn" class="btn-icon" title="Chamada de voz">📞</button>
         <button type="button" id="start-video-call-btn" class="btn-icon" title="Chamada de vídeo">🎥</button>
         <button type="button" id="piruleta-btn" class="btn-icon hidden" title="Modo piruleta">🍭</button>
+        <button type="button" id="mobile-members-btn" class="btn-icon mobile-only" title="Membros">👥</button>
       </div>
     </header>
+
+    <div id="message-search-bar" class="message-search-bar hidden">
+      <span class="message-search-icon">🔍</span>
+      <input type="text" id="message-search-input" placeholder="Buscar mensagens nesta conversa..." autocomplete="off">
+      <span id="message-search-count" class="message-search-count"></span>
+      <button type="button" id="message-search-prev" class="btn-icon" title="Anterior">↑</button>
+      <button type="button" id="message-search-next" class="btn-icon" title="Próxima">↓</button>
+      <button type="button" id="message-search-close" class="btn-icon" title="Fechar (Esc)">✕</button>
+    </div>
 
     <div id="call-bar" class="call-bar hidden">
       <div class="call-stage">
@@ -174,6 +188,14 @@
         <button type="submit" class="btn btn-primary">Enviar solicitação</button>
       </div>
     </form>
+  </div>
+
+  <div id="modal-pinned-messages" class="modal hidden">
+    <h3>📌 Mensagens fixadas</h3>
+    <div id="pinned-messages-list" class="pinned-messages-list"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-close-modal>Fechar</button>
+    </div>
   </div>
 
   <div id="modal-create-server" class="modal hidden">

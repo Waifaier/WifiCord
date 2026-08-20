@@ -188,7 +188,8 @@ for (const [table, column, definition] of [
   ['users','admin_note','TEXT'], ['users','super_emoji_uses','INTEGER NOT NULL DEFAULT 0'], ['users','banned_until','INTEGER'], ['users','chat_muted_until','INTEGER'],
   ['users','voice_muted_until','INTEGER'], ['users','punished_until','INTEGER'], ['users','punishment_reason','TEXT'],
   ['users','rainbow_until','INTEGER'], ['servers','icon_url','TEXT'], ['servers','banner_url','TEXT'],
-  ['channels','channel_type',"TEXT NOT NULL DEFAULT 'text'"], ['channels','is_private','INTEGER NOT NULL DEFAULT 0'], ['channels','permission_overwrites_json',"TEXT NOT NULL DEFAULT '{}'"], ['channels','topic',"TEXT NOT NULL DEFAULT ''"], ['channels','slowmode_seconds','INTEGER NOT NULL DEFAULT 0']
+  ['channels','channel_type',"TEXT NOT NULL DEFAULT 'text'"], ['channels','is_private','INTEGER NOT NULL DEFAULT 0'], ['channels','permission_overwrites_json',"TEXT NOT NULL DEFAULT '{}'"], ['channels','topic',"TEXT NOT NULL DEFAULT ''"], ['channels','slowmode_seconds','INTEGER NOT NULL DEFAULT 0'],
+  ['messages','edited_at','TEXT'], ['messages','pinned_at','TEXT'], ['messages','pinned_by','INTEGER']
 ]) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
   if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);

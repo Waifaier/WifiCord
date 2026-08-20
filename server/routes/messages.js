@@ -34,4 +34,18 @@ router.get('/dm/:userId', requireAuth, (req, res) => {
   res.json({ messages });
 });
 
+router.get('/channel/:channelId/pinned', requireAuth, (req, res) => {
+  const channelId = parsePositiveInt(req.params.channelId);
+  if (!channelId) return res.status(400).json({ error: 'ID inválido.' });
+
+  const channel = Channel.findById(channelId);
+  if (!channel) return res.status(404).json({ error: 'Canal não encontrado.' });
+  if (!ServerModel.isMember(channel.server_id, req.session.userId) || !Channel.canView(channel, req.session.userId)) {
+    return res.status(403).json({ error: 'Não autorizado.' });
+  }
+
+  const messages = Message.listPinnedForChannel(channelId).map(m => Message.toPublic(m));
+  res.json({ messages });
+});
+
 module.exports = router;

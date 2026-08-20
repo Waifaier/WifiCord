@@ -38,6 +38,24 @@ const Message = {
     return info.changes > 0;
   },
 
+  editContent(id, content) {
+    db.prepare("UPDATE messages SET content=?, edited_at=datetime('now') WHERE id=?").run(content, id);
+    return Message.findById(id);
+  },
+
+  setPinned(id, pinned, byUserId) {
+    if (pinned) db.prepare("UPDATE messages SET pinned_at=datetime('now'), pinned_by=? WHERE id=?").run(byUserId, id);
+    else db.prepare('UPDATE messages SET pinned_at=NULL, pinned_by=NULL WHERE id=?').run(id);
+    return Message.findById(id);
+  },
+
+  listPinnedForChannel(channelId) {
+    return db.prepare(`SELECT m.*, u.username, u.display_name, u.avatar_url
+      FROM messages m JOIN users u ON u.id=m.from_user_id
+      WHERE m.channel_id=? AND m.pinned_at IS NOT NULL
+      ORDER BY m.pinned_at DESC`).all(channelId);
+  },
+
   findById(id) {
     return db
       .prepare(
@@ -71,6 +89,8 @@ const Message = {
       toUserId: m.to_user_id,
       content: m.content,
       createdAt: m.created_at,
+      editedAt: m.edited_at || null,
+      pinnedAt: m.pinned_at || null,
       reactions: [],
       author: {
         id: m.from_user_id,

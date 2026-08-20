@@ -40,6 +40,11 @@
         if(mime.startsWith('image/')) return '<div class="chat-media"><img src="'+url+'" alt="'+name+'" loading="lazy"></div><a class="media-file-link" href="'+url+'" target="_blank" rel="noopener">'+name+'</a>';
         if(mime.startsWith('video/')) return '<div class="chat-media"><video src="'+url+'" controls preload="metadata"></video></div><a class="media-file-link" href="'+url+'" target="_blank" rel="noopener">'+name+'</a>';
         if(mime.startsWith('audio/')) return '<div class="chat-audio-player"><div class="chat-audio-icon">🎵</div><div class="chat-audio-main"><strong>'+name+'</strong><audio src="'+url+'" controls preload="metadata"></audio></div></div>';
+        if(isTextPreviewable(m.mime, m.name)){
+          const lang=escapeHtml(langForFile(m.mime,m.name));
+          return '<div class="code-preview-block" data-code-url="'+url+'" data-code-lang="'+lang+'"><div class="code-preview-loading">Carregando prévia…</div></div>'+
+            '<a class="media-file-link code-preview-download" href="'+url+'" target="_blank" rel="noopener" download>⬇️ Baixar '+name+'</a>';
+        }
         return '<a class="media-file-card" href="'+url+'" target="_blank" rel="noopener"><span>📎</span><strong>'+name+'</strong><small>'+Math.round(Number(m.size||0)/1024/1024*10)/10+' MB</small></a>';
       }catch(_){return '<span>Arquivo de mídia inválido.</span>';}
     }
@@ -215,6 +220,8 @@
     adminChatMutedUntil:0, adminPunishedUntil:0, seenMessageIds:new Set(), // userId -> { name, timer }
     typingLocalActive: false,
     typingLocalTimer: null,
+    searchMatches: [],
+    searchIndex: -1,
   };
 
   // ---------------------------------------------------------------------
@@ -235,6 +242,18 @@
       chatTitle: $('chat-title'),
       chatPeerAvatar: $('chat-peer-avatar'),
       typingIndicator: $('typing-indicator'),
+      messageSearchBtn: $('message-search-btn'),
+      messageSearchBar: $('message-search-bar'),
+      messageSearchInput: $('message-search-input'),
+      messageSearchCount: $('message-search-count'),
+      messageSearchPrev: $('message-search-prev'),
+      messageSearchNext: $('message-search-next'),
+      messageSearchClose: $('message-search-close'),
+      pinnedMessagesBtn: $('pinned-messages-btn'),
+      pinnedMessagesList: $('pinned-messages-list'),
+      mobileMembersBtn: $('mobile-members-btn'),
+      membersPanelClose: $('members-panel-close'),
+      mobileNavBackdrop: $('mobile-nav-backdrop'),
       friendRequestsList: $('friend-requests-list'),
       friendList: $('friend-list'),
       serverList: $('server-list'),
@@ -494,8 +513,13 @@
     const profileUser = member || state.friends.find(f=>String(f.id)===String(author.id)) || (state.currentUser && String(state.currentUser.id)===String(author.id)?state.currentUser:null);
     const displayAuthor = member ? memberDisplayName(member) : (author.displayName || author.username || 'Usuário');
     const own = state.currentUser && String(author.id) === String(state.currentUser.id);
+    const isEditableContent = !String(msg.content||'').startsWith('__MEDIA__:') && !String(msg.content||'').startsWith('__STICKER__:') && !String(msg.content||'').startsWith('__SUPER__:');
+    const editedLabel = msg.editedAt ? '<span class="message-edited-tag" title="Editada">(editado)</span>' : '';
+    const pinBtn = state.activeChannelId
+      ? '<button type="button" class="message-pin-btn" data-pin-message="' + escapeHtml(msg.id) + '" title="' + (msg.pinnedAt ? 'Desafixar mensagem' : 'Fixar mensagem') + '" aria-label="Fixar mensagem">📌</button>'
+      : '';
     return (
-      '<li class="message-item' + (own ? ' own' : '') + '" data-message-id="' + escapeHtml(msg.id) + '" data-message-author-id="' + escapeHtml(author.id) + '">' +
+      '<li class="message-item' + (own ? ' own' : '') + (msg.pinnedAt ? ' pinned' : '') + '" data-message-id="' + escapeHtml(msg.id) + '" data-message-author-id="' + escapeHtml(author.id) + '">' +
       '<div class="message-avatar">' +
       avatarHtml(profileUser || author) +
       '</div>' +
@@ -503,10 +527,14 @@
       '<div class="message-header">' +
       '<span class="message-author">' + escapeHtml(displayAuthor) + (member && String(member.id)===String(state.serverOwnerId)?' 👑':'') + '</span>' +
       '<span class="message-time">' + escapeHtml(formatTime(msg.createdAt)) + '</span>' +
+      editedLabel +
+      pinBtn +
+      (own && isEditableContent ? '<button type="button" class="message-edit-btn" data-edit-message="' + escapeHtml(msg.id) + '" title="Editar mensagem" aria-label="Editar mensagem">✏️</button>' : '') +
       (own ? '<button type="button" class="message-delete-btn" data-delete-message="' + escapeHtml(msg.id) + '" title="Apagar mensagem" aria-label="Apagar mensagem">🗑️</button>' : '') +
       '</div>' +
-      '<div class="message-content">' + formatMessageContent(msg.content) + '</div>' +
+      '<div class="message-content" data-raw-content="' + escapeHtml(msg.content) + '">' + formatMessageContent(msg.content) + '</div>' +
       reactionHtml(msg) +
+      (own ? '<div class="message-seen-status" data-seen-status></div>' : '') +
       '</div></li>'
     );
   }
@@ -528,6 +556,7 @@
       return;
     }
     el.messagesList.innerHTML = messages.map(messageItemHtml).join('');
+    hydrateCodePreviews();
     // Histórico nunca dispara efeitos novamente ao abrir a conversa.
     scrollMessagesToBottom();
   }
@@ -554,6 +583,306 @@
   function handleMessagesScroll() {
     if (isNearMessagesBottom()) hideScrollToBottomBtn();
     else showScrollToBottomBtn();
+  }
+
+  // ---------------------------------------------------------------------
+  // Busca de mensagens (Ctrl+F customizado)
+  // ---------------------------------------------------------------------
+
+  function isMessageSearchOpen() {
+    return !!(el.messageSearchBar && !el.messageSearchBar.classList.contains('hidden'));
+  }
+
+  function openMessageSearch() {
+    if (!el.messageSearchBar || (!state.activeChannelId && !state.activeDMUserId)) return;
+    el.messageSearchBar.classList.remove('hidden');
+    el.messageSearchInput && el.messageSearchInput.focus();
+    runMessageSearch();
+  }
+
+  function closeMessageSearch() {
+    if (!el.messageSearchBar) return;
+    el.messageSearchBar.classList.add('hidden');
+    if (el.messageSearchInput) el.messageSearchInput.value = '';
+    clearSearchHighlights();
+    state.searchMatches = [];
+    state.searchIndex = -1;
+  }
+
+  function clearSearchHighlights() {
+    if (!el.messagesList) return;
+    el.messagesList.querySelectorAll('.search-current').forEach(function (n) { n.classList.remove('search-current'); });
+    el.messagesList.querySelectorAll('mark.search-highlight').forEach(function (mark) {
+      const parent = mark.parentNode;
+      if (!parent) return;
+      parent.replaceChild(document.createTextNode(mark.textContent), mark);
+      parent.normalize();
+    });
+  }
+
+  function runMessageSearch() {
+    if (!el.messagesList || !el.messageSearchInput) return;
+    clearSearchHighlights();
+    const query = el.messageSearchInput.value.trim();
+    state.searchMatches = [];
+    state.searchIndex = -1;
+    if (!query) {
+      if (el.messageSearchCount) el.messageSearchCount.textContent = '';
+      return;
+    }
+    const lowerQuery = query.toLowerCase();
+    const items = el.messagesList.querySelectorAll('.message-item');
+    items.forEach(function (item) {
+      const contentEl = item.querySelector('.message-content');
+      if (!contentEl) return;
+      const text = contentEl.textContent || '';
+      if (text.toLowerCase().indexOf(lowerQuery) === -1) return;
+      highlightTextNodes(contentEl, lowerQuery);
+      state.searchMatches.push(item);
+    });
+    if (el.messageSearchCount) {
+      el.messageSearchCount.textContent = state.searchMatches.length
+        ? '0/' + state.searchMatches.length
+        : 'Nenhum resultado';
+    }
+    if (state.searchMatches.length) goToSearchMatch(0);
+  }
+
+  function highlightTextNodes(root, lowerQuery) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    let n;
+    while ((n = walker.nextNode())) nodes.push(n);
+    nodes.forEach(function (node) {
+      const text = node.textContent || '';
+      const lower = text.toLowerCase();
+      const idx = lower.indexOf(lowerQuery);
+      if (idx === -1) return;
+      const before = text.slice(0, idx);
+      const match = text.slice(idx, idx + lowerQuery.length);
+      const after = text.slice(idx + lowerQuery.length);
+      const frag = document.createDocumentFragment();
+      if (before) frag.appendChild(document.createTextNode(before));
+      const mark = document.createElement('mark');
+      mark.className = 'search-highlight';
+      mark.textContent = match;
+      frag.appendChild(mark);
+      if (after) frag.appendChild(document.createTextNode(after));
+      node.parentNode.replaceChild(frag, node);
+    });
+  }
+
+  function goToSearchMatch(index) {
+    if (!state.searchMatches.length) return;
+    const total = state.searchMatches.length;
+    const normalized = ((index % total) + total) % total;
+    state.searchIndex = normalized;
+    state.searchMatches.forEach(function (item) { item.classList.remove('search-current'); });
+    const current = state.searchMatches[normalized];
+    current.classList.add('search-current');
+    current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (el.messageSearchCount) el.messageSearchCount.textContent = (normalized + 1) + '/' + total;
+  }
+
+  function searchNext() { goToSearchMatch(state.searchIndex + 1); }
+  function searchPrev() { goToSearchMatch(state.searchIndex - 1); }
+
+  // ---------------------------------------------------------------------
+  // Mensagens fixadas
+  // ---------------------------------------------------------------------
+
+  function messagePreviewText(msg) {
+    const raw = String(msg.content || '');
+    if (raw.startsWith('__MEDIA__:')) return '📎 Arquivo de mídia';
+    if (raw.startsWith('__STICKER__:')) return '✨ Figurinha';
+    if (raw.startsWith('__SUPER__:')) return '💥 Super emoji';
+    return raw.length > 140 ? raw.slice(0, 140) + '…' : raw;
+  }
+
+  async function openPinnedMessagesModal() {
+    if (!state.activeChannelId) {
+      toast('Fixados estão disponíveis só em canais de servidor.', 'error');
+      return;
+    }
+    if (el.pinnedMessagesList) el.pinnedMessagesList.innerHTML = '<div class="loading-state">Carregando...</div>';
+    openModal('modal-pinned-messages');
+    try {
+      const data = await api('/api/messages/channel/' + encodeURIComponent(state.activeChannelId) + '/pinned');
+      renderPinnedMessagesList((data && data.messages) || []);
+    } catch (err) {
+      if (el.pinnedMessagesList) el.pinnedMessagesList.innerHTML = '<div class="error-state">Não foi possível carregar as fixadas.</div>';
+    }
+  }
+
+  function renderPinnedMessagesList(messages) {
+    if (!el.pinnedMessagesList) return;
+    if (!messages.length) {
+      el.pinnedMessagesList.innerHTML = '<div class="empty-state">Nenhuma mensagem fixada neste canal.</div>';
+      return;
+    }
+    el.pinnedMessagesList.innerHTML = messages.map(function (msg) {
+      const author = msg.author || {};
+      const name = escapeHtml(author.displayName || author.username || 'Usuário');
+      return (
+        '<div class="pinned-message-item" data-jump-to-message="' + escapeHtml(msg.id) + '">' +
+        '<div class="pinned-message-author">' + name + '<span class="message-time">' + escapeHtml(formatTime(msg.createdAt)) + '</span></div>' +
+        '<div class="pinned-message-content">' + escapeHtml(messagePreviewText(msg)) + '</div>' +
+        '</div>'
+      );
+    }).join('');
+    el.pinnedMessagesList.querySelectorAll('[data-jump-to-message]').forEach(function (node) {
+      node.addEventListener('click', function () {
+        const id = node.getAttribute('data-jump-to-message');
+        closeModals();
+        const target = el.messagesList && el.messagesList.querySelector('[data-message-id="' + CSS.escape(String(id)) + '"]');
+        if (target) {
+          target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          target.classList.add('search-current');
+          setTimeout(function () { target.classList.remove('search-current'); }, 1600);
+        } else {
+          toast('Mensagem fixada não está no histórico carregado.', 'error');
+        }
+      });
+    });
+  }
+
+  function togglePinMessage(messageId, pinned) {
+    window.ChatSocket.togglePinMessage(messageId, pinned, function (res) {
+      if (res && res.error) { toast(res.error, 'error'); return; }
+      applyPinStateToDom(messageId, res && res.pinnedAt);
+    });
+  }
+
+  function applyPinStateToDom(messageId, pinnedAt) {
+    const item = el.messagesList && el.messagesList.querySelector('[data-message-id="' + CSS.escape(String(messageId)) + '"]');
+    if (!item) return;
+    item.classList.toggle('pinned', !!pinnedAt);
+    const btn = item.querySelector('[data-pin-message]');
+    if (btn) btn.title = pinnedAt ? 'Desafixar mensagem' : 'Fixar mensagem';
+  }
+
+  function handleMessagePinChanged(data) {
+    if (!data || !data.messageId) return;
+    applyPinStateToDom(data.messageId, data.pinnedAt);
+  }
+
+  // ---------------------------------------------------------------------
+  // Preview de arquivos de texto/código
+  // ---------------------------------------------------------------------
+
+  const CODE_PREVIEW_LINES = 15;
+  const CODE_PREVIEW_MAX_CHARS = 40000;
+  const TEXT_EXT_LANGS = {
+    js: 'js', jsx: 'js', ts: 'js', tsx: 'js', mjs: 'js', cjs: 'js',
+    py: 'python', json: 'json', md: 'markdown', markdown: 'markdown',
+    html: 'html', htm: 'html', css: 'css', txt: 'text',
+    sh: 'bash', yml: 'yaml', yaml: 'yaml', xml: 'html',
+    c: 'c', cpp: 'c', h: 'c', java: 'java', go: 'go', rb: 'ruby', php: 'php',
+  };
+
+  function isTextPreviewable(mime, name) {
+    const m = String(mime || '');
+    if (/^text\//.test(m)) return true;
+    if (['application/json', 'application/javascript', 'application/xml', 'application/x-yaml'].includes(m)) return true;
+    const ext = String(name || '').split('.').pop().toLowerCase();
+    return Object.prototype.hasOwnProperty.call(TEXT_EXT_LANGS, ext);
+  }
+
+  function langForFile(mime, name) {
+    const ext = String(name || '').split('.').pop().toLowerCase();
+    if (TEXT_EXT_LANGS[ext]) return TEXT_EXT_LANGS[ext];
+    if (/json/.test(mime)) return 'json';
+    if (/javascript/.test(mime)) return 'js';
+    return 'text';
+  }
+
+  // Highlighter simples via regex — cobre js/python/json/html com boa
+  // cobertura de palavras-chave, strings, números e comentários.
+  function highlightCode(escapedText, lang) {
+    const rules = {
+      js: [
+        [/\/\/.*$/gm, 'cp-comment'],
+        [/\/\*[\s\S]*?\*\//g, 'cp-comment'],
+        [/(&#039;|&quot;|`)(?:\\.|(?!\1).)*\1/g, 'cp-string'],
+        [/\b\d+(\.\d+)?\b/g, 'cp-number'],
+        [/\b(function|return|const|let|var|if|else|for|while|new|class|extends|import|export|from|await|async|try|catch|throw|typeof|this|null|undefined|true|false)\b/g, 'cp-keyword'],
+      ],
+      python: [
+        [/#.*$/gm, 'cp-comment'],
+        [/(&#039;|&quot;)(?:\\.|(?!\1).)*\1/g, 'cp-string'],
+        [/\b\d+(\.\d+)?\b/g, 'cp-number'],
+        [/\b(def|return|import|from|class|if|elif|else|for|while|in|try|except|with|as|lambda|None|True|False|self|print)\b/g, 'cp-keyword'],
+      ],
+      json: [
+        [/(&quot;)(?:\\.|(?!\1).)*\1(?=\s*:)/g, 'cp-key'],
+        [/(&quot;)(?:\\.|(?!\1).)*\1/g, 'cp-string'],
+        [/\b\d+(\.\d+)?\b/g, 'cp-number'],
+        [/\b(true|false|null)\b/g, 'cp-keyword'],
+      ],
+      html: [
+        [/(&lt;\/?[a-zA-Z0-9-]+)/g, 'cp-keyword'],
+        [/(&#039;|&quot;)(?:\\.|(?!\1).)*\1/g, 'cp-string'],
+      ],
+    };
+    const set = rules[lang];
+    if (!set) return escapedText;
+    let out = escapedText;
+    set.forEach(function (pair) {
+      out = out.replace(pair[0], function (m) { return '<span class="' + pair[1] + '">' + m + '</span>'; });
+    });
+    return out;
+  }
+
+  function buildCodePreviewMarkup(rawText, lang) {
+    const lines = rawText.split('\n');
+    const truncated = rawText.length > CODE_PREVIEW_MAX_CHARS;
+    const capped = truncated ? rawText.slice(0, CODE_PREVIEW_MAX_CHARS) : rawText;
+    const cappedLines = capped.split('\n');
+    const isLong = cappedLines.length > CODE_PREVIEW_LINES;
+    const shortText = cappedLines.slice(0, CODE_PREVIEW_LINES).join('\n');
+    const shortHtml = highlightCode(escapeHtml(shortText), lang);
+    const fullHtml = highlightCode(escapeHtml(capped), lang);
+    const moreLabel = 'Ver mais (' + (lines.length - CODE_PREVIEW_LINES) + ' linhas)';
+    return (
+      '<pre class="code-preview-code" data-short="' + escapeHtml(shortHtml).replace(/"/g,'&quot;') + '">' +
+      '<code>' + (isLong ? shortHtml : fullHtml) + '</code></pre>' +
+      (isLong ? '<button type="button" class="code-preview-toggle" data-expanded="0" data-full="' + encodeURIComponent(fullHtml) + '" data-short="' + encodeURIComponent(shortHtml) + '">' + moreLabel + '</button>' : '') +
+      (truncated ? '<div class="code-preview-truncated">Arquivo grande — mostrando só o início.</div>' : '')
+    );
+  }
+
+  async function hydrateCodePreviews() {
+    if (!el.messagesList) return;
+    const blocks = el.messagesList.querySelectorAll('.code-preview-block[data-code-url]:not([data-hydrated])');
+    for (const block of blocks) {
+      block.setAttribute('data-hydrated', '1');
+      const url = block.getAttribute('data-code-url');
+      const lang = block.getAttribute('data-code-lang') || 'text';
+      try {
+        const res = await fetch(url, { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('fetch failed');
+        const text = await res.text();
+        block.innerHTML = buildCodePreviewMarkup(text, lang);
+        const toggleBtn = block.querySelector('.code-preview-toggle');
+        if (toggleBtn) {
+          toggleBtn.addEventListener('click', function () {
+            const expanded = toggleBtn.getAttribute('data-expanded') === '1';
+            const codeEl = block.querySelector('.code-preview-code code');
+            if (expanded) {
+              codeEl.innerHTML = decodeURIComponent(toggleBtn.getAttribute('data-short'));
+              toggleBtn.textContent = 'Ver mais';
+              toggleBtn.setAttribute('data-expanded', '0');
+            } else {
+              codeEl.innerHTML = decodeURIComponent(toggleBtn.getAttribute('data-full'));
+              toggleBtn.textContent = 'Ver menos';
+              toggleBtn.setAttribute('data-expanded', '1');
+            }
+          });
+        }
+      } catch (_) {
+        block.innerHTML = '<div class="code-preview-error">Não foi possível carregar a prévia do arquivo.</div>';
+      }
+    }
   }
 
   function toggleFocusMode() {
@@ -591,6 +920,7 @@
 
     el.messagesList.insertAdjacentHTML('beforeend', messageItemHtml(msg));
     maybeSuperEffect(msg.content);
+    hydrateCodePreviews();
 
     if (own || wasNearBottom) {
       scrollMessagesToBottom();
@@ -615,6 +945,16 @@
 
   function closeMobileNav() {
     if (el.appScreen) el.appScreen.classList.remove('nav-open');
+    if (el.mobileNavBackdrop && !el.membersPanel?.classList.contains('mobile-open')) {
+      el.mobileNavBackdrop.classList.remove('visible');
+    }
+  }
+
+  function closeMobileMembersDrawer() {
+    el.membersPanel?.classList.remove('mobile-open');
+    if (el.mobileNavBackdrop && !el.appScreen?.classList.contains('nav-open')) {
+      el.mobileNavBackdrop.classList.remove('visible');
+    }
   }
 
   function setChatEnabled(enabled) {
@@ -789,6 +1129,7 @@
     if (el.chatTitle) el.chatTitle.textContent = friend ? (friend.displayName || friend.username) : 'Conversa'; if(el.chatPeerAvatar){el.chatPeerAvatar.innerHTML=friend?avatarHtml(friend):'';el.chatPeerAvatar.classList.toggle('hidden',!friend);}
 
     window.ChatSocket.joinDM(userId);
+    window.ChatSocket.sendDmSeen(userId);
 
     // A conexão em tempo real não pode impedir o carregamento da conversa.
     // Também protegemos contra uma resposta antiga sobrescrever uma DM nova.
@@ -1000,6 +1341,94 @@
     window.ChatSocket.deleteMessage(messageId, result => {
       if (result?.error) toast(result.error, 'error');
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // Edição de mensagens
+  // ---------------------------------------------------------------------
+
+  function startEditMessage(messageId) {
+    const item = el.messagesList && el.messagesList.querySelector('[data-message-id="' + CSS.escape(String(messageId)) + '"]');
+    if (!item) return;
+    const contentEl = item.querySelector('.message-content');
+    if (!contentEl || item.querySelector('.message-edit-form')) return;
+    const rawContent = contentEl.getAttribute('data-raw-content') || contentEl.textContent || '';
+
+    const form = document.createElement('div');
+    form.className = 'message-edit-form';
+    form.innerHTML =
+      '<textarea class="message-edit-input" maxlength="2000">' + escapeHtml(rawContent) + '</textarea>' +
+      '<div class="message-edit-actions">' +
+      '<button type="button" class="btn btn-small btn-ghost" data-cancel-edit>Cancelar</button>' +
+      '<button type="button" class="btn btn-small btn-primary" data-save-edit>Salvar</button>' +
+      '</div>';
+
+    contentEl.classList.add('hidden');
+    contentEl.insertAdjacentElement('afterend', form);
+    const textarea = form.querySelector('.message-edit-input');
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+    function cancel() { form.remove(); contentEl.classList.remove('hidden'); }
+    function save() {
+      const newContent = textarea.value.trim();
+      if (!newContent) return;
+      window.ChatSocket.editMessage(messageId, newContent, function (res) {
+        if (res && res.error) { toast(res.error, 'error'); return; }
+        cancel();
+      });
+    }
+
+    form.querySelector('[data-cancel-edit]').addEventListener('click', cancel);
+    form.querySelector('[data-save-edit]').addEventListener('click', save);
+    textarea.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
+      if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    });
+  }
+
+  function handleMessageEdited(data) {
+    if (!data || !data.messageId || !el.messagesList) return;
+    const item = el.messagesList.querySelector('[data-message-id="' + CSS.escape(String(data.messageId)) + '"]');
+    if (!item) return;
+    const editForm = item.querySelector('.message-edit-form');
+    if (editForm) editForm.remove();
+    const contentEl = item.querySelector('.message-content');
+    if (contentEl) {
+      contentEl.classList.remove('hidden');
+      contentEl.setAttribute('data-raw-content', data.content);
+      contentEl.innerHTML = formatMessageContent(data.content);
+    }
+    if (data.editedAt && !item.querySelector('.message-edited-tag')) {
+      const timeEl = item.querySelector('.message-time');
+      if (timeEl) {
+        const tag = document.createElement('span');
+        tag.className = 'message-edited-tag';
+        tag.title = 'Editada';
+        tag.textContent = '(editado)';
+        timeEl.insertAdjacentElement('afterend', tag);
+      }
+    }
+    hydrateCodePreviews();
+  }
+
+  // ---------------------------------------------------------------------
+  // Confirmação de leitura (DM)
+  // ---------------------------------------------------------------------
+
+  function markDmSeenLocally(byUserId) {
+    if (!el.messagesList) return;
+    const ownItems = el.messagesList.querySelectorAll('.message-item.own [data-seen-status]');
+    if (!ownItems.length) return;
+    el.messagesList.querySelectorAll('[data-seen-status]').forEach(function (n) { n.textContent = ''; });
+    const last = ownItems[ownItems.length - 1];
+    last.textContent = '✓✓ visto';
+  }
+
+  function handleDmSeen(data) {
+    if (!data || !state.activeDMUserId) return;
+    if (String(data.byUserId) !== String(state.activeDMUserId)) return;
+    markDmSeenLocally(data.byUserId);
   }
 
   // ---------------------------------------------------------------------
@@ -1236,7 +1665,11 @@
 
     if (el.mobileMenuBtn) {
       el.mobileMenuBtn.addEventListener('click', function () {
-        if (el.appScreen) el.appScreen.classList.toggle('nav-open');
+        if (el.appScreen) {
+          const opening = !el.appScreen.classList.contains('nav-open');
+          el.appScreen.classList.toggle('nav-open');
+          if (el.mobileNavBackdrop) el.mobileNavBackdrop.classList.toggle('visible', opening);
+        }
       });
     }
 
@@ -1322,8 +1755,53 @@
       if (e.ctrlKey && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
         e.preventDefault();
         toggleFocusMode();
+        return;
+      }
+      // Ctrl+F customizado: busca só dentro do chat aberto, em vez da
+      // busca nativa do navegador.
+      if (e.ctrlKey && !e.shiftKey && (e.key === 'F' || e.key === 'f')) {
+        if (!state.activeChannelId && !state.activeDMUserId) return;
+        e.preventDefault();
+        openMessageSearch();
+        return;
+      }
+      if (e.key === 'Escape' && isMessageSearchOpen()) {
+        closeMessageSearch();
       }
     });
+
+    if (el.messageSearchInput) {
+      el.messageSearchInput.addEventListener('input', runMessageSearch);
+      el.messageSearchInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (e.shiftKey) searchPrev(); else searchNext();
+        }
+        if (e.key === 'Escape') { e.preventDefault(); closeMessageSearch(); }
+      });
+    }
+    if (el.messageSearchBtn) el.messageSearchBtn.addEventListener('click', openMessageSearch);
+    if (el.messageSearchClose) el.messageSearchClose.addEventListener('click', closeMessageSearch);
+    if (el.messageSearchNext) el.messageSearchNext.addEventListener('click', searchNext);
+    if (el.messageSearchPrev) el.messageSearchPrev.addEventListener('click', searchPrev);
+
+    if (el.pinnedMessagesBtn) el.pinnedMessagesBtn.addEventListener('click', openPinnedMessagesModal);
+
+    if (el.mobileMembersBtn) {
+      el.mobileMembersBtn.addEventListener('click', function () {
+        el.membersPanel?.classList.add('mobile-open');
+        el.mobileNavBackdrop?.classList.add('visible');
+      });
+    }
+    if (el.membersPanelClose) {
+      el.membersPanelClose.addEventListener('click', closeMobileMembersDrawer);
+    }
+    if (el.mobileNavBackdrop) {
+      el.mobileNavBackdrop.addEventListener('click', function () {
+        closeMobileNav();
+        closeMobileMembersDrawer();
+      });
+    }
 
     if (el.settingsBtn) el.settingsBtn.addEventListener('click', openSettingsModal);
     if (el.settingsLogoutBtn) {
@@ -1343,7 +1821,15 @@
         const reaction=e.target.closest('[data-reaction-emoji][data-reaction-message]');
         if(reaction){e.preventDefault();e.stopPropagation();toggleReaction(reaction.dataset.reactionMessage,reaction.dataset.reactionEmoji);return;}
         const btn = e.target.closest('[data-delete-message]');
-        if (btn) deleteMessage(btn.getAttribute('data-delete-message'));
+        if (btn) return deleteMessage(btn.getAttribute('data-delete-message'));
+        const editBtn = e.target.closest('[data-edit-message]');
+        if (editBtn) return startEditMessage(editBtn.getAttribute('data-edit-message'));
+        const pinBtn = e.target.closest('[data-pin-message]');
+        if (pinBtn) {
+          const item = pinBtn.closest('.message-item');
+          const currentlyPinned = item && item.classList.contains('pinned');
+          return togglePinMessage(pinBtn.getAttribute('data-pin-message'), !currentlyPinned);
+        }
       });
     }
 
@@ -1437,6 +1923,9 @@
     handleIncomingMessage: handleIncomingMessage,
     showIncomingDMNotice: showIncomingDMNotice,
     handleMessageDeleted: handleMessageDeleted,
+    handleMessageEdited: handleMessageEdited,
+    handleMessagePinChanged: handleMessagePinChanged,
+    handleDmSeen: handleDmSeen,
     handleMessageReaction,
     handleProfileUpdate: handleProfileUpdate,
     handleTyping: handleTyping,

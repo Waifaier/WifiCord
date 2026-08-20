@@ -71,6 +71,18 @@
         if (window.App) window.App.handleMessageDeleted(data);
       });
 
+      this.socket.on('message:edited', function (data) {
+        if (window.App) window.App.handleMessageEdited(data);
+      });
+
+      this.socket.on('message:pin-changed', function (data) {
+        if (window.App) window.App.handleMessagePinChanged(data);
+      });
+
+      this.socket.on('dm:seen', function (data) {
+        if (window.App) window.App.handleDmSeen(data);
+      });
+
       this.socket.on('message:reaction', function (data) {
         if (window.App) window.App.handleMessageReaction(data);
       });
@@ -159,6 +171,21 @@
     deleteMessage(messageId, callback) {
       if (!this.socket) return;
       this.socket.emit('message:delete', { messageId }, callback);
+    },
+
+    editMessage(messageId, content, callback) {
+      if (!this.socket) return;
+      this.socket.emit('message:edit', { messageId, content }, callback);
+    },
+
+    togglePinMessage(messageId, pinned, callback) {
+      if (!this.socket) return;
+      this.socket.emit('message:pin', { messageId, pinned }, callback);
+    },
+
+    sendDmSeen(toUserId) {
+      if (!this.socket) return;
+      this.socket.emit('dm:seen', { toUserId });
     },
 
     joinServerCall(payload, callback) { if(this.socket)this.socket.emit('server-call:join',payload,callback); },
