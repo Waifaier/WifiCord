@@ -199,6 +199,19 @@ function initSockets(io) {
     socket.on('typing:start', (data) => broadcastTyping(io, socket, data, true));
     socket.on('typing:stop', (data) => broadcastTyping(io, socket, data, false));
 
+    // Easter egg "piruleta": só repassa o evento para a mesma sala de
+    // canal/DM já usada pelo typing, sem persistir nada.
+    socket.on('piruleta:trigger', (data) => {
+      if (!data) return;
+      const payload = { userId };
+      if (data.channelId) {
+        payload.channelId = data.channelId;
+        socket.to(channelRoom(data.channelId)).emit('piruleta:trigger', payload);
+      } else if (data.toUserId) {
+        socket.to(dmRoom(userId, data.toUserId)).emit('piruleta:trigger', payload);
+      }
+    });
+
     // Sinalização WebRTC 1:1. O servidor valida amizade e somente repassa
     // SDP/ICE; áudio, vídeo e tela continuam P2P entre os navegadores.
     function canCall(toUserId) {
