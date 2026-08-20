@@ -199,6 +199,28 @@ input:focus, textarea:focus, select:focus {
   height: 100vh;
   background: var(--bg-deepest);
 }
+#app-screen.focus-mode {
+  grid-template-columns: 1fr;
+}
+#app-screen.focus-mode #server-rail,
+#app-screen.focus-mode #sidebar,
+#app-screen.focus-mode .members-panel {
+  display: none !important;
+}
+.focus-mode-hint {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  z-index: 50;
+  opacity: .85;
+  pointer-events: none;
+}
 
 #server-rail {
   background: var(--bg-deepest);
@@ -844,6 +866,8 @@ input:focus, textarea:focus, select:focus {
 .message-item {
   position: relative;
   animation: message-in .16s ease both;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
 }
 @keyframes message-in {
   from { opacity: 0; transform: translateY(4px); }

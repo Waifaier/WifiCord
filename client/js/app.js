@@ -556,6 +556,25 @@
     else showScrollToBottomBtn();
   }
 
+  function toggleFocusMode() {
+    if (!el.appScreen) return;
+    const active = el.appScreen.classList.toggle('focus-mode');
+    let hint = document.getElementById('focus-mode-hint');
+    if (active) {
+      if (!hint) {
+        hint = document.createElement('div');
+        hint.id = 'focus-mode-hint';
+        hint.className = 'focus-mode-hint';
+        hint.textContent = 'Modo foco ativado — Ctrl+Shift+F para sair';
+        document.body.appendChild(hint);
+      }
+      clearTimeout(toggleFocusMode._hideTimer);
+      toggleFocusMode._hideTimer = setTimeout(function () { hint && hint.remove(); }, 2500);
+    } else if (hint) {
+      hint.remove();
+    }
+  }
+
   function messageAlreadyRendered(messageId) {
     return !!el.messagesList.querySelector('[data-message-id="' + CSS.escape(String(messageId)) + '"]');
   }
@@ -1296,6 +1315,15 @@
     if (el.scrollToBottomBtn) {
       el.scrollToBottomBtn.addEventListener('click', scrollMessagesToBottom);
     }
+
+    // Modo foco: Ctrl+Shift+F esconde a lista de servidores/membros e
+    // deixa só o chat em tela cheia.
+    document.addEventListener('keydown', function (e) {
+      if (e.ctrlKey && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
+        e.preventDefault();
+        toggleFocusMode();
+      }
+    });
 
     if (el.settingsBtn) el.settingsBtn.addEventListener('click', openSettingsModal);
     if (el.settingsLogoutBtn) {
