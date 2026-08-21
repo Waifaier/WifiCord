@@ -1,710 +1,793 @@
 (function(){'use strict';
-const $=id=>document.getElementById(id);
-let canvas,ctx,tool='brush',brush='classic',drawing=false,start=null,last=null,history=[],future=[],layers=[],active=0,grid=false,zoom=1,selection=null,clipboard=null,frames=[],frameIndex=0;
-const brushes={classic:{name:'Clássico',cap:'round',join:'round',opacity:1,spacing:1},pencil:{name:'Lápis',cap:'round',join:'round',opacity:.72,spacing:1},ink:{name:'Tinta',cap:'round',join:'round',opacity:1,spacing:.55},watercolor:{name:'Aquarela',cap:'round',join:'round',opacity:.22,spacing:.75},marker:{name:'Marcador',cap:'round',join:'round',opacity:.72,spacing:1.1},chalk:{name:'Giz',cap:'round',join:'round',opacity:.32,spacing:.65},airbrush:{name:'Aerógrafo',cap:'round',join:'round',opacity:.12,spacing:.35},neon:{name:'Neon',cap:'round',join:'round',opacity:.9,spacing:1},pixel:{name:'Pixel',cap:'butt',join:'miter',opacity:1,spacing:1}};
 
-function toast(m,t){window.App?.toast?.(m,t);}
+const $=id=>document.getElementById(id);
+
+let canvas=null;
+let ctx=null;
+let tool='brush';
+let drawing=false;
+let lastPoint=null;
+let startPoint=null;
+let history=[];
+let future=[];
+let layers=[];
+let active=0;
+let grid=false;
+let zoom=1;
+
+function toast(message,type){
+    window.App?.toast?.(message,type);
+}
 
 function makeLayer(name){
     const c=document.createElement('canvas');
+
     c.width=canvas.width;
     c.height=canvas.height;
-    return{name,c,visible:true,opacity:1};
+
+    return{
+        name,
+        c,
+        visible:true,
+        opacity:1
+    };
 }
 
 function initCanvas(){
+
     canvas=$('wipaint-canvas');
-    if(!canvas)return;
-    ctx=canvas.getContext('2d',{willReadFrequently:true});
-    layers=[makeLayer('Camada 1')];
+
+    if(!canvas){
+        console.error('WifiPaint: canvas não encontrado.');
+        return;
+    }
+
+    ctx=canvas.getContext('2d',{
+        willReadFrequently:true
+    });
+
+    layers=[
+        makeLayer('Camada 1')
+    ];
+
     active=0;
-    frames=[snapshot()];
-    frameIndex=0;
+
     renderLayers();
-    resizeCanvas();
+
+    render();
+
     history=[];
+    future=[];
+
     saveHistory();
-    updateFrameUI();
+
+    attachCanvasEvents();
+}
+
+function attachCanvasEvents(){
+
+    if(!canvas) return;
+
+    canvas.style.touchAction='none';
+
+    canvas.onpointerdown=pointerDown;
+    canvas.onpointermove=pointerMove;
+    canvas.onpointerup=pointerUp;
+    canvas.onpointercancel=pointerUp;
+    canvas.onpointerleave=()=>{};
+
+    console.log('WifiPaint: eventos do canvas conectados.');
 }
 
 function resizeCanvas(){
+
+    if(!canvas) return;
+
     canvas.style.transform=`scale(${zoom})`;
     canvas.style.transformOrigin='top left';
+
     render();
 }
 
 function render(){
-    if(!ctx)return;
 
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+    if(!canvas || !ctx) return;
 
-    ctx.fillStyle='#fff';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
 
-    for(const l of layers){
-        if(!l.visible)continue;
+    ctx.fillStyle='#ffffff';
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    for(const layer of layers){
+
+        if(!layer.visible) continue;
 
         ctx.save();
-        ctx.globalAlpha=l.opacity;
-        ctx.drawImage(l.c,0,0);
+
+        ctx.globalAlpha=layer.opacity;
+
+        ctx.drawImage(
+            layer.c,
+            0,
+            0
+        );
+
         ctx.restore();
     }
 
     if(grid){
+
         ctx.save();
-        ctx.globalAlpha=.15;
-        ctx.strokeStyle='#64748b';
+
+        ctx.globalAlpha=.18;
+        ctx.strokeStyle='#777';
         ctx.lineWidth=1;
 
-        for(let x=0;x<canvas.width;x+=16){
+        for(
+            let x=0;
+            x<canvas.width;
+            x+=16
+        ){
+
             ctx.beginPath();
+
             ctx.moveTo(x,0);
             ctx.lineTo(x,canvas.height);
+
             ctx.stroke();
         }
 
-        for(let y=0;y<canvas.height;y+=16){
+        for(
+            let y=0;
+            y<canvas.height;
+            y+=16
+        ){
+
             ctx.beginPath();
+
             ctx.moveTo(0,y);
             ctx.lineTo(canvas.width,y);
+
             ctx.stroke();
         }
 
-        ctx.restore();
-    }
-
-    if(selection){
-        ctx.save();
-        ctx.setLineDash([6,4]);
-        ctx.strokeStyle='#7c5cff';
-        ctx.lineWidth=2;
-        ctx.strokeRect(selection.x,selection.y,selection.w,selection.h);
         ctx.restore();
     }
 }
 
-function pos(e){
-    const r=canvas.getBoundingClientRect();
+function getPosition(e){
+
+    const rect=
+        canvas.getBoundingClientRect();
+
+    const scaleX=
+        canvas.width/rect.width;
+
+    const scaleY=
+        canvas.height/rect.height;
 
     return{
-        x:Math.max(0,Math.min(canvas.width,(e.clientX-r.left)/zoom)),
-        y:Math.max(0,Math.min(canvas.height,(e.clientY-r.top)/zoom))
+        x:Math.max(
+            0,
+            Math.min(
+                canvas.width,
+                (e.clientX-rect.left)*scaleX
+            )
+        ),
+
+        y:Math.max(
+            0,
+            Math.min(
+                canvas.height,
+                (e.clientY-rect.top)*scaleY
+            )
+        )
     };
 }
 
-function style(c){
-    const b=brushes[brush]||brushes.classic;
-    const color=$('wipaint-color')?.value||'#7c5cff';
-    const size=Number($('wipaint-size')?.value||12);
-    const opacity=Number($('wipaint-opacity')?.value||100)/100;
+function getColor(){
 
-    c.globalAlpha=opacity*b.opacity;
-    c.lineCap=b.cap;
-    c.lineJoin=b.join;
-    c.lineWidth=brush==='pixel'
-        ?Math.max(1,Math.round(size/4))*4
-        :size;
+    return $('wipaint-color')?.value || '#7c5cff';
+}
 
-    c.strokeStyle=color;
-    c.fillStyle=color;
+function getSize(){
 
-    if(brush==='neon'){
-        c.shadowColor=color;
-        c.shadowBlur=Math.max(8,size);
+    return Number(
+        $('wipaint-size')?.value || 12
+    );
+}
+
+function getOpacity(){
+
+    return Number(
+        $('wipaint-opacity')?.value || 100
+    )/100;
+}
+
+function setupBrush(c){
+
+    const size=getSize();
+
+    c.globalAlpha=getOpacity();
+
+    c.strokeStyle=getColor();
+    c.fillStyle=getColor();
+
+    c.lineWidth=size;
+
+    c.lineCap='round';
+    c.lineJoin='round';
+
+    if(tool==='pixel'){
+
+        c.lineCap='butt';
+        c.lineJoin='miter';
+
+        c.lineWidth=
+            Math.max(
+                4,
+                Math.round(size/4)*4
+            );
+    }
+
+    if(tool==='eraser'){
+
+        c.globalCompositeOperation=
+            'destination-out';
+
+    }else{
+
+        c.globalCompositeOperation=
+            'source-over';
     }
 }
 
+function currentLayer(){
+
+    return layers[active];
+}
+
+function drawPoint(point){
+
+    const layer=currentLayer();
+
+    if(!layer) return;
+
+    const c=
+        layer.c.getContext('2d');
+
+    setupBrush(c);
+
+    if(tool==='pixel'){
+
+        const size=
+            Math.max(
+                4,
+                Math.round(getSize()/4)*4
+            );
+
+        c.fillRect(
+            Math.floor(point.x/size)*size,
+            Math.floor(point.y/size)*size,
+            size,
+            size
+        );
+
+    }else{
+
+        c.beginPath();
+
+        c.arc(
+            point.x,
+            point.y,
+            Math.max(
+                0.5,
+                getSize()/2
+            ),
+            0,
+            Math.PI*2
+        );
+
+        c.fill();
+    }
+
+    c.globalCompositeOperation=
+        'source-over';
+}
+
+function drawLine(from,to){
+
+    const layer=currentLayer();
+
+    if(!layer) return;
+
+    const c=
+        layer.c.getContext('2d');
+
+    setupBrush(c);
+
+    c.beginPath();
+
+    c.moveTo(
+        from.x,
+        from.y
+    );
+
+    c.lineTo(
+        to.x,
+        to.y
+    );
+
+    c.stroke();
+
+    c.globalCompositeOperation=
+        'source-over';
+}
+
+function pointerDown(e){
+
+    if(e.button!==0) return;
+
+    if(!canvas) return;
+
+    e.preventDefault();
+
+    try{
+        canvas.setPointerCapture?.(
+            e.pointerId
+        );
+    }catch{}
+
+    const point=
+        getPosition(e);
+
+    drawing=true;
+
+    startPoint=point;
+    lastPoint=point;
+
+    if(tool==='eyedropper'){
+
+        const pixel=
+            ctx.getImageData(
+                Math.floor(point.x),
+                Math.floor(point.y),
+                1,
+                1
+            ).data;
+
+        const color='#'+
+            [pixel[0],pixel[1],pixel[2]]
+            .map(
+                n=>n
+                    .toString(16)
+                    .padStart(2,'0')
+            )
+            .join('');
+
+        const input=
+            $('wipaint-color');
+
+        if(input)
+            input.value=color;
+
+        drawing=false;
+
+        return;
+    }
+
+    if(tool==='fill'){
+
+        const layer=currentLayer();
+
+        const c=
+            layer.c.getContext('2d');
+
+        c.globalAlpha=
+            getOpacity();
+
+        c.fillStyle=
+            getColor();
+
+        c.fillRect(
+            0,
+            0,
+            layer.c.width,
+            layer.c.height
+        );
+
+        render();
+
+        commit();
+
+        drawing=false;
+
+        return;
+    }
+
+    if(tool==='text'){
+
+        const text=
+            prompt('Digite o texto:');
+
+        if(text){
+
+            const layer=
+                currentLayer();
+
+            const c=
+                layer.c.getContext('2d');
+
+            c.globalAlpha=
+                getOpacity();
+
+            c.fillStyle=
+                getColor();
+
+            c.font=
+                `600 ${Math.max(
+                    14,
+                    getSize()*2
+                )}px Arial`;
+
+            c.fillText(
+                text,
+                point.x,
+                point.y
+            );
+
+            render();
+
+            commit();
+        }
+
+        drawing=false;
+
+        return;
+    }
+
+    if(
+        tool==='brush' ||
+        tool==='eraser' ||
+        tool==='pixel'
+    ){
+
+        drawPoint(point);
+
+        render();
+    }
+}
+
+function pointerMove(e){
+
+    if(!drawing) return;
+
+    e.preventDefault();
+
+    const point=
+        getPosition(e);
+
+    if(
+        tool==='brush' ||
+        tool==='eraser' ||
+        tool==='pixel'
+    ){
+
+        drawLine(
+            lastPoint,
+            point
+        );
+
+        lastPoint=point;
+
+        render();
+    }
+}
+
+function pointerUp(e){
+
+    if(!drawing) return;
+
+    e.preventDefault();
+
+    drawing=false;
+
+    try{
+        canvas.releasePointerCapture?.(
+            e.pointerId
+        );
+    }catch{}
+
+    if(
+        tool==='brush' ||
+        tool==='eraser' ||
+        tool==='pixel' ||
+        tool==='fill' ||
+        tool==='text'
+    ){
+
+        commit();
+    }
+
+    startPoint=null;
+    lastPoint=null;
+}
+
 function snapshot(){
-    return layers.map(l=>({
-        name:l.name,
-        visible:l.visible,
-        opacity:l.opacity,
-        data:l.c.toDataURL('image/png')
+
+    return layers.map(layer=>({
+
+        name:layer.name,
+
+        visible:layer.visible,
+
+        opacity:layer.opacity,
+
+        data:layer.c.toDataURL(
+            'image/png'
+        )
     }));
 }
 
-function restore(snap){
+function restore(snapshotData){
+
     return Promise.all(
-        snap.map(x=>new Promise(res=>{
-            const l=makeLayer(x.name);
+        snapshotData.map(item=>
+            new Promise(resolve=>{
 
-            l.visible=x.visible;
-            l.opacity=x.opacity;
+                const layer=
+                    makeLayer(item.name);
 
-            const im=new Image();
+                layer.visible=
+                    item.visible;
 
-            im.onload=()=>{
-                l.c.getContext('2d').drawImage(im,0,0);
-                res(l);
-            };
+                layer.opacity=
+                    item.opacity;
 
-            im.src=x.data;
-        }))
-    ).then(ls=>{
-        layers=ls;
-        active=Math.min(active,layers.length-1);
+                const image=
+                    new Image();
+
+                image.onload=()=>{
+
+                    layer.c
+                        .getContext('2d')
+                        .drawImage(
+                            image,
+                            0,
+                            0
+                        );
+
+                    resolve(layer);
+                };
+
+                image.src=item.data;
+            })
+        )
+    ).then(newLayers=>{
+
+        layers=newLayers;
+
+        active=
+            Math.min(
+                active,
+                layers.length-1
+            );
+
         renderLayers();
+
         render();
     });
 }
 
 function saveHistory(){
-    history.push(snapshot());
+
+    history.push(
+        snapshot()
+    );
 
     if(history.length>40)
         history.shift();
 
     future=[];
-
-    frames[frameIndex]=snapshot();
-
-    updateFrameUI();
 }
 
 async function undo(){
-    if(history.length<2)return;
 
-    future.push(history.pop());
+    if(history.length<=1){
 
-    await restore(history[history.length-1]);
+        toast(
+            'Nada para desfazer.',
+            'error'
+        );
 
-    updateFrameUI();
+        return;
+    }
+
+    const current=
+        history.pop();
+
+    future.push(current);
+
+    await restore(
+        history[history.length-1]
+    );
 }
 
 async function redo(){
-    const s=future.pop();
 
-    if(!s)return;
+    if(!future.length){
 
-    history.push(s);
+        toast(
+            'Nada para refazer.',
+            'error'
+        );
 
-    await restore(s);
+        return;
+    }
 
-    updateFrameUI();
-}
+    const state=
+        future.pop();
 
-function current(){
-    return layers[active];
+    history.push(state);
+
+    await restore(state);
 }
 
 function commit(){
+
     saveHistory();
 }
 
-function pointerDown(e){
-    if(e.button!==0)return;
+function renderLayers(){
 
-    drawing=true;
-    start=pos(e);
-    last=start;
+    const box=
+        $('wipaint-layers');
 
-    if(tool==='select'){
-        selection={
-            x:start.x,
-            y:start.y,
-            w:0,
-            h:0
-        };
+    if(!box) return;
 
-        render();
-        return;
-    }
+    box.innerHTML=
+        layers.map(
+            (layer,index)=>`
 
-    if(tool==='eyedropper'){
-        const p=ctx.getImageData(
-            Math.floor(start.x),
-            Math.floor(start.y),
-            1,
-            1
-        ).data;
+                <div
+                    class="wipaint-layer ${
+                        index===active
+                            ?'active'
+                            :''
+                    }"
+                    data-layer="${index}"
+                >
 
-        $('wipaint-color').value='#'+
-            [p[0],p[1],p[2]]
-            .map(x=>x.toString(16).padStart(2,'0'))
-            .join('');
+                    <button
+                        type="button"
+                        data-visible="${index}"
+                    >
+                        ${
+                            layer.visible
+                                ?'👁️'
+                                :'🚫'
+                        }
+                    </button>
 
-        drawing=false;
-        return;
-    }
+                    <span>
+                        ${layer.name}
+                    </span>
 
-    if(tool==='fill'){
-        const l=current();
-        const c=l.c.getContext('2d');
+                </div>
+            `
+        ).join('');
 
-        c.globalAlpha=
-            Number($('wipaint-opacity').value)/100;
+    box
+        .querySelectorAll(
+            '[data-layer]'
+        )
+        .forEach(element=>{
 
-        c.fillStyle=$('wipaint-color').value;
-        c.fillRect(0,0,l.c.width,l.c.height);
+            element.onclick=()=>{
 
-        render();
-        commit();
+                active=
+                    Number(
+                        element.dataset.layer
+                    );
 
-        drawing=false;
-        return;
-    }
-
-    if(tool==='text'){
-        const text=prompt('Texto:');
-
-        if(text){
-            const l=current();
-            const c=l.c.getContext('2d');
-
-            style(c);
-
-            c.font=
-                `600 ${Math.max(
-                    12,
-                    Number($('wipaint-size').value)*2
-                )}px Inter, sans-serif`;
-
-            c.fillText(
-                text,
-                start.x,
-                start.y
-            );
-
-            c.shadowBlur=0;
-
-            render();
-            commit();
-        }
-
-        drawing=false;
-        return;
-    }
-
-    if(['brush','eraser'].includes(tool))
-        drawTo(start,start);
-}
-
-function drawTo(a,b){
-    const l=current();
-    const c=l.c.getContext('2d');
-
-    style(c);
-
-    if(tool==='eraser')
-        c.globalCompositeOperation='destination-out';
-    else
-        c.globalCompositeOperation='source-over';
-
-    if(brush==='pixel'){
-        const s=Math.max(
-            4,
-            Math.round(
-                Number($('wipaint-size').value)/4
-            )*4
-        );
-
-        c.fillRect(
-            Math.floor(b.x/s)*s,
-            Math.floor(b.y/s)*s,
-            s,
-            s
-        );
-
-    }else if(
-        brush==='airbrush'||
-        brush==='watercolor'||
-        brush==='chalk'
-    ){
-        const d=Math.max(
-            1,
-            Math.hypot(
-                b.x-a.x,
-                b.y-a.y
-            )
-        );
-
-        const step=Math.max(
-            1,
-            Number($('wipaint-size').value)*.35
-        );
-
-        for(let i=0;i<d;i+=step){
-            const t=i/d||0;
-
-            const x=
-                a.x+(b.x-a.x)*t;
-
-            const y=
-                a.y+(b.y-a.y)*t;
-
-            c.beginPath();
-
-            c.arc(
-                x,
-                y,
-                Math.max(
-                    1,
-                    Number($('wipaint-size').value)/2
-                ),
-                0,
-                Math.PI*2
-            );
-
-            c.fill();
-        }
-
-    }else{
-        c.beginPath();
-
-        c.moveTo(a.x,a.y);
-        c.lineTo(b.x,b.y);
-
-        c.stroke();
-    }
-
-    c.shadowBlur=0;
-    c.globalCompositeOperation='source-over';
-
-    render();
-}
-
-function pointerMove(e){
-    if(!drawing)return;
-
-    const p=pos(e);
-
-    if(tool==='select'){
-        selection={
-            x:Math.min(start.x,p.x),
-            y:Math.min(start.y,p.y),
-            w:Math.abs(p.x-start.x),
-            h:Math.abs(p.y-start.y)
-        };
-
-        render();
-        return;
-    }
-
-    if(['brush','eraser'].includes(tool))
-        drawTo(last,p);
-
-    last=p;
-}
-
-function pointerUp(e){
-    if(!drawing)return;
-
-    const end=pos(e);
-
-    if(['line','rect','circle'].includes(tool)){
-        restore(history[history.length-1]).then(()=>{
-            const l=current();
-            const c=l.c.getContext('2d');
-
-            style(c);
-
-            const x=start.x;
-            const y=start.y;
-            const w=end.x-x;
-            const h=end.y-y;
-
-            c.beginPath();
-
-            if(tool==='line'){
-                c.moveTo(x,y);
-                c.lineTo(end.x,end.y);
-                c.stroke();
-
-            }else if(tool==='rect'){
-                c.strokeRect(
-                    x,
-                    y,
-                    w,
-                    h
-                );
-
-            }else{
-                c.ellipse(
-                    x+w/2,
-                    y+h/2,
-                    Math.abs(w/2),
-                    Math.abs(h/2),
-                    0,
-                    0,
-                    Math.PI*2
-                );
-
-                c.stroke();
-            }
-
-            c.shadowBlur=0;
-
-            render();
-            commit();
+                renderLayers();
+            };
         });
 
-    }else if(tool==='select'){
-        render();
+    box
+        .querySelectorAll(
+            '[data-visible]'
+        )
+        .forEach(button=>{
 
-    }else{
-        commit();
-    }
+            button.onclick=e=>{
 
-    drawing=false;
-    start=last=null;
-}
+                e.stopPropagation();
 
-function normalizeSel(){
-    if(
-        !selection||
-        selection.w<2||
-        selection.h<2
-    )return null;
+                const index=
+                    Number(
+                        button.dataset.visible
+                    );
 
-    return{
-        x:Math.round(selection.x),
-        y:Math.round(selection.y),
-        w:Math.round(selection.w),
-        h:Math.round(selection.h)
-    };
-}
+                layers[index].visible=
+                    !layers[index].visible;
 
-async function copySelection(cut=false){
-    const s=normalizeSel();
+                renderLayers();
 
-    if(!s){
-        toast(
-            'Faça uma seleção primeiro.',
-            'error'
-        );
+                render();
 
-        return;
-    }
-
-    const tmp=document.createElement('canvas');
-
-    tmp.width=s.w;
-    tmp.height=s.h;
-
-    tmp.getContext('2d').drawImage(
-        current().c,
-        s.x,
-        s.y,
-        s.w,
-        s.h,
-        0,
-        0,
-        s.w,
-        s.h
-    );
-
-    clipboard={
-        canvas:tmp,
-        x:s.x,
-        y:s.y
-    };
-
-    try{
-        const blob=await new Promise(
-            r=>tmp.toBlob(r,'image/png')
-        );
-
-        if(
-            navigator.clipboard&&
-            window.ClipboardItem
-        ){
-            await navigator.clipboard.write([
-                new ClipboardItem({
-                    'image/png':blob
-                })
-            ]);
-        }
-
-    }catch{}
-
-    if(cut){
-        current().c
-            .getContext('2d')
-            .clearRect(
-                s.x,
-                s.y,
-                s.w,
-                s.h
-            );
-
-        render();
-        commit();
-    }
-}
-
-function paste(){
-    if(!clipboard){
-        toast(
-            'Nada copiado ainda.',
-            'error'
-        );
-
-        return;
-    }
-
-    const l=current();
-    const c=l.c.getContext('2d');
-
-    c.drawImage(
-        clipboard.canvas,
-        selection?.x||
-        clipboard.x,
-        selection?.y||
-        clipboard.y
-    );
-
-    render();
-    commit();
-}
-
-function deleteSelection(){
-    const s=normalizeSel();
-
-    if(!s)return;
-
-    current().c
-        .getContext('2d')
-        .clearRect(
-            s.x,
-            s.y,
-            s.w,
-            s.h
-        );
-
-    selection=null;
-
-    render();
-    commit();
-}
-
-function applyEffect(type){
-    const l=current();
-    const c=l.c.getContext('2d');
-
-    const img=c.getImageData(
-        0,
-        0,
-        l.c.width,
-        l.c.height
-    );
-
-    const d=img.data;
-
-    for(let i=0;i<d.length;i+=4){
-        let r=d[i];
-        let g=d[i+1];
-        let b=d[i+2];
-
-        if(type==='grayscale'){
-            const v=.299*r+.587*g+.114*b;
-            r=g=b=v;
-
-        }else if(type==='sepia'){
-            [r,g,b]=[
-                .393*r+.769*g+.189*b,
-                .349*r+.686*g+.168*b,
-                .272*r+.534*g+.131*b
-            ];
-
-        }else if(type==='invert'){
-            r=255-r;
-            g=255-g;
-            b=255-b;
-
-        }else if(type==='warm'){
-            r=Math.min(255,r+22);
-            b=Math.max(0,b-14);
-
-        }else if(type==='cool'){
-            b=Math.min(255,b+22);
-            r=Math.max(0,r-14);
-        }
-
-        d[i]=r;
-        d[i+1]=g;
-        d[i+2]=b;
-    }
-
-    c.putImageData(img,0,0);
-
-    render();
-    commit();
-
-    toast(
-        'Efeito aplicado.',
-        'success'
-    );
+                commit();
+            };
+        });
 }
 
 function addLayer(){
+
     layers.push(
         makeLayer(
-            'Camada '+(layers.length+1)
+            `Camada ${layers.length+1}`
         )
     );
 
-    active=layers.length-1;
+    active=
+        layers.length-1;
 
     renderLayers();
+
     render();
 
     commit();
 }
 
 function deleteLayer(){
+
     if(layers.length<=1){
+
         toast(
-            'Mantenha pelo menos uma camada.',
+            'Você precisa manter uma camada.',
             'error'
         );
 
         return;
     }
 
-    layers.splice(active,1);
-
-    active=Math.max(
-        0,
-        active-1
+    layers.splice(
+        active,
+        1
     );
 
-    renderLayers();
-    render();
-
-    commit();
-}
-
-function duplicateLayer(){
-    const src=current();
-
-    const l=makeLayer(
-        src.name+' cópia'
-    );
-
-    l.c
-        .getContext('2d')
-        .drawImage(
-            src.c,
+    active=
+        Math.max(
             0,
-            0
+            active-1
         );
 
-    layers.splice(
-        active+1,
-        0,
-        l
-    );
-
-    active++;
-
     renderLayers();
+
     render();
 
     commit();
 }
 
-function clear(){
-    current().c
+function clearCanvas(){
+
+    const layer=
+        currentLayer();
+
+    if(!layer) return;
+
+    layer.c
         .getContext('2d')
         .clearRect(
             0,
@@ -714,26 +797,102 @@ function clear(){
         );
 
     render();
+
     commit();
 }
 
+function savePNG(){
+
+    const output=
+        document.createElement('canvas');
+
+    output.width=
+        canvas.width;
+
+    output.height=
+        canvas.height;
+
+    const outputCtx=
+        output.getContext('2d');
+
+    outputCtx.fillStyle=
+        '#ffffff';
+
+    outputCtx.fillRect(
+        0,
+        0,
+        output.width,
+        output.height
+    );
+
+    for(const layer of layers){
+
+        if(!layer.visible)
+            continue;
+
+        outputCtx.globalAlpha=
+            layer.opacity;
+
+        outputCtx.drawImage(
+            layer.c,
+            0,
+            0
+        );
+    }
+
+    outputCtx.globalAlpha=1;
+
+    const link=
+        document.createElement('a');
+
+    link.download=
+        `wipaint-${Date.now()}.png`;
+
+    link.href=
+        output.toDataURL(
+            'image/png'
+        );
+
+    link.click();
+}
+
 function loadImage(file){
-    if(!file)return;
 
-    const im=new Image();
+    if(!file) return;
 
-    im.onload=()=>{
-        canvas.width=
+    const image=
+        new Image();
+
+    image.onload=()=>{
+
+        const maxWidth=1400;
+        const maxHeight=1000;
+
+        const scale=
             Math.min(
-                1400,
-                im.width
+                1,
+                maxWidth/image.width,
+                maxHeight/image.height
+            );
+
+        canvas.width=
+            Math.max(
+                1,
+                Math.round(
+                    image.width*scale
+                )
             );
 
         canvas.height=
-            Math.min(
-                1000,
-                im.height
+            Math.max(
+                1,
+                Math.round(
+                    image.height*scale
+                )
             );
+
+        ctx=
+            canvas.getContext('2d');
 
         layers=[
             makeLayer('Imagem')
@@ -742,7 +901,7 @@ function loadImage(file){
         layers[0].c
             .getContext('2d')
             .drawImage(
-                im,
+                image,
                 0,
                 0,
                 canvas.width,
@@ -750,387 +909,123 @@ function loadImage(file){
             );
 
         active=0;
+
         history=[];
         future=[];
-        frames=[snapshot()];
-        frameIndex=0;
 
         renderLayers();
+
         render();
 
         saveHistory();
 
         URL.revokeObjectURL(
-            im.src
+            image.src
         );
     };
 
-    im.src=URL.createObjectURL(file);
-}
-
-function save(){
-    exportCanvas('png');
-}
-
-function compositeCanvas(){
-    const out=document.createElement('canvas');
-
-    out.width=canvas.width;
-    out.height=canvas.height;
-
-    const oc=out.getContext('2d');
-
-    oc.fillStyle='#fff';
-
-    oc.fillRect(
-        0,
-        0,
-        out.width,
-        out.height
-    );
-
-    for(const l of layers){
-        if(l.visible){
-            oc.globalAlpha=l.opacity;
-            oc.drawImage(
-                l.c,
-                0,
-                0
-            );
-        }
-    }
-
-    return out;
-}
-
-function exportCanvas(type='png'){
-    const out=compositeCanvas();
-
-    const a=document.createElement('a');
-
-    a.download=
-        'wipaint-'+
-        Date.now()+
-        '.png';
-
-    a.href=
-        out.toDataURL(
-            'image/png'
-        );
-
-    a.click();
-}
-
-function addFrame(){
-    frames[frameIndex]=snapshot();
-
-    frames.push(
-        snapshot()
-    );
-
-    frameIndex=
-        frames.length-1;
-
-    restore(
-        frames[frameIndex]
-    ).then(()=>{
-        history=[];
-        future=[];
-        saveHistory();
-        updateFrameUI();
-
-        toast(
-            'Novo frame criado.',
-            'success'
-        );
-    });
-}
-
-function prevFrame(){
-    if(frameIndex<=0)return;
-
-    frames[frameIndex]=snapshot();
-
-    frameIndex--;
-
-    restore(
-        frames[frameIndex]
-    ).then(()=>{
-        history=[];
-        future=[];
-        saveHistory();
-        updateFrameUI();
-    });
-}
-
-function nextFrame(){
-    if(
-        frameIndex>=
-        frames.length-1
-    )return;
-
-    frames[frameIndex]=snapshot();
-
-    frameIndex++;
-
-    restore(
-        frames[frameIndex]
-    ).then(()=>{
-        history=[];
-        future=[];
-        saveHistory();
-        updateFrameUI();
-    });
-}
-
-function updateFrameUI(){
-    const el=$('wipaint-frame-label');
-
-    if(el)
-        el.textContent=
-            `Frame ${frameIndex+1} / ${Math.max(
-                1,
-                frames.length
-            )}`;
-
-    const tl=$('wipaint-timeline');
-
-    if(tl){
-        tl.innerHTML=
-            frames.map(
-                (_,i)=>
-                    `<button type="button" class="wipaint-frame ${i===frameIndex?'active':''}" data-frame="${i}">🎞️ ${i+1}</button>`
-            ).join('');
-
-        tl
-            .querySelectorAll('[data-frame]')
-            .forEach(b=>{
-                b.onclick=()=>{
-                    frames[frameIndex]=snapshot();
-
-                    frameIndex=
-                        Number(
-                            b.dataset.frame
-                        );
-
-                    restore(
-                        frames[frameIndex]
-                    ).then(()=>{
-                        history=[];
-                        future=[];
-                        saveHistory();
-                        updateFrameUI();
-                    });
-                };
-            });
-    }
-}
-
-function renderLayers(){
-    const box=$('wipaint-layers');
-
-    if(!box)return;
-
-    box.innerHTML=
-        layers.map(
-            (l,i)=>
-                `<div class="wipaint-layer ${i===active?'active':''}" data-layer="${i}">
-                    <button type="button" data-vis="${i}">
-                        ${l.visible?'👁️':'🚫'}
-                    </button>
-                    <span>${l.name}</span>
-                </div>`
-        ).join('');
-
-    box
-        .querySelectorAll('[data-layer]')
-        .forEach(el=>{
-            el.onclick=()=>{
-                active=
-                    Number(
-                        el.dataset.layer
-                    );
-
-                renderLayers();
-            };
-        });
-
-    box
-        .querySelectorAll('[data-vis]')
-        .forEach(b=>{
-            b.onclick=e=>{
-                e.stopPropagation();
-
-                const i=
-                    Number(
-                        b.dataset.vis
-                    );
-
-                layers[i].visible=
-                    !layers[i].visible;
-
-                renderLayers();
-                render();
-
-                commit();
-            };
-        });
+    image.src=
+        URL.createObjectURL(file);
 }
 
 function keyboard(e){
-    const mod=
-        e.ctrlKey||
+
+    const modifier=
+        e.ctrlKey ||
         e.metaKey;
 
     if(
-        mod&&
+        modifier &&
         e.key.toLowerCase()==='z'
     ){
+
         e.preventDefault();
+
         undo();
+
         return;
     }
 
     if(
-        mod&&
+        modifier &&
         e.key.toLowerCase()==='y'
     ){
+
         e.preventDefault();
+
         redo();
+
         return;
     }
 
     if(
-        mod&&
-        e.key.toLowerCase()==='c'
-    ){
-        e.preventDefault();
-        copySelection(false);
-        return;
-    }
-
-    if(
-        mod&&
-        e.key.toLowerCase()==='x'
-    ){
-        e.preventDefault();
-        copySelection(true);
-        return;
-    }
-
-    if(
-        mod&&
-        e.key.toLowerCase()==='v'
-    ){
-        e.preventDefault();
-        paste();
-        return;
-    }
-
-    if(
-        mod&&
+        modifier &&
         e.key.toLowerCase()==='s'
     ){
-        e.preventDefault();
-        save();
-        return;
-    }
 
-    if(
-        e.key==='Delete'&&
-        selection
-    ){
         e.preventDefault();
-        deleteSelection();
+
+        savePNG();
+
         return;
     }
 
     if(e.key==='Escape'){
-        selection=null;
-        render();
+
+        drawing=false;
+
+        startPoint=null;
+        lastPoint=null;
+
         return;
     }
 
-    if(e.key.toLowerCase()==='b')
+    const key=
+        e.key.toLowerCase();
+
+    if(key==='b')
         tool='brush';
 
-    if(e.key.toLowerCase()==='e')
+    else if(key==='e')
         tool='eraser';
 
-    if(e.key.toLowerCase()==='v')
-        tool='select';
-
-    if(e.key.toLowerCase()==='p')
+    else if(key==='p')
         tool='pixel';
 
-    if(e.key.toLowerCase()==='i')
+    else if(key==='i')
         tool='eyedropper';
 
-    if(e.key.toLowerCase()==='t')
+    else if(key==='t')
         tool='text';
 
-    if(e.key.toLowerCase()==='l')
-        tool='line';
-
-    if(e.key.toLowerCase()==='r')
-        tool='rect';
-
-    if(e.key.toLowerCase()==='o')
-        tool='circle';
-
-    syncControls();
+    syncTool();
 }
 
-function syncControls(){
-    if($('wipaint-tool'))
-        $('wipaint-tool').value=tool;
+function syncTool(){
 
-    if($('wipaint-brush'))
-        $('wipaint-brush').value=brush;
-}
+    const select=
+        $('wipaint-tool');
 
-async function sendToConversation(){
-    const out=compositeCanvas();
-
-    const blob=await new Promise(
-        r=>out.toBlob(
-            r,
-            'image/png'
-        )
-    );
-
-    const file=new File(
-        [
-            blob
-        ],
-        `wipaint-${Date.now()}.png`,
-        {
-            type:'image/png'
-        }
-    );
-
-    if(window.WCMedia?.sendFile){
-        await window.WCMedia.sendFile(file);
-
-        toast(
-            'Desenho enviado na conversa.',
-            'success'
-        );
-    }else{
-        toast(
-            'Abra uma conversa antes de enviar.',
-            'error'
-        );
-    }
+    if(select)
+        select.value=tool;
 }
 
 function bind(){
-    const openBtn=
+
+    const openButton=
         $('wipaint-open-btn');
 
-    if(!openBtn)return;
+    if(!openButton){
 
-    openBtn.onclick=()=>{
+        console.warn(
+            'WifiPaint: botão de abertura não encontrado.'
+        );
+
+        return;
+    }
+
+    openButton.onclick=()=>{
+
         $('modal-overlay')
             ?.classList
             .remove('hidden');
@@ -1138,7 +1033,9 @@ function bind(){
         document
             .querySelectorAll('.modal')
             .forEach(
-                m=>m.classList.add('hidden')
+                modal=>
+                    modal.classList
+                        .add('hidden')
             );
 
         $('modal-wipaint')
@@ -1152,23 +1049,22 @@ function bind(){
     $('wipaint-tool')
         ?.addEventListener(
             'change',
-            e=>tool=e.target.value
-        );
-
-    $('wipaint-brush')
-        ?.addEventListener(
-            'change',
-            e=>brush=e.target.value
+            e=>{
+                tool=e.target.value;
+            }
         );
 
     $('wipaint-size')
         ?.addEventListener(
             'input',
             e=>{
-                $('wipaint-size-value')
-                    .textContent=
-                    e.target.value+
-                    ' px';
+
+                const label=
+                    $('wipaint-size-value');
+
+                if(label)
+                    label.textContent=
+                        `${e.target.value} px`;
             }
         );
 
@@ -1176,6 +1072,7 @@ function bind(){
         ?.addEventListener(
             'input',
             e=>{
+
                 zoom=
                     Number(
                         e.target.value
@@ -1197,69 +1094,21 @@ function bind(){
             redo
         );
 
+    $('wipaint-clear')
+        ?.addEventListener(
+            'click',
+            clearCanvas
+        );
+
     $('wipaint-grid')
         ?.addEventListener(
             'click',
             ()=>{
+
                 grid=!grid;
+
                 render();
             }
-        );
-
-    $('wipaint-clear')
-        ?.addEventListener(
-            'click',
-            clear
-        );
-
-    $('wipaint-open-image')
-        ?.addEventListener(
-            'click',
-            ()=>$('wipaint-file-input')?.click()
-        );
-
-    $('wipaint-file-input')
-        ?.addEventListener(
-            'change',
-            e=>loadImage(
-                e.target.files?.[0]
-            )
-        );
-
-    $('wipaint-save')
-        ?.addEventListener(
-            'click',
-            save
-        );
-
-    $('wipaint-send')
-        ?.addEventListener(
-            'click',
-            sendToConversation
-        );
-
-    $('wipaint-copy')
-        ?.addEventListener(
-            'click',
-            ()=>copySelection(false)
-        );
-
-    $('wipaint-cut')
-        ?.addEventListener(
-            'click',
-            ()=>copySelection(true)
-        );
-
-    $('wipaint-paste')
-        ?.addEventListener(
-            'click',
-            paste
-        );
-
-    $('wipaint-delete-selection')
-        ?.addEventListener(
-            'click',
-            deleteSelection
         );
 
     $('wipaint-add-layer')
@@ -1274,61 +1123,31 @@ function bind(){
             deleteLayer
         );
 
-    $('wipaint-duplicate-layer')
+    $('wipaint-save')
         ?.addEventListener(
             'click',
-            duplicateLayer
+            savePNG
         );
 
-    $('wipaint-add-frame')
+    $('wipaint-open-image')
         ?.addEventListener(
             'click',
-            addFrame
+            ()=>
+                $('wipaint-file-input')
+                    ?.click()
         );
 
-    $('wipaint-prev-frame')
+    $('wipaint-file-input')
         ?.addEventListener(
-            'click',
-            prevFrame
-        );
-
-    $('wipaint-next-frame')
-        ?.addEventListener(
-            'click',
-            nextFrame
-        );
-
-    document
-        .querySelectorAll(
-            '[data-wipaint-effect]'
-        )
-        .forEach(
-            b=>b.addEventListener(
-                'click',
-                ()=>applyEffect(
-                    b.dataset.wipaintEffect
+            'change',
+            e=>
+                loadImage(
+                    e.target.files?.[0]
                 )
-            )
         );
 
-    canvas?.addEventListener(
-        'pointerdown',
-        pointerDown
-    );
-
-    canvas?.addEventListener(
-        'pointermove',
-        pointerMove
-    );
-
-    window.addEventListener(
-        'pointerup',
-        pointerUp
-    );
-
-    window.addEventListener(
-        'keydown',
-        keyboard
+    console.log(
+        'WifiPaint carregado com sucesso.'
     );
 }
 
@@ -1338,11 +1157,10 @@ document.addEventListener(
 );
 
 window.WiPaint={
-    open:()=>openFile()
+    open:()=>{
+        $('wipaint-open-btn')
+            ?.click();
+    }
 };
-
-function openFile(){
-    $('wipaint-file-input')?.click();
-}
 
 })();
