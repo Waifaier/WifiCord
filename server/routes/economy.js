@@ -6,7 +6,7 @@ const { requireAuth } = require('./auth');
 const router = express.Router();
 
 const ITEMS = [
-  { id: 'frame-neon', type: 'frame', name: 'Moldura Neon', price: 500, icon: '💡' },
+  { id: 'frame-neon', type: 'frame', name: 'Moldura Neon', price: 500, icon: '💠' },
   { id: 'frame-cyber', type: 'frame', name: 'Moldura Cyber', price: 900, icon: '🪩' },
   { id: 'frame-gold', type: 'frame', name: 'Moldura Ouro', price: 1800, icon: '👑' },
   { id: 'frame-fire', type: 'frame', name: 'Moldura Fogo', price: 2600, icon: '🔥' },
@@ -37,8 +37,11 @@ const WFNA_COST = 25000;
 const WFNA_PRICE_BRL = 20;
 
 function inventory(uid) {
-  return db.prepare(`SELECT item_id, item_type, equipped FROM user_inventory WHERE user_id = ? ORDER BY acquired_at DESC`).all(uid)
-    .map(x => ({ id: x.item_id, type: x.item_type, equipped: !!x.equipped }));
+  return db.prepare(`SELECT item_id, item_type, equipped FROM user_inventory WHERE user_id = ?`).all(uid).map(x => ({
+    id: x.item_id,
+    type: x.item_type,
+    equipped: !!x.equipped
+  }));
 }
 
 router.get('/store', requireAuth, (req, res, next) => {
@@ -60,48 +63,52 @@ router.post('/buy/:itemId', requireAuth, (req, res, next) => {
   try {
     const item = ITEMS.find(x => x.id === req.params.itemId);
     if (!item) return res.status(404).json({ error: 'Item não encontrado.' });
-    const uid = Number(req.session.userId);
-    const tx = db.transaction(() => {
-      const u = User.findById(uid);
-      if (!u) throw Object.assign(new Error('Usuário não encontrado.'), { status: 404 });
-      if (db.prepare('SELECT 1 FROM user_inventory WHERE user_id = ? AND item_id = ? LIMIT 1').get(uid, item.id)) {
-        throw Object.assign(new Error('Você já possui este item.'), { status: 409 });
-      }
-      if (Number(u.points || 0) < item.price) throw Object.assign(new Error('Pontos insuficientes.'), { status: 400 });
-      db.prepare('UPDATE users SET points = points - ? WHERE id = ? AND points >= ?').run(item.price, uid, item.price);
-      db.prepare('INSERT INTO user_inventory (user_id, item_id, item_type) VALUES (?, ?, ?)').run(uid, item.id, item.type);
-      db.prepare('INSERT INTO point_events (user_id, amount, reason) VALUES (?, ?, ?)').run(uid, -item.price, `purchase:${item.id}`);
-    });
-    tx();
-    res.json({ ok: true, inventory: inventory(uid), user: User.toPublic(User.findById(uid)) });
-  } catch (err) { next(err); }
+    const u = User.findById(req.session.userId);
+    if (!u) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    const result = db.transaction(() => {
+      const existing = db.prepare(`SELECT 1 FROM user_inventory WHERE user_id = ? AND item_id = ? LIMIT 1`).get(u.id, item.id);
+      if (existing) throw Object.assign(new Error('Você já possui este item.'), { status: 409 });
+      if (Number(u.points) < item.price) throw Object.assign(new Error('Pontos insuficientes.'), { status: 400 });
+      db.prepare(`UPDATE users SET points = points - ? WHERE id = ?`).run(item.price, u.id);
+      db.prepare(`INSERT INTO user_inventory (user_id, item_id, item_type) VALUES (?, ?, ?)`).run(u.id, item.id, item.type);
+      db.prepare(`INSERT INTO point_events (user_id, amount, reason) VALUES (?, ?, ?)`).run(u.id, -item.price, `purchase:${item.id}`);
+    })();
+
+    void result;
+    res.json({ ok: true, inventory: inventory(u.id), user: User.toPublic(User.findById(u.id)) });
+  } catch (err) {
+    const status = Number(err.status) || 500;
+    if (status < 500) return res.status(status).json({ error: err.message });
+    next(err);
+  }
 });
 
 router.post('/unequip/:itemId', requireAuth, (req, res, next) => {
   try {
-    const uid = Number(req.session.userId);
+    const uid = req.session.userId;
     const item = ITEMS.find(x => x.id === req.params.itemId);
     if (!item) return res.status(404).json({ error: 'Item não encontrado.' });
-    db.transaction(() => {
-      db.prepare('UPDATE user_inventory SET equipped = 0 WHERE user_id = ? AND item_id = ?').run(uid, item.id);
-      if (item.type === 'frame') db.prepare('UPDATE users SET frame = NULL WHERE id = ? AND frame = ?').run(uid, item.id);
-      if (item.type === 'decoration') db.prepare('UPDATE users SET decoration = NULL WHERE id = ? AND decoration = ?').run(uid, item.id);
-    })();
+    db.prepare(`UPDATE user_inventory SET equipped = 0 WHERE user_id = ? AND item_id = ?`).run(uid, item.id);
+    if (item.type === 'frame') db.prepare(`UPDATE users SET frame = NULL WHERE id = ? AND frame = ?`).run(uid, item.id);
+    if (item.type === 'decoration') db.prepare(`UPDATE users SET decoration = NULL WHERE id = ? AND decoration = ?`).run(uid, item.id);
     res.json({ ok: true, user: User.toPublic(User.findById(uid)), inventory: inventory(uid) });
   } catch (err) { next(err); }
 });
 
 router.post('/equip/:itemId', requireAuth, (req, res, next) => {
   try {
-    const uid = Number(req.session.userId);
+    const uid = req.session.userId;
     const item = ITEMS.find(x => x.id === req.params.itemId);
     if (!item) return res.status(404).json({ error: 'Item não encontrado.' });
-    if (!db.prepare('SELECT 1 FROM user_inventory WHERE user_id = ? AND item_id = ? LIMIT 1').get(uid, item.id)) return res.status(403).json({ error: 'Item não adquirido.' });
+    if (!db.prepare(`SELECT 1 FROM user_inventory WHERE user_id = ? AND item_id = ? LIMIT 1`).get(uid, item.id)) {
+      return res.status(403).json({ error: 'Item não adquirido.' });
+    }
     db.transaction(() => {
-      db.prepare('UPDATE user_inventory SET equipped = 0 WHERE user_id = ? AND item_type = ?').run(uid, item.type);
-      db.prepare('UPDATE user_inventory SET equipped = 1 WHERE user_id = ? AND item_id = ?').run(uid, item.id);
-      if (item.type === 'frame') db.prepare('UPDATE users SET frame = ? WHERE id = ?').run(item.id, uid);
-      if (item.type === 'decoration') db.prepare('UPDATE users SET decoration = ? WHERE id = ?').run(item.id, uid);
+      db.prepare(`UPDATE user_inventory SET equipped = 0 WHERE user_id = ? AND item_type = ?`).run(uid, item.type);
+      db.prepare(`UPDATE user_inventory SET equipped = 1 WHERE user_id = ? AND item_id = ?`).run(uid, item.id);
+      if (item.type === 'frame') db.prepare(`UPDATE users SET frame = ? WHERE id = ?`).run(item.id, uid);
+      if (item.type === 'decoration') db.prepare(`UPDATE users SET decoration = ? WHERE id = ?`).run(item.id, uid);
     })();
     res.json({ ok: true, user: User.toPublic(User.findById(uid)), inventory: inventory(uid) });
   } catch (err) { next(err); }
@@ -109,17 +116,15 @@ router.post('/equip/:itemId', requireAuth, (req, res, next) => {
 
 router.post('/wfna/buy', requireAuth, (req, res, next) => {
   try {
-    const uid = Number(req.session.userId);
-    const tx = db.transaction(() => {
-      const u = User.findById(uid);
-      if (!u) throw Object.assign(new Error('Usuário não encontrado.'), { status: 404 });
-      if (u.wfna) throw Object.assign(new Error('WFNA já ativo.'), { status: 409 });
-      if (Number(u.points || 0) < WFNA_COST) throw Object.assign(new Error('Pontos insuficientes.'), { status: 400 });
-      db.prepare('UPDATE users SET points = points - ?, wfna = 1 WHERE id = ? AND points >= ?').run(WFNA_COST, uid, WFNA_COST);
-      db.prepare('INSERT INTO point_events (user_id, amount, reason) VALUES (?, ?, ?)').run(uid, -WFNA_COST, 'wfna');
-    });
-    tx();
-    res.json({ ok: true, user: User.toPublic(User.findById(uid)), animation: 'rocket' });
+    const u = User.findById(req.session.userId);
+    if (!u) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    if (u.wfna) return res.status(409).json({ error: 'WFNA já ativo.' });
+    if (Number(u.points) < WFNA_COST) return res.status(400).json({ error: 'Pontos insuficientes.' });
+    db.transaction(() => {
+      db.prepare(`UPDATE users SET points = points - ?, wfna = 1 WHERE id = ?`).run(WFNA_COST, u.id);
+      db.prepare(`INSERT INTO point_events (user_id, amount, reason) VALUES (?, ?, ?)`).run(u.id, -WFNA_COST, 'wfna');
+    })();
+    res.json({ ok: true, user: User.toPublic(User.findById(u.id)), animation: 'rocket' });
   } catch (err) { next(err); }
 });
 
