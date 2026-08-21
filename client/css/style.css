@@ -805,7 +805,7 @@ input:focus, textarea:focus, select:focus {
   }
 
   #server-rail { left: 0; width: 76px; }
-  #sidebar { left: 76px; width: 260px; }
+  #sidebar { left: 76px; width: 260px; transform: translateX(calc(-100% - 76px)); }
 
   #app-screen.nav-open #server-rail,
   #app-screen.nav-open #sidebar {
@@ -1762,15 +1762,20 @@ mark.search-highlight {
   }
   .message-form textarea {
     max-height: 40vh;
+    min-height: 44px;
+  }
+  .composer-tools {
+    gap: 2px;
   }
   .composer-btn {
-    font-size: 22px;
-    min-width: 40px;
-    min-height: 40px;
+    font-size: 19px;
+    min-width: 34px;
+    min-height: 34px;
   }
   .message-form .btn.btn-primary {
     min-height: 40px;
-    padding: 0 16px;
+    padding: 0 12px;
+    font-size: 13px;
   }
 
   .code-preview-code {
@@ -1790,4 +1795,9 @@ mark.search-highlight {
 @media (max-width: 480px) {
   .toast-container { left: 12px; right: 12px; top: 12px; }
   .toast { max-width: 100%; }
+}
+
+#delete-dm-btn:hover {
+  background: var(--danger);
+  color: #fff;
 }
