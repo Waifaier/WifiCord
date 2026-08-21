@@ -584,61 +584,189 @@
   function setBrush(b){S.brush=b;syncUI();}
 
   function injectUI(){
-    const bar=document.querySelector('.wipaint-toolbar');if(!bar)return;
-    if(!$('wipaint-pro-panel')){
-      const panel=document.createElement('div');panel.id='wipaint-pro-panel';panel.className='wipaint-pro-panel';
-      panel.innerHTML=`<div class="wp-row"><label>Ferramenta <select id="wp-tool">${TOOLS.map(x=>`<option value="${x[0]}">${x[1]}</option>`).join('')}</select></label>
-      <label>Pincel <select id="wp-brush">${Object.entries(BRUSHES).map(([k,v])=>`<option value="${k}">${v[0]}</option>`).join('')}</select></label>
-      <label>Tamanho <input id="wp-size" type="range" min="1" max="300" value="12"></label>
-      <label>Opacidade <input id="wp-opacity" type="range" min="1" max="100" value="100"></label>
-      <input id="wp-color" type="color" value="#7c5cff"><label>Mesclagem <select id="wp-blend"><option value="source-over">Normal</option><option value="multiply">Multiplicar</option><option value="screen">Tela</option><option value="overlay">Sobreposição</option><option value="darken">Escurecer</option><option value="lighten">Clarear</option><option value="difference">Diferença</option><option value="color-dodge">Color Dodge</option></select></label></div>
-      <div class="wp-row wp-actions">
-      <button id="wp-new">🆕 Novo</button><button id="wp-undo">↶</button><button id="wp-redo">↷</button><button id="wp-selectall">🎯 Conteúdo</button><button id="wp-copy">📋</button><button id="wp-cut">✂️</button><button id="wp-paste">📥</button>
-      <button id="wp-frame">🎞️ Frame</button><button id="wp-prev">◀</button><button id="wp-next">▶</button><button id="wp-play">▶ Play</button><button id="wp-stop">■</button><button id="wp-onion">Onion</button><button id="wp-grid">Grid</button><button id="wp-export">Exportar</button><button id="wp-send">📤 Enviar</button></div>
-      <div class="wp-row wp-effects"><span>Efeitos:</span>${['grayscale','invert','sepia','warm','cool','contrast','saturation','posterize','threshold'].map(x=>`<button data-effect="${x}">${x}</button>`).join('')}<button id="wp-blur">blur</button></div>
-      <div class="wp-row wp-layers"><button id="wp-add-layer">＋ Camada</button><button id="wp-dup-layer">Duplicar</button><button id="wp-del-layer">Excluir</button><button id="wp-up-layer">↑</button><button id="wp-down-layer">↓</button><button id="wp-lock">🔒</button><button id="wp-rename">Renomear</button><button id="wp-group">Agrupar</button></div>
-      <div class="wp-row wp-modes"><button id="wp-mirror">🪞 Espelho</button><button id="wp-sym">✣ Simetria</button><button id="wp-snap">Snap</button><button id="wp-neon">Neon</button><button id="wp-glitch">Glitch</button></div>`;
-      bar.appendChild(panel);
+    // O editor usa a toolbar existente do index.html.
+    // Não criamos uma segunda toolbar: isso evita controles duplicados
+    // e mantém o CSS original do WifiCord intacto.
+    const tool = $('wipaint-tool');
+    const brush = $('wipaint-brush');
+    if(tool){
+      const current = tool.value || 'brush';
+      tool.innerHTML = TOOLS.map(([value,label]) =>
+        `<option value="${value}">${label}</option>`
+      ).join('');
+      tool.value = TOOLS.some(x=>x[0]===current) ? current : 'brush';
     }
+    if(brush){
+      const current = brush.value || 'classic';
+      brush.innerHTML = Object.entries(BRUSHES).map(([value,data]) =>
+        `<option value="${value}">${data[0]}</option>`
+      ).join('');
+      brush.value = BRUSHES[current] ? current : 'classic';
+    }
+    ensureAdvancedUI();
+  }
+
+
+  function ensurePaintStyle(){
+    if($('wipaint-pro-runtime-style'))return;
+    const style=document.createElement('style');
+    style.id='wipaint-pro-runtime-style';
+    style.textContent=`
+      #modal-wipaint .wipaint-advanced{display:flex;flex-direction:column;gap:8px}
+      #modal-wipaint .wipaint-frame-actions{display:flex;flex-wrap:wrap;gap:6px}
+      #modal-wipaint .wipaint-frames{display:flex;gap:6px;overflow:auto;padding:4px 0}
+      #modal-wipaint .wipaint-frame{min-width:58px;padding:7px 8px;border:1px solid #ffffff18;border-radius:8px;background:#171422;color:#eee;cursor:pointer}
+      #modal-wipaint .wipaint-frame.active{background:#322a55;border-color:#7c5cff}
+      #modal-wipaint .wipaint-frame small{display:block;color:#9a92b3;font-size:10px;margin-top:2px}
+      #modal-wipaint .wipaint-side .wipaint-effects{display:flex;flex-wrap:wrap;gap:6px}
+      #modal-wipaint .wipaint-side h5{margin:8px 0 2px}
+      #modal-wipaint .wipaint-toolbar{position:relative}
+      #modal-wipaint .wipaint-toolbar select{max-width:240px}
+      #modal-wipaint .wipaint-toolbar .wipaint-range input[type="range"]{accent-color:#7c5cff}
+      #modal-wipaint #wipaint-canvas{transform-origin:top left}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureAdvancedUI(){
+    const side = document.querySelector('.wipaint-side');
+    if(!side || $('wipaint-advanced')) return;
+
+    const section = document.createElement('section');
+    section.id = 'wipaint-advanced';
+    section.className = 'wipaint-advanced';
+    section.innerHTML = `
+      <h5>Animação</h5>
+      <div id="wipaint-frames" class="wipaint-frames"></div>
+      <div class="wipaint-frame-actions">
+        <button type="button" class="btn btn-small" id="wipaint-add-frame">＋ Frame</button>
+        <button type="button" class="btn btn-small" id="wipaint-prev-frame">◀</button>
+        <button type="button" class="btn btn-small" id="wipaint-next-frame">▶</button>
+        <button type="button" class="btn btn-small" id="wipaint-play-frames">▶ Play</button>
+        <button type="button" class="btn btn-small" id="wipaint-stop-frames">■</button>
+        <button type="button" class="btn btn-small" id="wipaint-onion-skin">Onion</button>
+      </div>
+      <h5>Mais efeitos</h5>
+      <div class="wipaint-effects" id="wipaint-more-effects">
+        <button type="button" class="btn btn-small" data-wipaint-effect="saturation">🎨 Saturação</button>
+        <button type="button" class="btn btn-small" data-wipaint-effect="posterize">🧩 Posterizar</button>
+        <button type="button" class="btn btn-small" data-wipaint-effect="threshold">◐ Limite</button>
+        <button type="button" class="btn btn-small" id="wipaint-blur">🌫️ Blur</button>
+        <button type="button" class="btn btn-small" id="wipaint-glitch">⚡ Glitch</button>
+      </div>
+      <div class="wipaint-layer-actions">
+        <button type="button" class="btn btn-small" id="wipaint-layer-lock">🔒 Bloquear</button>
+        <button type="button" class="btn btn-small" id="wipaint-layer-rename">✏️ Renomear</button>
+      </div>`;
+    side.appendChild(section);
   }
 
   function bindUI(){
-    if(S.uiBound)return;S.uiBound=true;
-    const on=(id,fn)=>$(id)?.addEventListener('click',fn);
-    $('wp-tool')?.addEventListener('change',e=>setTool(e.target.value));
-    $('wp-brush')?.addEventListener('change',e=>setBrush(e.target.value));
-    $('wp-size')?.addEventListener('input',e=>S.size=Number(e.target.value));
-    $('wp-opacity')?.addEventListener('input',e=>S.opacity=Number(e.target.value)/100);
-    $('wp-color')?.addEventListener('input',e=>S.color=e.target.value);
-    $('wp-blend')?.addEventListener('change',e=>{const l=activeLayer();if(l&&!l.locked){l.blend=e.target.value;commit();render();}});
-    on('wp-new',newProject);on('wp-undo',undo);on('wp-redo',redo);on('wp-selectall',selectAll);on('wp-copy',copy);on('wp-cut',cut);on('wp-paste',paste);
-    on('wp-frame',addFrame);on('wp-prev',()=>frameStep(-1));on('wp-next',()=>frameStep(1));on('wp-play',playFrames);on('wp-stop',stopFrames);on('wp-onion',toggleOnion);
-    on('wp-grid',()=>{S.grid=!S.grid;render();});on('wp-export',()=>exportImage());on('wp-send',openRecipientPicker);
-    on('wp-add-layer',()=>addLayer());on('wp-dup-layer',duplicateLayer);on('wp-del-layer',deleteLayer);on('wp-up-layer',()=>moveLayer(1));on('wp-down-layer',()=>moveLayer(-1));on('wp-lock',toggleLock);on('wp-rename',renameLayer);
-    on('wp-group',()=>{
-      const l=activeLayer(); if(!l)return;
-      const group=l.group ? null : 'group_'+Date.now();
-      for(const x of S.layers) if(x===l || (x.group&&x.group===l.group)) x.group=group;
-      commit();renderLayers();
+    if(S.uiBound)return;
+    S.uiBound=true;
+
+    const on=(id,fn)=>{
+      const el=$(id);
+      if(el) el.addEventListener('click',fn);
+    };
+
+    $('wipaint-tool')?.addEventListener('change',e=>setTool(e.target.value));
+    $('wipaint-brush')?.addEventListener('change',e=>setBrush(e.target.value));
+
+    $('wipaint-color')?.addEventListener('input',e=>{S.color=e.target.value;});
+    $('wipaint-size')?.addEventListener('input',e=>{
+      S.size=clamp(Number(e.target.value)||12,1,300);
+      const out=$('wipaint-size-value');
+      if(out) out.textContent=`${S.size} px`;
     });
-    on('wp-mirror',()=>{S.symmetry={mode:S.symmetry.mode==='none'?'radial':'none',count:2};render();});
-    on('wp-sym',()=>{S.symmetry={mode:S.symmetry.mode==='none'?'radial':'none',count:4};render();});
-    on('wp-snap',()=>{S.snap=!S.snap;toast(S.snap?'Snap ativado.':'Snap desativado.');});
-    on('wp-neon',()=>setBrush(S.brush==='neon'?'classic':'neon'));
-    on('wp-glitch',()=>applyGlitch());
-    on('wp-blur',()=>blurSelection(6));
-    qsa('[data-effect]').forEach(b=>b.addEventListener('click',()=>applyFilter(b.dataset.effect,b.dataset.effect==='contrast'?.35:1)));
+    $('wipaint-opacity')?.addEventListener('input',e=>S.opacity=clamp(Number(e.target.value)/100,0,1));
+    $('wipaint-zoom')?.addEventListener('input',e=>{
+      S.zoom=clamp(Number(e.target.value)/100,.25,2);
+      if(S.canvas) S.canvas.style.transform=`scale(${S.zoom})`;
+    });
+
+    on('wipaint-undo',undo);
+    on('wipaint-redo',redo);
+    on('wipaint-grid',()=>{S.grid=!S.grid;render();});
+    on('wipaint-clear',()=>{
+      const l=activeLayer();
+      if(!l||l.locked)return toast('A camada está bloqueada.','error');
+      l.c.getContext('2d').clearRect(0,0,l.c.width,l.c.height);
+      S.selection=null;commit();render();
+    });
+    on('wipaint-select-all',selectAll);
+    on('wipaint-copy',copy);
+    on('wipaint-cut',cut);
+    on('wipaint-paste',paste);
+    on('wipaint-delete-selection',()=>{
+      if(!S.selection)return;
+      const l=activeLayer();
+      if(!l||l.locked)return;
+      const r=S.selection;
+      const x=(r.x-l.x)*l.c.width/l.width;
+      const y=(r.y-l.y)*l.c.height/l.height;
+      const w=r.width*l.c.width/l.width;
+      const h=r.height*l.c.height/l.height;
+      l.c.getContext('2d').clearRect(x,y,w,h);
+      S.selection=null;commit();render();
+    });
+    on('wipaint-duplicate-layer',duplicateLayer);
+    on('wipaint-layer-up',()=>moveLayer(1));
+    on('wipaint-layer-down',()=>moveLayer(-1));
+    on('wipaint-add-layer',()=>addLayer());
+    on('wipaint-delete-layer',deleteLayer);
+    on('wipaint-send',openRecipientPicker);
+    on('wipaint-save',()=>exportImage());
+
+    on('wipaint-open-image',()=>$('wipaint-file-input')?.click());
+    $('wipaint-file-input')?.addEventListener('change',handleImageOpen);
+
+    on('wipaint-add-frame',addFrame);
+    on('wipaint-prev-frame',()=>frameStep(-1));
+    on('wipaint-next-frame',()=>frameStep(1));
+    on('wipaint-play-frames',playFrames);
+    on('wipaint-stop-frames',stopFrames);
+    on('wipaint-onion-skin',toggleOnion);
+    on('wipaint-blur',()=>blurSelection(6));
+    on('wipaint-glitch',applyGlitch);
+    on('wipaint-layer-lock',toggleLock);
+    on('wipaint-layer-rename',renameLayer);
+
+    qsa('[data-wipaint-effect]').forEach(b=>{
+      b.addEventListener('click',()=>applyFilter(
+        b.dataset.wipaintEffect,
+        b.dataset.wipaintEffect==='contrast' ? .35 : 1
+      ));
+    });
+
     bindOriginalControls();
     window.addEventListener('keydown',keyboard,true);
     window.addEventListener('paste',handlePasteEvent,true);
   }
 
+  function handleImageOpen(e){
+    const file=e.target.files?.[0];
+    if(!file)return;
+    const l=activeLayer();
+    if(!l||l.locked)return toast('A camada está bloqueada.','error');
+    const im=new Image();
+    im.onload=()=>{
+      const c=l.c.getContext('2d');
+      const scale=Math.min(l.c.width/im.width,l.c.height/im.height,1);
+      const w=im.width*scale,h=im.height*scale;
+      c.clearRect(0,0,l.c.width,l.c.height);
+      c.drawImage(im,(l.c.width-w)/2,(l.c.height-h)/2,w,h);
+      commit();render();
+      URL.revokeObjectURL(im.src);
+    };
+    im.onerror=()=>toast('Não foi possível abrir a imagem.','error');
+    im.src=URL.createObjectURL(file);
+    e.target.value='';
+  }
+
   function bindOriginalControls(){
-    const map={'wipaint-add-layer':()=>addLayer(),'wipaint-delete-layer':deleteLayer,'wipaint-duplicate-layer':duplicateLayer,'wipaint-layer-up':()=>moveLayer(1),'wipaint-layer-down':()=>moveLayer(-1),'wipaint-undo':undo,'wipaint-redo':redo,'wipaint-grid':()=>{S.grid=!S.grid;render();},'wipaint-save':()=>exportImage(),'wipaint-send':openRecipientPicker,'wipaint-select-all':selectAll,'wipaint-copy':copy,'wipaint-cut':cut,'wipaint-paste':paste};
-    for(const [id,fn] of Object.entries(map))$(id)?.addEventListener('click',fn);
-    $('wipaint-color')?.addEventListener('input',e=>S.color=e.target.value);
-    $('wipaint-size')?.addEventListener('input',e=>S.size=Number(e.target.value));
-    $('wipaint-opacity')?.addEventListener('input',e=>S.opacity=Number(e.target.value)/100);
+    // Mantido como ponto de compatibilidade para versões antigas.
+    // Os controles reais são ligados em bindUI().
   }
 
   function renderLayers(){
@@ -743,55 +871,31 @@
   function init(){
     S.canvas=$('wipaint-canvas');if(!S.canvas)return;
     S.ctx=S.canvas.getContext('2d',{willReadFrequently:true});S.canvas.style.touchAction='none';
-    initDocument();injectUI();bindCanvas();bindUI();loadAutosave();
+    initDocument();ensurePaintStyle();injectUI();bindCanvas();bindUI();loadAutosave();
     if(!S.history.length)commit();render();renderLayers();renderFrames();syncUI();
     if (!S.autosaveTimer) S.autosaveTimer = setInterval(autosave,15000);
   }
 
-  function openWifiPaintModal(){
-    const overlay=$('modal-overlay');
-    const modal=$('modal-wipaint');
-    if(!modal)return false;
-
-    if(overlay)overlay.classList.remove('hidden');
-    document.querySelectorAll('.modal').forEach(m=>m.classList.add('hidden'));
-    modal.classList.remove('hidden');
-
-    // The original app's modal manager is private to app.js, so WifiPaint
-    // opens its own modal explicitly instead of relying on a missing app API.
-    if(!S.canvas) init();
-    else {
-      injectUI();
-      renderLayers();
-      renderFrames();
-      render();
-      syncUI();
-    }
-    return true;
-  }
-
-  function closeWifiPaintModal(){
-    const overlay=$('modal-overlay');
-    const modal=$('modal-wipaint');
-    if(modal)modal.classList.add('hidden');
-    if(overlay)overlay.classList.add('hidden');
-  }
-
   document.addEventListener('DOMContentLoaded',()=>{
     const open=$('wipaint-open-btn');
-    if(open){
-      open.addEventListener('click',e=>{
-        e.preventDefault();
-        e.stopPropagation();
-        openWifiPaintModal();
-      });
-    }
+    const modal=$('modal-wipaint');
+    const overlay=$('modal-overlay');
+
+    const openPaint=()=>{
+      if(overlay)overlay.classList.remove('hidden');
+      if(modal)modal.classList.remove('hidden');
+      if(!S.canvas)init();
+      else { injectUI(); renderLayers(); renderFrames(); render(); syncUI(); }
+    };
+
+    if(open) open.addEventListener('click',openPaint);
+    else init();
   });
 
   window.WiPaintPro={
+    open:()=>{if($('wipaint-open-btn'))$('wipaint-open-btn').click();else init();},
     state:S,
     setTool,setBrush,selectAll,clearSelection,addLayer,duplicateLayer,deleteLayer,
-    undo,redo,exportImage,addFrame,frameStep,playFrames,stopFrames,openRecipientPicker,
-    open:openWifiPaintModal, close:closeWifiPaintModal
+    undo,redo,exportImage,addFrame,frameStep,playFrames,stopFrames,openRecipientPicker
   };
 })();
