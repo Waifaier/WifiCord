@@ -411,17 +411,69 @@
   </div>
 
   <div id="modal-wipaint" class="modal modal-wipaint hidden">
-    <div class="wipaint-header"><div><div class="wipaint-brand"><span>🎨</span><div><h3>WifiPaint Studio</h3><p class="text-muted">Um mini editor criativo integrado ao WifiCord.</p></div></div></div><div class="wipaint-header-actions"><span class="wipaint-shortcut">Ctrl Z • Ctrl Y • Ctrl C • Ctrl V</span><button id="wipaint-send" class="btn btn-primary">📤 Enviar na conversa</button></div></div>
-    <div class="wipaint-toolbar wipaint-toolbar-main">
-      <div class="wipaint-tool-group"><select id="wipaint-tool" title="Ferramenta"><option value="brush">🖌️ Pincel</option><option value="select">⬚ Seleção</option><option value="eraser">🧽 Borracha</option><option value="pixel">🟪 Pixel</option><option value="fill">🪣 Balde</option><option value="line">📏 Linha</option><option value="rect">▭ Retângulo</option><option value="circle">⚪ Círculo</option><option value="text">🔤 Texto</option><option value="eyedropper">💧 Conta-gotas</option></select><select id="wipaint-brush" title="Tipo de pincel"><option value="classic">🖌️ Clássico</option><option value="pencil">✏️ Lápis</option><option value="ink">🖋️ Tinta</option><option value="watercolor">💧 Aquarela</option><option value="marker">🖍️ Marcador</option><option value="chalk">🪨 Giz</option><option value="airbrush">🌫️ Aerógrafo</option><option value="neon">✨ Neon</option><option value="pixel">🟪 Pixel</option></select></div>
-      <input type="color" id="wipaint-color" value="#7c5cff" title="Cor"><label class="wipaint-range">Tamanho <input type="range" id="wipaint-size" min="1" max="120" value="12"><span id="wipaint-size-value">12 px</span></label><label class="wipaint-range">Opacidade <input type="range" id="wipaint-opacity" min="1" max="100" value="100"></label><label class="wipaint-range">Zoom <input type="range" id="wipaint-zoom" min="25" max="200" value="100"></label>
-      <div class="wipaint-actions"><button id="wipaint-undo" class="btn btn-small">↩️</button><button id="wipaint-redo" class="btn btn-small">↪️</button><button id="wipaint-copy" class="btn btn-small">📋 Copiar</button><button id="wipaint-cut" class="btn btn-small">✂️ Recortar</button><button id="wipaint-paste" class="btn btn-small">📌 Colar</button><button id="wipaint-delete-selection" class="btn btn-small">⌫ Apagar seleção</button></div>
+    <div class="wipaint-header"><div><h3>🎨 WifiPaint</h3><p class="text-muted">Desenhe, pinte e edite imagens com camadas.</p></div></div>
+    <div class="wipaint-toolbar">
+      <select id="wipaint-tool" title="Ferramenta">
+        <option value="select">🎯 Seleção / Transformar</option>
+        <option value="brush">🖌️ Pincel</option>
+        <option value="pixel">🟪 Pixel</option>
+        <option value="eraser">🧽 Borracha</option>
+        <option value="fill">🪣 Balde</option>
+        <option value="line">📏 Linha</option>
+        <option value="rect">▭ Retângulo</option>
+        <option value="circle">⚪ Círculo</option>
+        <option value="text">🔤 Texto</option>
+        <option value="eyedropper">💧 Conta-gotas</option>
+      </select>
+      <select id="wipaint-brush" title="Tipo de pincel">
+        <option value="classic">🖌️ Clássico</option>
+        <option value="pencil">✏️ Lápis</option>
+        <option value="ink">🖋️ Tinta</option>
+        <option value="watercolor">💧 Aquarela</option>
+        <option value="marker">🖍️ Marcador</option>
+        <option value="chalk">🧱 Giz</option>
+        <option value="airbrush">🌫️ Aerógrafo</option>
+        <option value="neon">💜 Neon</option>
+      </select>
+      <input type="color" id="wipaint-color" value="#7c5cff" title="Cor">
+      <label class="wipaint-range">Tam. <input type="range" id="wipaint-size" min="1" max="80" value="12"><span id="wipaint-size-value">12 px</span></label>
+      <label class="wipaint-range">Opac. <input type="range" id="wipaint-opacity" min="1" max="100" value="100"></label>
+      <label class="wipaint-range">Zoom <input type="range" id="wipaint-zoom" min="25" max="200" value="100"></label>
+      <button type="button" id="wipaint-undo" class="btn btn-small">↩️ Desfazer</button>
+      <button type="button" id="wipaint-redo" class="btn btn-small">↪️ Refazer</button>
+      <button type="button" id="wipaint-grid" class="btn btn-small">🔳 Grade</button>
+      <button type="button" id="wipaint-clear" class="btn btn-small">🗑️ Limpar</button>
+      <button type="button" id="wipaint-open-image" class="btn btn-small">🖼️ Abrir imagem</button>
+      <input type="file" id="wipaint-file-input" hidden accept="image/*">
+      <button type="button" id="wipaint-select-all" class="btn btn-small">🎯 Selecionar tudo</button>
+      <button type="button" id="wipaint-copy" class="btn btn-small">📋 Copiar</button>
+      <button type="button" id="wipaint-cut" class="btn btn-small">✂️ Recortar</button>
+      <button type="button" id="wipaint-paste" class="btn btn-small">📥 Colar</button>
+      <button type="button" id="wipaint-delete-selection" class="btn btn-small">🗑️ Seleção</button>
+      <button type="button" id="wipaint-duplicate-layer" class="btn btn-small">📑 Duplicar</button>
+      <button type="button" id="wipaint-layer-up" class="btn btn-small">🔝 Subir</button>
+      <button type="button" id="wipaint-layer-down" class="btn btn-small">🔽 Descer</button>
+      <button type="button" id="wipaint-send" class="btn btn-primary">📤 Enviar na conversa</button>
+      <button type="button" id="wipaint-save" class="btn btn-primary">💾 Salvar PNG</button>
     </div>
-    <div class="wipaint-studio-grid"><aside class="wipaint-panel wipaint-left-panel"><h5>🧰 Ferramentas</h5><button data-wipaint-effect="grayscale">⚫ P&B</button><button data-wipaint-effect="sepia">🟤 Sépia</button><button data-wipaint-effect="invert">🔄 Inverter</button><button data-wipaint-effect="warm">🌅 Quente</button><button data-wipaint-effect="cool">❄️ Frio</button><button id="wipaint-grid">🔳 Grade</button><button id="wipaint-clear">🗑️ Limpar tela</button><button id="wipaint-open-image">🖼️ Importar imagem</button><input type="file" id="wipaint-file-input" hidden accept="image/*"></aside>
-      <main class="wipaint-workspace"><div class="wipaint-canvas-wrap"><div class="wipaint-canvas-checker"><canvas id="wipaint-canvas" width="900" height="600"></canvas></div></div><div class="wipaint-timeline"><div class="wipaint-timeline-head"><strong>🎞️ Frames / animação</strong><span id="wipaint-frame-label">Frame 1 / 1</span><div><button id="wipaint-prev-frame" class="btn btn-small">◀</button><button id="wipaint-next-frame" class="btn btn-small">▶</button><button id="wipaint-add-frame" class="btn btn-small btn-primary">＋ Novo frame</button></div></div><div id="wipaint-timeline" class="wipaint-frames"></div></div></main>
-      <aside class="wipaint-panel wipaint-right-panel"><div class="wipaint-panel-title"><h5>📚 Camadas</h5><div><button id="wipaint-add-layer" class="btn btn-small">＋</button><button id="wipaint-duplicate-layer" class="btn btn-small">⧉</button><button id="wipaint-delete-layer" class="btn btn-small">🗑️</button></div></div><div id="wipaint-layers" class="wipaint-layers"></div><hr><h5>✨ Efeitos rápidos</h5><p class="wipaint-hint">Aplique filtros na camada atual.</p><div class="wipaint-effect-grid"><button data-wipaint-effect="grayscale">P&B</button><button data-wipaint-effect="sepia">Sépia</button><button data-wipaint-effect="invert">Inverter</button><button data-wipaint-effect="warm">Quente</button><button data-wipaint-effect="cool">Frio</button></div></aside>
+    <div class="wipaint-body">
+      <div class="wipaint-canvas-wrap"><canvas id="wipaint-canvas" width="900" height="600"></canvas></div>
+      <div class="wipaint-side">
+        <h5>Camadas</h5>
+        <div id="wipaint-layers" class="wipaint-layers"></div>
+        <div class="wipaint-layer-actions"><button type="button" id="wipaint-add-layer" class="btn btn-small">+ Camada</button><button type="button" id="wipaint-delete-layer" class="btn btn-small">Excluir</button></div>
+        <h5>Efeitos</h5>
+        <div class="wipaint-effects">
+          <button type="button" class="btn btn-small" data-wipaint-effect="grayscale">⚫ P&B</button>
+          <button type="button" class="btn btn-small" data-wipaint-effect="sepia">🟤 Sépia</button>
+          <button type="button" class="btn btn-small" data-wipaint-effect="invert">🔄 Inverter</button>
+          <button type="button" class="btn btn-small" data-wipaint-effect="warm">🔥 Quente</button>
+          <button type="button" class="btn btn-small" data-wipaint-effect="cool">❄️ Frio</button>
+          <button type="button" class="btn btn-small" data-wipaint-effect="contrast">◐ Contraste</button>
+        </div>
+      </div>
     </div>
-    <div class="modal-actions"><span class="wipaint-status">💡 B = pincel · V = seleção · E = borracha · T = texto · L = linha · R = retângulo · O = círculo · I = conta-gotas</span><button id="wipaint-save" class="btn btn-primary">💾 Exportar PNG</button><button class="btn btn-ghost" data-close-modal>Fechar</button></div>
+    <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Fechar</button></div>
   </div>
 
   <div id="modal-admin" class="modal modal-admin hidden">
