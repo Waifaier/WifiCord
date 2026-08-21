@@ -1,163 +1,320 @@
-/* WifiPaint PRO UI */
-#wipaint-pro-panel{
-  width:100%;
-  margin-top:10px;
-  padding:10px;
-  border:1px solid rgba(124,92,255,.22);
-  border-radius:14px;
-  background:linear-gradient(145deg,rgba(20,20,32,.96),rgba(12,13,23,.96));
-  box-shadow:0 10px 35px rgba(0,0,0,.24);
-  color:#e8e9f3;
-  box-sizing:border-box;
-}
-#wipaint-pro-panel .wp-row{
-  display:flex;
-  align-items:center;
-  flex-wrap:wrap;
-  gap:7px;
-  margin:6px 0;
-}
-#wipaint-pro-panel label{
-  display:flex;
-  align-items:center;
-  gap:5px;
-  font-size:12px;
-  color:#aeb2c8;
-}
-#wipaint-pro-panel select,
-#wipaint-pro-panel input[type="range"],
-#wipaint-pro-panel input[type="color"]{
-  accent-color:#7c5cff;
-}
-#wipaint-pro-panel select{
-  min-width:110px;
-  padding:6px 8px;
-  border:1px solid rgba(255,255,255,.09);
-  border-radius:8px;
-  background:#171827;
-  color:#fff;
-}
-#wipaint-pro-panel input[type="color"]{
-  width:36px;
-  height:30px;
-  padding:2px;
-  border:1px solid rgba(255,255,255,.12);
-  border-radius:8px;
-  background:#171827;
-}
-#wipaint-pro-panel button{
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:8px;
-  padding:6px 9px;
-  background:#1b1d2d;
-  color:#e9eaff;
-  cursor:pointer;
-  transition:transform .12s ease,background .12s ease,border-color .12s ease;
-}
-#wipaint-pro-panel button:hover{
-  transform:translateY(-1px);
-  background:#272a40;
-  border-color:rgba(124,92,255,.5);
-}
-#wipaint-pro-panel button:active{transform:translateY(0)}
-#wipaint-pro-panel .wp-effects button{font-size:11px}
-#wipaint-pro-panel .wp-actions button:first-child,
-#wipaint-pro-panel #wp-send{
-  background:linear-gradient(135deg,#7c5cff,#5c7cff);
-  border-color:transparent;
-}
-.wipaint-layer{
-  display:flex;
-  align-items:center;
-  gap:6px;
-  padding:8px;
-  margin:4px 0;
-  border:1px solid transparent;
-  border-radius:9px;
-  cursor:pointer;
-}
-.wipaint-layer:hover{background:rgba(255,255,255,.04)}
-.wipaint-layer.active{
-  background:rgba(124,92,255,.14);
-  border-color:rgba(124,92,255,.35);
-}
-.wipaint-layer button{
-  border:0;
-  background:transparent;
-  color:#cdd0e4;
-  cursor:pointer;
-}
-.wipaint-layer-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.wipaint-layer-meta{font-size:10px;color:#7f849e}
-#wipaint-frames{
-  display:flex;
-  gap:7px;
-  overflow:auto;
-  padding:8px 2px;
-}
-.wipaint-frame{
-  min-width:64px;
-  padding:7px;
-  border:1px solid rgba(255,255,255,.1);
-  border-radius:9px;
-  background:#171827;
-  color:#fff;
-  cursor:pointer;
-}
-.wipaint-frame.active{
-  border-color:#7c5cff;
-  background:rgba(124,92,255,.16);
-}
-.wipaint-frame small{display:block;color:#8e92aa;margin-top:3px}
-.wipaint-send-picker{
-  position:fixed;
-  inset:0;
-  z-index:99999;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background:rgba(0,0,0,.66);
-  backdrop-filter:blur(8px);
-}
-.wipaint-send-dialog{
-  width:min(440px,calc(100vw - 30px));
-  max-height:80vh;
-  overflow:auto;
-  padding:20px;
-  border:1px solid rgba(124,92,255,.35);
-  border-radius:18px;
-  background:#111321;
-  color:#fff;
-  box-shadow:0 25px 80px rgba(0,0,0,.45);
-}
-.wipaint-send-dialog h3{margin:0 0 5px}
-.wipaint-send-dialog p{color:#9da2bb}
-.wipaint-recipient-list{
-  display:flex;
-  flex-direction:column;
-  gap:7px;
-  margin:14px 0;
-}
-.wipaint-recipient{
-  width:100%;
-  padding:11px;
-  text-align:left;
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:10px;
-  background:#191b2a;
-  color:#fff;
-  cursor:pointer;
-}
-.wipaint-recipient:hover{
-  background:#242740;
-  border-color:rgba(124,92,255,.45);
-}
-#wipaint-canvas{
-  transform-origin:center center;
-  transition:transform .12s ease;
+/* =========================================================
+   WifiPaint PRO — UI polish
+   Escopo: somente elementos criados pelo WifiPaint PRO.
+   Não altera a estrutura/tema global do WifiCord.
+   ========================================================= */
+
+#wipaint-pro-panel {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 10px 0 0;
+  padding: 10px;
+  border: 1px solid rgba(124, 92, 255, 0.22);
+  border-radius: 14px;
+  background: rgba(17, 19, 33, 0.96);
+  color: #e8e9f3;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+  font-family: inherit;
 }
 
-#wipaint-canvas{cursor:crosshair;user-select:none;-webkit-user-select:none}
-.wipaint-toolbar button.active,.wipaint-pro-panel button.active{box-shadow:0 0 0 2px rgba(124,92,255,.4) inset}
-.wipaint-layer[data-group]{padding-left:18px}
-#wipaint-pro-panel .wp-row label{white-space:nowrap}
+#wipaint-pro-panel *,
+#wipaint-pro-panel *::before,
+#wipaint-pro-panel *::after {
+  box-sizing: border-box;
+}
+
+#wipaint-pro-panel .wp-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 6px 0;
+}
+
+#wipaint-pro-panel .wp-row:first-child {
+  margin-top: 0;
+}
+
+#wipaint-pro-panel .wp-row:last-child {
+  margin-bottom: 0;
+}
+
+#wipaint-pro-panel label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  color: #aeb2c8;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+#wipaint-pro-panel select {
+  min-width: 105px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  outline: none;
+  background: #191b2a;
+  color: #f3f4fb;
+  font: inherit;
+}
+
+#wipaint-pro-panel select:focus {
+  border-color: rgba(124, 92, 255, 0.65);
+  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.12);
+}
+
+#wipaint-pro-panel input[type="range"] {
+  width: 105px;
+  margin: 0;
+  accent-color: #7c5cff;
+  cursor: pointer;
+}
+
+#wipaint-pro-panel input[type="color"] {
+  width: 34px;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: #191b2a;
+  cursor: pointer;
+}
+
+#wipaint-pro-panel button {
+  appearance: none;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  outline: none;
+  background: #1b1d2d;
+  color: #e9eaff;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
+}
+
+#wipaint-pro-panel button:hover {
+  background: #25283c;
+  border-color: rgba(124, 92, 255, 0.42);
+  transform: translateY(-1px);
+}
+
+#wipaint-pro-panel button:active {
+  transform: translateY(0);
+}
+
+#wipaint-pro-panel button:focus-visible {
+  border-color: #7c5cff;
+  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.18);
+}
+
+#wipaint-pro-panel #wp-new,
+#wipaint-pro-panel #wp-send {
+  border-color: transparent;
+  background: linear-gradient(135deg, #7c5cff, #5c7cff);
+  color: #fff;
+}
+
+#wipaint-pro-panel #wp-new:hover,
+#wipaint-pro-panel #wp-send:hover {
+  background: linear-gradient(135deg, #896dff, #6887ff);
+}
+
+#wipaint-pro-panel .wp-effects {
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#wipaint-pro-panel .wp-effects > span {
+  margin-right: 2px;
+  color: #858aa4;
+  font-size: 11px;
+}
+
+#wipaint-pro-panel .wp-effects button {
+  padding: 5px 7px;
+  font-size: 11px;
+}
+
+#wipaint-pro-panel .wp-layers,
+#wipaint-pro-panel .wp-modes {
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Camadas: estilos somente nos elementos que o JS cria. */
+#wipaint-layers .wipaint-layer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  margin: 3px 0;
+  padding: 5px 7px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+#wipaint-layers .wipaint-layer:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+#wipaint-layers .wipaint-layer.active {
+  border-color: rgba(124, 92, 255, 0.34);
+  background: rgba(124, 92, 255, 0.13);
+}
+
+#wipaint-layers .wipaint-layer > button {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #cdd0e4;
+  cursor: pointer;
+}
+
+#wipaint-layers .wipaint-layer > button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+#wipaint-layers .wipaint-layer-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: #e8e9f3;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#wipaint-layers .wipaint-layer-meta {
+  flex: 0 0 auto;
+  color: #7f849e;
+  font-size: 10px;
+}
+
+/* Frames */
+#wipaint-frames {
+  display: flex;
+  align-items: stretch;
+  gap: 7px;
+  max-width: 100%;
+  padding: 7px 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+#wipaint-frames .wipaint-frame {
+  flex: 0 0 auto;
+  min-width: 64px;
+  min-height: 46px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  background: #171827;
+  color: #f1f2f8;
+  cursor: pointer;
+}
+
+#wipaint-frames .wipaint-frame:hover {
+  border-color: rgba(124, 92, 255, 0.42);
+  background: #202238;
+}
+
+#wipaint-frames .wipaint-frame.active {
+  border-color: #7c5cff;
+  background: rgba(124, 92, 255, 0.16);
+}
+
+#wipaint-frames .wipaint-frame small {
+  display: block;
+  max-width: 90px;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #8e92aa;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Envio */
+.wipaint-send-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.64);
+  backdrop-filter: blur(7px);
+}
+
+.wipaint-send-dialog {
+  width: min(440px, 100%);
+  max-height: min(80vh, 680px);
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid rgba(124, 92, 255, 0.3);
+  border-radius: 18px;
+  background: #111321;
+  color: #fff;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.45);
+}
+
+.wipaint-send-dialog h3 {
+  margin: 0 0 5px;
+  color: #fff;
+  font-size: 18px;
+}
+
+.wipaint-send-dialog p {
+  margin: 0 0 14px;
+  color: #9da2bb;
+  font-size: 13px;
+}
+
+.wipaint-recipient-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 14px 0;
+}
+
+.wipaint-recipient {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: #191b2a;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wipaint-recipient:hover {
+  border-color: rgba(124, 92, 255, 0.45);
+  background: #242740;
+}
+
+/* Canvas: só comportamento de interação; não altera tamanho/layout. */
+#wipaint-canvas {
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
