@@ -1,24 +1,9 @@
 const express = require('express');
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const { normalizeEmail, isNonEmptyString } = require('../utils/validate');
-const db = require('../database/db');
-const { UPLOAD_DIR } = require('../storage');
 
 const router = express.Router();
-
-// Creator codes are compared by SHA-256 so the literal codes are not exposed in the client/UI.
-// They can be overridden through environment variables for a private deployment.
-const CREATOR_POINTS_HASH = '055c6597bc5743d43042cd9ed8befd880820f805a94da8d52a312fd45b91cc21';
-const CREATOR_ADMIN_HASH = 'c98a25675beca42a4ae604a1210091986101ec9962c78e30fefac710f6265732';
-function creatorHash(value) { return crypto.createHash('sha256').update(String(value || ''), 'utf8').digest('hex'); }
-function creatorCodeMatches(value, hash, envName) {
-  const expected = process.env[envName] ? creatorHash(process.env[envName]) : hash;
-  return crypto.timingSafeEqual(Buffer.from(creatorHash(value)), Buffer.from(expected));
-}
 
 function requireAuth(req, res, next) {
   if (!req.session || !req.session.userId) return res.status(401).json({ error: 'Não autenticado.' });
@@ -129,17 +114,11 @@ router.post('/avatar', requireAuth, (req, res) => {
   if (!signatures[mime]) return res.status(400).json({ error: 'O arquivo não parece ser uma imagem válida.' });
 
   const owner=User.findById(req.session.userId); if(mime==='image/gif' && !owner?.wfna) return res.status(403).json({error:'Avatar animado exige WFNA.'});
+  const dataUrl = `data:${mime === 'image/jpg' ? 'image/jpeg' : mime};base64,${normalized}`;
   const user = User.findById(req.session.userId);
   if (!user) return res.status(401).json({ error: 'Não autenticado.' });
 
-  const ext = mime === 'image/png' ? '.png' : mime === 'image/gif' ? '.gif' : mime === 'image/webp' ? '.webp' : '.jpg';
-  const filename = `avatar-${req.session.userId}-${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`;
-  const avatarDir = path.join(UPLOAD_DIR, 'avatars');
-  fs.mkdirSync(avatarDir, { recursive: true });
-  const avatarPath = path.join(avatarDir, filename);
-  fs.writeFileSync(avatarPath, bytes, { flag: 'wx' });
-  const avatarUrl = `/uploads/avatars/${encodeURIComponent(filename)}`;
-  User.setAvatar(req.session.userId, avatarUrl);
+  User.setAvatar(req.session.userId, dataUrl);
   const publicUser = User.toPublic(User.findById(req.session.userId));
 
   const io = req.app.get('io');
@@ -190,44 +169,25 @@ router.put('/settings', requireAuth, (req,res)=>{
   res.json({user:User.toPublic(user)});
 });
 
-router.post('/creator-code', requireAuth, (req, res) => {
-  const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
-  if (!code) return res.status(400).json({ error: 'Criador inválido.' });
-
-  const isPoints = creatorCodeMatches(code, CREATOR_POINTS_HASH, 'CREATOR_POINTS_CODE');
-  const isAdmin = creatorCodeMatches(code, CREATOR_ADMIN_HASH, 'CREATOR_ADMIN_CODE');
-  if (!isPoints && !isAdmin) return res.status(400).json({ error: 'Criador inválido.' });
-
-  const reward = isAdmin ? 'admin' : 'points';
-  try {
-    const claimed = db.prepare('SELECT 1 FROM creator_redemptions WHERE user_id=? AND reward=?').get(req.session.userId, reward);
-    if (claimed) return res.status(409).json({ error: 'Este benefício já foi ativado nesta conta.' });
-
-    const tx = db.transaction(() => {
-      if (isAdmin) {
-        db.prepare("UPDATE users SET role='admin' WHERE id=?").run(req.session.userId);
-      } else {
-        db.prepare('UPDATE users SET points=points+10000 WHERE id=?').run(req.session.userId);
-        db.prepare("INSERT INTO point_events(user_id,amount,reason) VALUES (?,?,?)").run(req.session.userId,10000,'creator_support');
-      }
-      db.prepare('INSERT INTO creator_redemptions(user_id,reward) VALUES (?,?)').run(req.session.userId,reward);
-      return User.findById(req.session.userId);
-    });
-    const user = tx();
-    const publicUser = User.toPublic(user);
-    req.app.get('io')?.to('user:'+req.session.userId).emit('profile:update',{user:publicUser});
-    return res.json({ user: publicUser, reward: isAdmin ? 'admin' : 'points' });
-  } catch (err) {
-    console.error('creator-code:', err);
-    return res.status(500).json({ error: 'Não foi possível ativar o benefício.' });
-  }
-});
-
 router.get('/profile/:id', requireAuth, (req,res)=>{
   const id=Number(req.params.id);
   const user=User.findById(id);
   if(!user) return res.status(404).json({error:'Usuário não encontrado.'});
   res.json({user:User.toPublic(user)});
+});
+
+
+router.get('/rtc-config', requireAuth, (req, res) => {
+  const iceServers = [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    { urls: 'stun:stun.cloudflare.com:3478' }
+  ];
+  const urls = String(process.env.TURN_URLS || '').split(',').map(x => x.trim()).filter(Boolean);
+  const username = String(process.env.TURN_USERNAME || '');
+  const credential = String(process.env.TURN_CREDENTIAL || '');
+  if (urls.length && username && credential) iceServers.push({ urls: urls.length === 1 ? urls[0] : urls, username, credential });
+  res.set('Cache-Control', 'no-store');
+  res.json({ iceServers });
 });
 
 module.exports = { router, requireAuth };
