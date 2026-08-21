@@ -748,16 +748,50 @@
     if (!S.autosaveTimer) S.autosaveTimer = setInterval(autosave,15000);
   }
 
+  function openWifiPaintModal(){
+    const overlay=$('modal-overlay');
+    const modal=$('modal-wipaint');
+    if(!modal)return false;
+
+    if(overlay)overlay.classList.remove('hidden');
+    document.querySelectorAll('.modal').forEach(m=>m.classList.add('hidden'));
+    modal.classList.remove('hidden');
+
+    // The original app's modal manager is private to app.js, so WifiPaint
+    // opens its own modal explicitly instead of relying on a missing app API.
+    if(!S.canvas) init();
+    else {
+      injectUI();
+      renderLayers();
+      renderFrames();
+      render();
+      syncUI();
+    }
+    return true;
+  }
+
+  function closeWifiPaintModal(){
+    const overlay=$('modal-overlay');
+    const modal=$('modal-wipaint');
+    if(modal)modal.classList.add('hidden');
+    if(overlay)overlay.classList.add('hidden');
+  }
+
   document.addEventListener('DOMContentLoaded',()=>{
     const open=$('wipaint-open-btn');
-    if(open)open.addEventListener('click',()=>setTimeout(()=>{if(!S.canvas)init();else{injectUI();renderLayers();renderFrames();render();}},0));
-    else init();
+    if(open){
+      open.addEventListener('click',e=>{
+        e.preventDefault();
+        e.stopPropagation();
+        openWifiPaintModal();
+      });
+    }
   });
 
   window.WiPaintPro={
-    open:()=>{if($('wipaint-open-btn'))$('wipaint-open-btn').click();else init();},
     state:S,
     setTool,setBrush,selectAll,clearSelection,addLayer,duplicateLayer,deleteLayer,
-    undo,redo,exportImage,addFrame,frameStep,playFrames,stopFrames,openRecipientPicker
+    undo,redo,exportImage,addFrame,frameStep,playFrames,stopFrames,openRecipientPicker,
+    open:openWifiPaintModal, close:closeWifiPaintModal
   };
 })();
