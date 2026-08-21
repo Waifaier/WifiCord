@@ -313,6 +313,23 @@ function initSockets(io) {
       callback({ ok: true, messageId });
     });
 
+    socket.on('dm:clear', (data, callback) => {
+      callback = typeof callback === 'function' ? callback : () => {};
+      const otherUserId = Number(data && data.userId);
+      if (!Number.isInteger(otherUserId) || otherUserId <= 0) {
+        return callback({ error: 'Conversa inválida.' });
+      }
+      if (otherUserId !== userId && !Friendship.areFriends(userId, otherUserId)) {
+        return callback({ error: 'Não autorizado.' });
+      }
+
+      Message.deleteDMConversation(userId, otherUserId);
+      const payload = { withUserId: otherUserId, byUserId: userId };
+      io.to(userRoom(userId)).emit('dm:cleared', payload);
+      io.to(userRoom(otherUserId)).emit('dm:cleared', { withUserId: userId, byUserId: userId });
+      callback({ ok: true });
+    });
+
     socket.on('message:edit', (data, callback) => {
       callback = typeof callback === 'function' ? callback : () => {};
       const messageId = Number(data && data.messageId);
