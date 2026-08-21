@@ -6,8 +6,21 @@ const RTC_CONFIG={iceServers:[
  {urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']},
  {urls:'stun:stun.cloudflare.com:3478'}
 ]};
+let rtcConfigReady=null;
+async function loadRtcConfig(){
+ if(rtcConfigReady)return rtcConfigReady;
+ rtcConfigReady=(async()=>{
+  try{
+   const r=await fetch('/api/auth/rtc-config',{credentials:'same-origin'});
+   if(!r.ok)return;
+   const data=await r.json();
+   if(Array.isArray(data.iceServers)&&data.iceServers.length)RTC_CONFIG.iceServers=data.iceServers;
+  }catch(e){console.warn('RTC config fallback:',e?.message||e);}
+ })();
+ return rtcConfigReady;
+}
 const state={pc:null,localStream:null,screenStream:null,screenSender:null,targetUserId:null,callType:'video',
- micEnabled:true,camEnabled:false,inCall:false,pendingOffer:null,pendingCandidates:[],makingOffer:false,
+ micEnabled:true,camEnabled:false,inCall:false,pendingOffer:null,pendingCandidates:[],makingOffer:false,reconnecting:false,reconnectTimer:null,reconnectAttempts:0,
  localAudioCtx:null,remoteAudioCtx:null,speakingTimer:null,remoteSpeakingTimer:null,fullscreen:false,adminVoiceMutedUntil:0,shareResolution:720,shareType:'screen',shareSystemAudio:false,headphonesOff:false,groupMode:false,groupServerId:null,groupChannelId:null,groupType:'audio',groupPeers:new Map()};
 const el={}; const $=id=>document.getElementById(id);
 function cache(){Object.assign(el,{callBar:$('call-bar'),localVideo:$('local-video'),remoteVideo:$('remote-video'),
@@ -47,32 +60,32 @@ function makeMediaConstraints(video){
 }
 async function getLocalStream(video){
  if(!navigator.mediaDevices?.getUserMedia) throw new Error('Este navegador não disponibilizou o microfone. Use Chrome, Edge ou Opera em uma página segura/localhost.');
- const constraints=makeMediaConstraints(video);
+ const primary=makeMediaConstraints(video);
  try{
-  const stream=await requestStream(constraints);
+  const stream=await navigator.mediaDevices.getUserMedia(primary);
   const audio=stream.getAudioTracks()[0];
-  if(!audio) throw new Error('O navegador não entregou uma faixa de áudio. Verifique o microfone selecionado.');
+  if(!audio){stream.getTracks().forEach(t=>t.stop());throw new Error('O navegador não entregou uma faixa de áudio. Verifique o microfone selecionado.');}
   audio.enabled=true;
-  return stream;}
- catch(e){
-  // A saved microphone deviceId that no longer exists throws OverconstrainedError;
-  // retry once with the default microphone instead of failing the whole call.
-  if(e.name==='OverconstrainedError'&&constraints.audio&&typeof constraints.audio==='object'&&constraints.audio.deviceId){
+  return stream;
+ }catch(e){
+  // Device IDs saved from a previous computer/session can become invalid.
+  // Retry once with the default input/output constraints instead of making
+  // an otherwise healthy call fail before WebRTC even starts.
+  if(e.name==='OverconstrainedError' && primary.audio?.deviceId){
    try{
-    const fallbackConstraints={audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:constraints.video};
-    const stream=await requestStream(fallbackConstraints);
-    const audio=stream.getAudioTracks()[0];
-    if(!audio) throw new Error('O navegador não entregou uma faixa de áudio. Verifique o microfone selecionado.');
-    audio.enabled=true;
+    const fallback={audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:primary.video};
+    const stream=await navigator.mediaDevices.getUserMedia(fallback);
+    if(!stream.getAudioTracks()[0]){stream.getTracks().forEach(t=>t.stop());throw e;}
+    stream.getAudioTracks()[0].enabled=true;
     return stream;
-   }catch(e2){ e=e2; }
+   }catch(_){}
   }
   if(e.name==='NotAllowedError')throw new Error('Permita o microfone/câmera nas permissões do navegador.');
   if(e.name==='NotFoundError')throw new Error(video?'Microfone ou câmera não encontrados.':'Microfone não encontrado.');
   if(e.name==='NotReadableError')throw new Error('O dispositivo está sendo usado por outro aplicativo.');
+  if(e.name==='OverconstrainedError')throw new Error('O dispositivo selecionado não está disponível. Abra as configurações da chamada e escolha outro microfone/câmera.');
   throw e;
  }}
-function requestStream(constraints){return navigator.mediaDevices.getUserMedia(constraints);}
 function attachScreenPreview(stream,remote=false){const v=remote?el.remoteVideo:el.localVideo;if(!v)return;v.srcObject=stream;v.muted=!remote;v.autoplay=true;v.playsInline=true;v.style.display='block';v.classList.toggle('is-screen-preview',!remote);v.play?.().catch(()=>{});requestAnimationFrame(()=>v.play?.().catch(()=>{}));}
 function pcCreate(){
  const pc=new RTCPeerConnection(RTC_CONFIG);
@@ -105,27 +118,56 @@ function pcCreate(){
   el.callBar?.classList.add('has-remote');refreshParticipants();
  };
  pc.onconnectionstatechange=()=>{
-  if(pc.connectionState==='connected'){window.Sounds?.stopLoop();window.Sounds?.play('call-join');state._iceRestarted=false;}
-  if(pc.connectionState==='disconnected'){
-   setTimeout(()=>{if(state.pc===pc&&pc.connectionState==='disconnected'&&!state._iceRestarted){state._iceRestarted=true;negotiate(true);}},1500);
+  if(pc.connectionState==='connected'){
+   state.reconnecting=false;state.reconnectAttempts=0;
+   if(state.reconnectTimer){clearTimeout(state.reconnectTimer);state.reconnectTimer=null;}
+   window.Sounds?.play('call-join');
   }
-  if(pc.connectionState==='failed'){
-   if(!state._iceRestarted){state._iceRestarted=true;negotiate(true);}
-   setTimeout(()=>{if(state.pc===pc&&['failed','disconnected'].includes(pc.connectionState))endCall(true);},4000);
-  }
+  if(pc.connectionState==='disconnected')scheduleReconnect(pc);
+  if(pc.connectionState==='failed')scheduleReconnect(pc,true);
+ };
+ pc.oniceconnectionstatechange=()=>{
+  if(['disconnected','failed'].includes(pc.iceConnectionState))scheduleReconnect(pc,pc.iceConnectionState==='failed');
  };
  return pc;
 }
+
+async function restartIce(pc){
+ if(state.pc!==pc||!state.inCall||!state.targetUserId||pc.signalingState!=='stable')return false;
+ try{
+  state.reconnecting=true;
+  const offer=await pc.createOffer({iceRestart:true});
+  await pc.setLocalDescription(offer);
+  window.ChatSocket.sendCallOffer({toUserId:state.targetUserId,sdp:pc.localDescription,callType:state.callType,renegotiation:true});
+  return true;
+ }catch(e){console.warn('ICE restart failed:',e?.message||e);return false;}
+}
+function scheduleReconnect(pc,immediate=false){
+ if(state.pc!==pc||!state.inCall)return;
+ if(state.reconnectTimer)return;
+ const attempt=++state.reconnectAttempts;
+ const delay=immediate?250:Math.min(5000,700*attempt);
+ state.reconnectTimer=setTimeout(async()=>{
+  state.reconnectTimer=null;
+  if(state.pc!==pc||!state.inCall)return;
+  if(pc.connectionState==='connected')return;
+  if(attempt<=6){await restartIce(pc);scheduleReconnect(pc,false);return;}
+  // Only give up after several ICE restarts, not after a single transient disconnect.
+  endCall(true);
+ },delay);
+}
+
 async function flushCandidates(){if(!state.pc?.remoteDescription)return;for(const c of state.pendingCandidates.splice(0)){try{await state.pc.addIceCandidate(c);}catch(_){}}}
-async function negotiate(restart){
+async function negotiate(){
  if(!state.pc||!state.inCall||!state.targetUserId||state.pc.signalingState!=='stable'||state.makingOffer)return;
- state.makingOffer=true;try{const offer=await state.pc.createOffer(restart?{iceRestart:true}:undefined);await state.pc.setLocalDescription(offer);
+ state.makingOffer=true;try{const offer=await state.pc.createOffer();await state.pc.setLocalDescription(offer);
  window.ChatSocket.sendCallOffer({toUserId:state.targetUserId,sdp:state.pc.localDescription,callType:state.callType,renegotiation:true});}
  catch(e){console.error(e)}finally{state.makingOffer=false;}
 }
 async function prepare(target,type){
+ await loadRtcConfig();
  state.targetUserId=target;state.callType=type;state.localStream=await getLocalStream(type==='video');
- state.inCall=true;state.micEnabled=true;state.camEnabled=type==='video';state._iceRestarted=false;el.callBar?.classList.toggle('audio-call',type==='audio');
+ state.inCall=true;state.micEnabled=true;state.camEnabled=type==='video';el.callBar?.classList.toggle('audio-call',type==='audio');
  state.pc=pcCreate();state.localStream.getTracks().forEach(t=>{if(t.kind==='audio')t.enabled=true;const sender=t.kind==='video'?state.pc.getTransceivers().find(x=>x.receiver?.track?.kind==='video')?.sender:null;if(sender) sender.replaceTrack(t); else state.pc.addTrack(t,state.localStream);});
  el.localVideo.srcObject=state.localStream;el.localVideo.muted=true;el.localVideo.play?.().catch(()=>{});
  openBar();startLocalSpeaking(); try{await state.localAudioCtx?.resume?.();}catch(_){}window.Settings?.refreshDevices?.();window.Sounds?.play('call-join');
@@ -134,14 +176,14 @@ async function startCall(target,type){
  if(!target)return window.App?.toast('Selecione um amigo para ligar.','error');
  if(state.inCall||state.pendingOffer)return;
  try{await prepare(target,type);const offer=await state.pc.createOffer();await state.pc.setLocalDescription(offer);
- window.ChatSocket.sendCallOffer({toUserId:target,sdp:state.pc.localDescription,callType:type,renegotiation:false});window.Sounds?.startLoop('ringback');}
- catch(e){window.Sounds?.stopLoop();window.App?.toast(e.message||'Não foi possível iniciar a chamada.','error');endCall(false);}
+ window.ChatSocket.sendCallOffer({toUserId:target,sdp:state.pc.localDescription,callType:type,renegotiation:false});}
+ catch(e){window.App?.toast(e.message||'Não foi possível iniciar a chamada.','error');endCall(false);}
 }
 function handleOffer(data){
  if(!data?.fromUserId||!data.sdp)return;
  if(state.inCall&&state.targetUserId&&String(state.targetUserId)===String(data.fromUserId)&&data.renegotiation){handleRenegotiate(data);return;}
  if(state.inCall||state.pendingOffer){window.ChatSocket.sendCallHangup({toUserId:data.fromUserId});return;}
- state.pendingOffer=data;window.Sounds?.startLoop('incoming');
+ state.pendingOffer=data;window.Sounds?.play('call-incoming');
  if(el.incomingText)el.incomingText.textContent=`${friendName(data.fromUserId)} está te ligando (${data.callType==='audio'?'voz':'vídeo'}).`;
  document.getElementById('modal-overlay')?.classList.remove('hidden');el.incomingModal?.classList.remove('hidden');
 }
@@ -151,18 +193,19 @@ async function handleRenegotiate(data){
  window.ChatSocket.sendCallAnswer({toUserId:data.fromUserId,sdp:state.pc.localDescription,renegotiation:true});}catch(e){console.error(e);}
 }
 async function accept(){
- const d=state.pendingOffer;if(!d)return;window.Sounds?.stopLoop();closeModals();
+ const d=state.pendingOffer;if(!d)return;closeModals();
  try{await prepare(d.fromUserId,d.callType||'video');await state.pc.setRemoteDescription(new RTCSessionDescription(d.sdp));await flushCandidates();
  const a=await state.pc.createAnswer();await state.pc.setLocalDescription(a);window.ChatSocket.sendCallAnswer({toUserId:d.fromUserId,sdp:state.pc.localDescription,renegotiation:false});state.pendingOffer=null;}
  catch(e){window.App?.toast(e.message||'Não foi possível atender.','error');state.pendingOffer=null;endCall(true);}
 }
-function reject(){window.Sounds?.stopLoop();if(state.pendingOffer)window.ChatSocket.sendCallHangup({toUserId:state.pendingOffer.fromUserId});state.pendingOffer=null;closeModals();window.Sounds?.play('call-leave');}
+function reject(){if(state.pendingOffer)window.ChatSocket.sendCallHangup({toUserId:state.pendingOffer.fromUserId});state.pendingOffer=null;closeModals();window.Sounds?.play('call-leave');}
 async function answer(data){if(!state.pc||!data?.sdp)return;try{await state.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));await flushCandidates();}catch(e){console.error(e);}}
 async function ice(data){if(!data?.candidate)return;const expected=state.targetUserId||state.pendingOffer?.fromUserId;if(!expected||String(data.fromUserId)!==String(expected))return;
  if(!state.pc||!state.pc.remoteDescription){state.pendingCandidates.push(data.candidate);return;}try{await state.pc.addIceCandidate(data.candidate);}catch(_){}}
-function handleHangup(data){window.Sounds?.stopLoop();if(state.pendingOffer&&(!data||String(data.fromUserId)===String(state.pendingOffer.fromUserId))){state.pendingOffer=null;closeModals();}if(state.inCall&&(!data||String(data.fromUserId)===String(state.targetUserId)))endCall(false);}
+function handleHangup(data){if(state.pendingOffer&&(!data||String(data.fromUserId)===String(state.pendingOffer.fromUserId))){state.pendingOffer=null;closeModals();}if(state.inCall&&(!data||String(data.fromUserId)===String(state.targetUserId)))endCall(false);}
 function endCall(notify){
- window.Sounds?.stopLoop();
+ if(state.reconnectTimer){clearTimeout(state.reconnectTimer);state.reconnectTimer=null;}
+ state.reconnecting=false;state.reconnectAttempts=0;
  if(state.groupMode){window.ChatSocket.leaveServerCall({serverId:state.groupServerId,channelId:state.groupChannelId});for(const id of [...state.groupPeers.keys()])removeGroupPeer(id);state.groupPeers.clear();state.groupMode=false;state.groupServerId=null;state.groupChannelId=null;}
  const target=state.targetUserId;if(notify&&target)window.ChatSocket.sendCallHangup({toUserId:target});
  try{state.pc?.close()}catch(_){}
@@ -190,11 +233,9 @@ async function switchDevice(kind,id){
  if(!state.inCall||!state.localStream)return;
  const isAudio=kind==='audioinput';const c=isAudio?{audio:{deviceId:{exact:id},echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}:{audio:false,video:{deviceId:{exact:id},width:{ideal:1280},height:{ideal:720}}};
  const fresh=await navigator.mediaDevices.getUserMedia(c);const track=isAudio?fresh.getAudioTracks()[0]:fresh.getVideoTracks()[0];const old=isAudio?state.localStream.getAudioTracks()[0]:state.localStream.getVideoTracks()[0];
- let addedNewSender=false;
- if(state.groupMode){for(const p of state.groupPeers.values()){const sender=p.pc.getSenders().find(x=>x.track?.kind===track.kind);if(sender)await sender.replaceTrack(track);else{p.pc.addTrack(track,state.localStream);addedNewSender=true;}}} else {const sender=state.pc.getSenders().find(x=>x.track?.kind===track.kind);if(sender)await sender.replaceTrack(track);else{state.pc.addTrack(track,state.localStream);addedNewSender=true;}}
+ if(state.groupMode){for(const p of state.groupPeers.values()){const sender=p.pc.getSenders().find(x=>x.track?.kind===track.kind);if(sender)await sender.replaceTrack(track);else p.pc.addTrack(track,state.localStream);}} else {const sender=state.pc.getSenders().find(x=>x.track?.kind===track.kind);if(sender)await sender.replaceTrack(track);else state.pc.addTrack(track,state.localStream);}
  if(old)old.stop();state.localStream.removeTrack(old);state.localStream.addTrack(track);track.enabled=isAudio?state.micEnabled:state.camEnabled;
  if(!isAudio&&!state.screenStream)el.localVideo.srcObject=state.localStream;
- if(addedNewSender&&!state.groupMode)await negotiate();
  const settings=window.Settings?.getMediaSettings?.()||{};if(isAudio)settings.audioDeviceId=id;else settings.videoDeviceId=id;
  localStorage.setItem('wificord-media-settings',JSON.stringify(settings));window.App?.toast('Dispositivo alterado.','success');
 }
@@ -259,7 +300,7 @@ function createGroupPeer(peerId,initiator){const id=String(peerId);if(groupPeerP
  try { pc.addTransceiver('video',{direction:'sendrecv'}); } catch (_) {}
  const peer={pc,video:null,audios:[]};state.groupPeers.set(id,peer);state.localStream?.getTracks().forEach(t=>{const sender=t.kind==='video'?pc.getTransceivers().find(x=>x.receiver?.track?.kind==='video')?.sender:null;if(sender)sender.replaceTrack(t);else pc.addTrack(t,state.localStream);});pc.onicecandidate=e=>{if(e.candidate)window.ChatSocket.sendServerCallIce({toUserId:Number(id),serverId:state.groupServerId,channelId:state.groupChannelId,candidate:e.candidate});};pc.ontrack=e=>{if(e.track.kind==='video'){if(!(peer.video instanceof MediaStream))peer.video=new MediaStream();if(!peer.video.getTracks().some(t=>t.id===e.track.id))peer.video.addTrack(e.track);renderGroupTiles();}else{const a=document.createElement('audio');a.autoplay=true;a.playsInline=true;a.srcObject=new MediaStream([e.track]);a.volume=1;document.body.appendChild(a);peer.audios.push(a);a.play?.().catch(()=>{});}};pc.onconnectionstatechange=()=>{if(['failed','disconnected','closed'].includes(pc.connectionState))removeGroupPeer(id);};state.groupPeers.set(id,peer);if(initiator)pc.createOffer().then(o=>pc.setLocalDescription(o)).then(()=>window.ChatSocket.sendServerCallOffer({toUserId:Number(id),serverId:state.groupServerId,channelId:state.groupChannelId,callType:state.groupType,sdp:pc.localDescription})).catch(()=>{});return peer;}
 function removeGroupPeer(id){const p=state.groupPeers.get(String(id));if(!p)return;p.pc.close();p.audios?.forEach(a=>a.remove());state.groupPeers.delete(String(id));renderGroupTiles();}
-async function startServerCall(serverId,channelId,type){if(state.inCall)return;try{state.groupMode=true;state.groupServerId=serverId;state.groupChannelId=channelId;state.groupType=type;state.localStream=await getLocalStream(type==='video');state.inCall=true;state.micEnabled=true;state.camEnabled=type==='video';state.pc=null;el.callBar?.classList.toggle('audio-call',type==='audio');openBar();renderGroupTiles();window.ChatSocket.joinServerCall({serverId,channelId,callType:type},r=>{if(r?.error){window.App?.toast(r.error,'error');endCall(false);return;}for(const id of (r?.peers||[]))createGroupPeer(id,true);});window.Sounds?.play('call-join');}catch(e){state.groupMode=false;window.App?.toast(e.message||'Não foi possível entrar na chamada.','error');endCall(false);}}
+async function startServerCall(serverId,channelId,type){if(state.inCall)return;try{await loadRtcConfig();state.groupMode=true;state.groupServerId=serverId;state.groupChannelId=channelId;state.groupType=type;state.localStream=await getLocalStream(type==='video');state.inCall=true;state.micEnabled=true;state.camEnabled=type==='video';state.pc=null;el.callBar?.classList.toggle('audio-call',type==='audio');openBar();renderGroupTiles();window.ChatSocket.joinServerCall({serverId,channelId,callType:type},r=>{if(r?.error){window.App?.toast(r.error,'error');endCall(false);return;}for(const id of (r?.peers||[]))createGroupPeer(id,true);});window.Sounds?.play('call-join');}catch(e){state.groupMode=false;window.App?.toast(e.message||'Não foi possível entrar na chamada.','error');endCall(false);}}
 async function handleServerOffer(d){if(!state.groupMode||Number(d?.serverId)!==Number(state.groupServerId)||Number(d?.channelId)!==Number(state.groupChannelId))return;const p=createGroupPeer(d.fromUserId,false);try{await p.pc.setRemoteDescription(new RTCSessionDescription(d.sdp));await flushGroupCandidates(p);const a=await p.pc.createAnswer();await p.pc.setLocalDescription(a);window.ChatSocket.sendServerCallAnswer({toUserId:Number(d.fromUserId),serverId:state.groupServerId,channelId:state.groupChannelId,sdp:p.pc.localDescription});}catch(e){console.error(e)}}
 async function handleServerAnswer(d){const p=groupPeerPc(d?.fromUserId);if(!p)return;try{await p.pc.setRemoteDescription(new RTCSessionDescription(d.sdp));await flushGroupCandidates(p);}catch(_){} }
 async function handleServerIce(d){if(!state.groupMode)return;const p=groupPeerPc(d?.fromUserId)||createGroupPeer(d.fromUserId,false);p._pending=p._pending||[];if(p.pc.remoteDescription)p.pc.addIceCandidate(d.candidate).catch(()=>{});else p._pending.push(d.candidate);}
