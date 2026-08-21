@@ -241,6 +241,7 @@
       messageInput: $('message-input'),
       chatTitle: $('chat-title'),
       chatPeerAvatar: $('chat-peer-avatar'),
+      deleteDMBtn: $('delete-dm-btn'),
       typingIndicator: $('typing-indicator'),
       messageSearchBtn: $('message-search-btn'),
       messageSearchBar: $('message-search-bar'),
@@ -971,6 +972,7 @@
     state.channels = [];
     if (el.homeBtn) el.homeBtn.classList.remove('active');
     if (el.chatTitle) el.chatTitle.textContent = 'Servidor'; if(el.chatPeerAvatar){el.chatPeerAvatar.classList.add('hidden');el.chatPeerAvatar.innerHTML='';}
+    el.deleteDMBtn?.classList.add('hidden');
     if (el.messagesList) el.messagesList.innerHTML = '<li class="empty-state">Selecione um canal para começar.</li>';
     if (el.channelList) el.channelList.innerHTML = '<li class="loading-state">Carregando canais…</li>';
     renderServers();
@@ -981,6 +983,7 @@
   function setActiveChannel(channelId) {
     state.activeChannelId = channelId;
     state.activeDMUserId = null;
+    el.deleteDMBtn?.classList.add('hidden');
     renderChannels();
     window.Call?.syncContext?.();
   }
@@ -1127,6 +1130,7 @@
 
     const friend = friendById(userId);
     if (el.chatTitle) el.chatTitle.textContent = friend ? (friend.displayName || friend.username) : 'Conversa'; if(el.chatPeerAvatar){el.chatPeerAvatar.innerHTML=friend?avatarHtml(friend):'';el.chatPeerAvatar.classList.toggle('hidden',!friend);}
+    el.deleteDMBtn?.classList.remove('hidden');
 
     window.ChatSocket.joinDM(userId);
     window.ChatSocket.sendDmSeen(userId);
@@ -1304,6 +1308,27 @@
     if (item) {
       item.classList.add('message-deleting');
       setTimeout(() => item.remove(), 180);
+    }
+  }
+
+  function clearActiveDM() {
+    const userId = state.activeDMUserId;
+    if (!userId) return;
+    if (!window.confirm('Apagar toda a conversa? Essa ação não pode ser desfeita.')) return;
+    window.ChatSocket.clearDM(userId, result => {
+      if (result && result.error) return toast(result.error, 'error');
+      if (String(state.activeDMUserId) === String(userId) && el.messagesList) {
+        el.messagesList.innerHTML = '<li class="empty-state">Nenhuma mensagem ainda. Diga oi!</li>';
+      }
+      toast('Conversa apagada.', 'success');
+    });
+  }
+
+  function handleDMCleared(data) {
+    const withUserId = data && data.withUserId;
+    if (!withUserId || !el.messagesList) return;
+    if (String(state.activeDMUserId) === String(withUserId)) {
+      el.messagesList.innerHTML = '<li class="empty-state">Nenhuma mensagem ainda. Diga oi!</li>';
     }
   }
 
@@ -1786,6 +1811,7 @@
     if (el.messageSearchPrev) el.messageSearchPrev.addEventListener('click', searchPrev);
 
     if (el.pinnedMessagesBtn) el.pinnedMessagesBtn.addEventListener('click', openPinnedMessagesModal);
+    if (el.deleteDMBtn) el.deleteDMBtn.addEventListener('click', clearActiveDM);
 
     if (el.mobileMembersBtn) {
       el.mobileMembersBtn.addEventListener('click', function () {
@@ -1923,6 +1949,7 @@
     handleIncomingMessage: handleIncomingMessage,
     showIncomingDMNotice: showIncomingDMNotice,
     handleMessageDeleted: handleMessageDeleted,
+    handleDMCleared: handleDMCleared,
     handleMessageEdited: handleMessageEdited,
     handleMessagePinChanged: handleMessagePinChanged,
     handleDmSeen: handleDmSeen,
