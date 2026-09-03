@@ -395,9 +395,11 @@ router.put('/:serverId/profile', requireAuth, async (req, res, next) => {
         !/^data:image\/(png|jpeg|jpg|gif|webp);base64,/i.test(v) ||
         v.length > 4200000
       ) {
-        throw new Error(
+        const e = new Error(
           'Imagem inválida ou muito grande.'
         );
+        e.status = 400;
+        throw e;
       }
 
       return v;
