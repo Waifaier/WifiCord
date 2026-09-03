@@ -273,10 +273,15 @@
         <div class="settings-pane active" data-settings-pane="profile">
           <h4>Perfil</h4>
           <p class="text-muted">Informações da sua conta no WifiCord.</p>
-          <div id="settings-profile-banner" class="profile-banner-preview"></div>
-          <label>Foto ou GIF de perfil<input type="file" id="settings-avatar-input" accept="image/png,image/jpeg,image/gif,image/webp"></label>
-          <img id="settings-avatar-preview" class="settings-avatar-preview" alt="Preview">
-          <label>Banner do perfil<input type="file" id="settings-banner-input" accept="image/png,image/jpeg,image/gif,image/webp"></label>
+          <div id="settings-profile-banner" class="profile-banner-preview">
+            <button type="button" class="media-edit-btn media-edit-btn-banner" id="settings-banner-edit-btn" title="Alterar banner" aria-label="Alterar banner"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+            <input type="file" id="settings-banner-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+          </div>
+          <div class="settings-avatar-wrap">
+            <img id="settings-avatar-preview" class="settings-avatar-preview" alt="Preview">
+            <button type="button" class="media-edit-btn" id="settings-avatar-edit-btn" title="Alterar foto de perfil" aria-label="Alterar foto de perfil"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+            <input type="file" id="settings-avatar-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+          </div>
           <label>Nome de exibição<input type="text" id="settings-display-name" maxlength="64"></label>
           <label>Nome de usuário<input type="text" id="settings-username" disabled></label>
           <label>Sobre você<textarea id="settings-bio" maxlength="190" placeholder="Conte algo sobre você..."></textarea></label>
