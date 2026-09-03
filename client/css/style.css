@@ -1964,3 +1964,132 @@ body { min-width: 0; min-height: 100dvh; overflow: hidden; }
    painéis flutuantes como modais) ficam arredondados; a grade principal do
    app permanece reta, como convém a um layout de colunas encostadas --- */
 .message-form textarea { border-radius: var(--radius-md); }
+
+/* =========================================================================
+   CONTROLES DE FORMULÁRIO PERSONALIZADOS
+   Nada de widget padrão do sistema operacional: checkbox vira interruptor,
+   select ganha seta e menu no estilo do site, range ganha trilho e alça
+   próprios, e o campo de cor ganha uma moldura consistente com o resto.
+   ========================================================================= */
+
+/* --- Checkbox → interruptor (toggle) --- */
+input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 40px !important;
+  height: 22px !important;
+  min-width: 40px;
+  padding: 0;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--bg-hover);
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  vertical-align: middle;
+  transition: background .2s ease, border-color .2s ease;
+}
+input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #cfc9e0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .45);
+  transition: transform .2s cubic-bezier(.2, .8, .2, 1), background .2s ease;
+}
+input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, var(--accent-primary-start), var(--accent-primary-end));
+  border-color: transparent;
+}
+input[type="checkbox"]:checked::after { transform: translateX(18px); background: #fff; }
+input[type="checkbox"]:disabled { opacity: .4; cursor: not-allowed; }
+input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 3px rgba(143, 104, 255, .4); }
+.settings-toggle { cursor: pointer; }
+
+/* --- Select: reset do widget nativo + seta própria --- */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  background: var(--bg-elevated) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%239d95b8' stroke-width='2'%3E%3Cpath d='M6 8l4 4 4-4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center / 16px;
+  color: var(--text-primary);
+  border: 1px solid var(--bg-hover);
+  border-radius: var(--radius-sm);
+  padding: 10px 34px 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+select:hover { border-color: var(--accent-primary-start); }
+select:focus { outline: none; border-color: var(--accent-secondary); }
+select option { background: var(--bg-elevated); color: var(--text-primary); }
+
+/* --- Range slider --- */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: var(--bg-hover);
+  border: none;
+  border-radius: 999px;
+  padding: 0;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-primary-start), var(--accent-primary-end));
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--accent-primary-start);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .4);
+  transition: transform .12s ease;
+}
+input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.12); }
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+}
+input[type="range"]::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-primary-start), var(--accent-primary-end));
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--accent-primary-start);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .4);
+}
+
+/* --- Campo de cor: moldura própria em volta do seletor nativo --- */
+input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 40px;
+  height: 32px;
+  padding: 3px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--bg-hover);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+input[type="color"]::-webkit-color-swatch { border: none; border-radius: 6px; }
+input[type="color"]::-moz-color-swatch { border: none; border-radius: 6px; }
