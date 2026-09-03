@@ -36,6 +36,19 @@ html, body {
 
 .hidden { display: none !important; }
 
+.mention { background: rgba(139,92,246,.25); color: #cabaff; border-radius: 4px; padding: 0 3px; font-weight: 600; }
+.mention-self { background: rgba(251,191,36,.3); color: #fde68a; }
+.icon-svg { width: 18px; height: 18px; display: block; flex-shrink: 0; }
+.message-pin-btn .icon-svg, .message-delete-btn .icon-svg { width: 14px; height: 14px; }
+.mini-call-status .icon-svg { width: 14px; height: 14px; display: inline-block; vertical-align: -2px; }
+.call-stage-empty .icon-svg { width: 42px; height: 42px; opacity: .5; }
+#home-btn, #join-server-btn, #admin-btn, #store-btn, #games-btn, #settings-btn, #logout-btn,
+#start-voice-call-btn, #start-video-call-btn, #media-btn, #emoji-btn,
+.call-btn, .incoming-call-btn, .message-pin-btn, .message-delete-btn,
+#mini-call-mic, #mini-call-cam, #mini-call-screen, #mini-call-headphones, #mini-call-hangup {
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
 button {
   font-family: inherit;
   cursor: pointer;
@@ -192,7 +205,7 @@ input:focus, textarea:focus {
 .rail-btn {
   width: 48px;
   height: 48px;
-  border-radius: var(--radius-md);
+  border-radius: 50%;
   background: var(--bg-elevated);
   display: flex;
   align-items: center;
@@ -200,9 +213,10 @@ input:focus, textarea:focus {
   font-size: 18px;
   transition: border-radius .15s ease, background .15s ease;
 }
-.rail-btn:hover { background: var(--bg-hover); border-radius: 14px; }
+.rail-btn:hover { background: var(--bg-hover); border-radius: 30%; }
 .rail-btn.active {
   background: linear-gradient(135deg, var(--accent-primary-start), var(--accent-primary-end));
+  border-radius: 30%;
 }
 
 .rail-btn-ghost { color: var(--accent-secondary); font-weight: 700; }
@@ -219,9 +233,10 @@ input:focus, textarea:focus {
 }
 
 .server-item {
+  position: relative;
   width: 48px;
   height: 48px;
-  border-radius: var(--radius-md);
+  border-radius: 50%;
   background: var(--bg-elevated);
   display: flex;
   align-items: center;
@@ -230,8 +245,24 @@ input:focus, textarea:focus {
   font-weight: 700;
   transition: border-radius .15s ease, background .15s ease;
 }
-.server-item:hover { background: var(--bg-hover); border-radius: 14px; }
-.server-item.active { background: linear-gradient(135deg, var(--accent-primary-start), var(--accent-primary-end)); }
+/* Indicador da barrinha à esquerda, igual ao Discord: cresce no hover e fica cheia quando ativo */
+.server-item::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 8px;
+  border-radius: 0 4px 4px 0;
+  background: var(--text-primary);
+  opacity: 0;
+  transition: height .15s ease, opacity .15s ease;
+}
+.server-item:hover { background: var(--bg-hover); border-radius: 30%; }
+.server-item:hover::before { height: 20px; opacity: .6; }
+.server-item.active { background: linear-gradient(135deg, var(--accent-primary-start), var(--accent-primary-end)); border-radius: 30%; }
+.server-item.active::before { height: 40px; opacity: 1; }
 .server-item .server-name { display: none; }
 
 #sidebar {

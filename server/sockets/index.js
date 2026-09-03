@@ -12,6 +12,7 @@ const SUPER_EMOJIS = new Set(['🌈','⚡','🚀','💥','🔥','❄️','🎉',
 
 const onlineSockets = new Map(); // userId -> Set(socketId)
 const offlineTimers = new Map(); // userId -> Timeout
+const lastChannelMessageAt = new Map(); // "channelId:userId" -> timestamp (para slowmode)
 
 function userRoom(userId) {
   return 'user:' + userId;
@@ -115,6 +116,14 @@ function initSockets(io) {
       if (!channel || !ServerModel.isMember(channel.server_id, userId) || !Channel.canView(channel,userId)) {
         return callback({ error: 'Não autorizado.' });
       }
+      const isOwner = Number(ServerModel.findById(channel.server_id)?.owner_id) === Number(userId);
+      const slowmode = Number(channel.slowmode_seconds || 0);
+      if (slowmode > 0 && !isOwner) {
+        const key = channelId + ':' + userId;
+        const last = lastChannelMessageAt.get(key) || 0;
+        const remaining = slowmode * 1000 - (Date.now() - last);
+        if (remaining > 0) return callback({ error: 'Slowmode ativo. Aguarde ' + Math.ceil(remaining / 1000) + 's para enviar de novo.' });
+      }
       if (content.startsWith('__SUPER__:')) {
         const emoji = content.slice(10).trim();
         if (!ServerModel.getSettings(channel.server_id).allowSuperEmojis) return callback({ error: 'Super emojis estão desativados neste servidor.' });
@@ -135,6 +144,7 @@ function initSockets(io) {
       }
       const saved = Message.toPublic(Message.createChannelMessage(channelId, userId, content));
       saved.reactions = Message.getReactionSummary(saved.id, userId);
+      if (slowmode > 0 && !isOwner) lastChannelMessageAt.set(channelId + ':' + userId, Date.now());
       rewardMessage(userId, content);
       io.to(channelRoom(channelId)).emit('channel:message', saved);
       callback({ message: saved });

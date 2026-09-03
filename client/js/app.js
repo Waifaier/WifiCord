@@ -49,7 +49,14 @@
       }catch(_){return '<span>Arquivo de mídia inválido.</span>';}
     }
     const safe=escapeHtml(raw).replace(/\n/g,'<br>');
-    return safe.replace(/(https?:\/\/[^\s<]+)/g,function(u){ const m=u.match(/\/invite\/([a-zA-Z0-9_-]+)/); if(m) return '<a class="server-invite-card" href="#" data-invite="'+m[1]+'">🔗 Convite de servidor <strong>'+m[1]+'</strong></a>'; return '<a href="'+u+'" target="_blank" rel="noopener">'+u+'</a>'; });
+    const withLinks=safe.replace(/(https?:\/\/[^\s<]+)/g,function(u){ const m=u.match(/\/invite\/([a-zA-Z0-9_-]+)/); if(m) return '<a class="server-invite-card" href="#" data-invite="'+m[1]+'">🔗 Convite de servidor <strong>'+m[1]+'</strong></a>'; return '<a href="'+u+'" target="_blank" rel="noopener">'+u+'</a>'; });
+    return withLinks.replace(/(^|[\s(])@([a-zA-Z0-9_]{3,32})\b/g,function(full,pre,uname){
+      const known=(state.serverMembers||[]).concat(state.friends||[]).concat(state.currentUser?[state.currentUser]:[]);
+      const user=known.find(u=>u&&u.username&&u.username.toLowerCase()===uname.toLowerCase());
+      if(!user) return full;
+      const isSelf=state.currentUser&&String(user.id)===String(state.currentUser.id);
+      return pre+'<span class="mention'+(isSelf?' mention-self':'')+'" data-mention-user="'+escapeHtml(user.id)+'">@'+escapeHtml(uname)+'</span>';
+    });
   }
 
   function formatTime(isoString) {
@@ -517,7 +524,7 @@
     const isEditableContent = !String(msg.content||'').startsWith('__MEDIA__:') && !String(msg.content||'').startsWith('__STICKER__:') && !String(msg.content||'').startsWith('__SUPER__:');
     const editedLabel = msg.editedAt ? '<span class="message-edited-tag" title="Editada">(editado)</span>' : '';
     const pinBtn = state.activeChannelId
-      ? '<button type="button" class="message-pin-btn" data-pin-message="' + escapeHtml(msg.id) + '" title="' + (msg.pinnedAt ? 'Desafixar mensagem' : 'Fixar mensagem') + '" aria-label="Fixar mensagem">📌</button>'
+      ? '<button type="button" class="message-pin-btn" data-pin-message="' + escapeHtml(msg.id) + '" title="' + (msg.pinnedAt ? 'Desafixar mensagem' : 'Fixar mensagem') + '" aria-label="Fixar mensagem">' + (window.WCIcons ? window.WCIcons.pin : '📌') + '</button>'
       : '';
     return (
       '<li class="message-item' + (own ? ' own' : '') + (msg.pinnedAt ? ' pinned' : '') + '" data-message-id="' + escapeHtml(msg.id) + '" data-message-author-id="' + escapeHtml(author.id) + '">' +
@@ -531,7 +538,7 @@
       editedLabel +
       pinBtn +
       (own && isEditableContent ? '<button type="button" class="message-edit-btn" data-edit-message="' + escapeHtml(msg.id) + '" title="Editar mensagem" aria-label="Editar mensagem">✏️</button>' : '') +
-      (own ? '<button type="button" class="message-delete-btn" data-delete-message="' + escapeHtml(msg.id) + '" title="Apagar mensagem" aria-label="Apagar mensagem">🗑️</button>' : '') +
+      (own ? '<button type="button" class="message-delete-btn" data-delete-message="' + escapeHtml(msg.id) + '" title="Apagar mensagem" aria-label="Apagar mensagem">' + (window.WCIcons ? window.WCIcons.trash : '🗑️') + '</button>' : '') +
       '</div>' +
       '<div class="message-content" data-raw-content="' + escapeHtml(msg.content) + '">' + formatMessageContent(msg.content) + '</div>' +
       reactionHtml(msg) +
