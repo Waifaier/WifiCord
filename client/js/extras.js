@@ -29,5 +29,107 @@ document.getElementById('settings-save-accessibility')?.addEventListener('click'
 document.getElementById('settings-test-sound')?.addEventListener('click',()=>window.Sounds?.play('message'));
 
 document.getElementById('settings-save-profile-effects')?.addEventListener('click',()=>{const me=window.App?.getState?.()?.currentUser;if(!me?.wfna)return window.App?.toast('Os efeitos animados do perfil são exclusivos do WFNA.','error');saveSettings({profileEffect:document.getElementById('settings-profile-effect')?.value||'none',profileEffectSpeed:document.getElementById('settings-profile-effect-speed')?.value||'normal',profileEffectEnabled:document.getElementById('settings-profile-effect-enabled')?.checked===true},'Efeitos do perfil salvos.');});
+
+// ---------------------------------------------------------------------
+// Autocomplete de @menção no composer
+// ---------------------------------------------------------------------
+(function(){
+  if(!input) return;
+  const escM=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let box=null, active=false, tokenStart=-1, tokenEnd=-1, items=[], index=0;
+
+  function ensureBox(){
+    if(box) return box;
+    box=document.createElement('div');
+    box.id='mention-autocomplete';
+    box.className='mention-autocomplete hidden';
+    (input.closest('form')||input.parentElement)?.appendChild(box);
+    return box;
+  }
+
+  function candidates(){
+    const st=window.App?.getState?.(); if(!st) return [];
+    return st.activeDMUserId ? (st.friends||[]) : (st.serverMembers||[]);
+  }
+
+  function findToken(value,cursor){
+    const upto=value.slice(0,cursor);
+    const m=upto.match(/(^|[\s])@([a-zA-Z0-9_]{0,32})$/);
+    if(!m) return null;
+    return { start: cursor-m[2].length-1, query: m[2] };
+  }
+
+  function filterCandidates(query){
+    const q=query.toLowerCase(), seen=new Set();
+    return candidates().filter(u=>{
+      if(!u||!u.username) return false;
+      const key=String(u.id);
+      if(seen.has(key)) return false;
+      seen.add(key);
+      if(!q) return true;
+      return u.username.toLowerCase().includes(q) || String(u.displayName||'').toLowerCase().includes(q);
+    }).slice(0,8);
+  }
+
+  function close(){
+    active=false; tokenStart=-1; tokenEnd=-1; items=[];
+    box?.classList.add('hidden');
+  }
+
+  function highlight(){
+    if(!box) return;
+    Array.from(box.children).forEach((el,i)=>el.classList.toggle('active',i===index));
+    box.children[index]?.scrollIntoView({block:'nearest'});
+  }
+
+  function render(list){
+    const b=ensureBox();
+    if(!list.length){ close(); return; }
+    items=list; index=0;
+    b.innerHTML=list.map((u,i)=>{
+      const label=u.displayName||u.username;
+      const av=u.avatarUrl?`<img src="${escM(u.avatarUrl)}" alt="">`:`<div class="avatar-fallback">${escM(label.trim().charAt(0).toUpperCase())}</div>`;
+      return `<div class="mention-autocomplete-item${i===0?' active':''}" data-index="${i}">${av}<span class="mention-name">${escM(label)}</span><span class="mention-username">@${escM(u.username)}</span></div>`;
+    }).join('');
+    Array.from(b.querySelectorAll('.mention-autocomplete-item')).forEach(el=>{
+      el.addEventListener('mousedown',ev=>{ ev.preventDefault(); select(Number(el.dataset.index)); });
+    });
+    b.classList.remove('hidden');
+    active=true;
+  }
+
+  function select(i){
+    const u=items[i]; if(!u) return;
+    const before=input.value.slice(0,tokenStart);
+    const after=input.value.slice(tokenEnd);
+    const insertion='@'+u.username+' ';
+    input.value=before+insertion+after;
+    const pos=(before+insertion).length;
+    input.setSelectionRange(pos,pos);
+    input.focus();
+    close();
+    input.dispatchEvent(new Event('input'));
+  }
+
+  function onInput(){
+    const cursor=input.selectionStart;
+    const token=findToken(input.value,cursor);
+    if(!token){ close(); return; }
+    tokenStart=token.start; tokenEnd=cursor;
+    const list=filterCandidates(token.query);
+    if(!list.length){ close(); return; }
+    render(list);
+  }
+
+  input.addEventListener('input',onInput);
+  input.addEventListener('keydown',function(e){
+    if(!active) return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); e.stopImmediatePropagation(); index=(index+1)%items.length; highlight(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); e.stopImmediatePropagation(); index=(index-1+items.length)%items.length; highlight(); }
+    else if(e.key==='Enter'){ e.preventDefault(); e.stopImmediatePropagation(); select(index); }
+    else if(e.key==='Escape'){ e.preventDefault(); e.stopImmediatePropagation(); close(); }
+  });
+  input.addEventListener('blur',()=>setTimeout(close,120));
+})();
 })();
 

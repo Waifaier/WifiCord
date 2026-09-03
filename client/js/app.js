@@ -221,6 +221,7 @@
     typingUsers: new Map(),
     serverMembers: [],
     unreadDMs: new Map(),
+    unreadChannelIds: new Set(),
     serverRoles: [],
     serverOwnerId: null,
     localNicknames: {},
@@ -395,10 +396,12 @@
     el.channelList.innerHTML = state.channels
       .map(function (channel) {
         const activeClass = channel.id === state.activeChannelId ? ' active' : '';
+        const isUnread = String(channel.id) !== String(state.activeChannelId) && state.unreadChannelIds.has(String(channel.id));
         return (
-          '<li class="channel-item' + activeClass + '" data-channel-id="' + escapeHtml(channel.id) + '" data-channel-type="' + escapeHtml(channel.type || 'text') +
+          '<li class="channel-item' + activeClass + (isUnread ? ' has-unread' : '') + '" data-channel-id="' + escapeHtml(channel.id) + '" data-channel-type="' + escapeHtml(channel.type || 'text') +
           '" role="button" tabindex="0">' +
           '<span class="channel-hash">' + (channel.type === 'voice' ? '🔊' : channel.type === 'announcement' ? '📢' : channel.type === 'media' ? '🖼️' : '#') + '</span><span class="channel-name">' + escapeHtml(channel.name) + '</span>' +
+          (isUnread ? '<span class="channel-unread-dot" title="Não lido"></span>' : '') +
           '</li>'
         );
       })
@@ -1007,9 +1010,34 @@
   function setActiveChannel(channelId) {
     state.activeChannelId = channelId;
     state.activeDMUserId = null;
+    state.unreadChannelIds.delete(String(channelId));
     el.deleteDMBtn?.classList.add('hidden');
     renderChannels();
     window.Call?.syncContext?.();
+  }
+
+  function markChannelRead(channelId) {
+    if (!channelId) return;
+    state.unreadChannelIds.delete(String(channelId));
+    renderChannels();
+  }
+
+  async function markServerRead(serverId) {
+    if (!serverId) return;
+    try {
+      let channels;
+      if (String(state.activeServerId) === String(serverId)) {
+        channels = state.channels;
+      } else {
+        const data = await api('/api/servers/' + encodeURIComponent(serverId) + '/channels');
+        channels = (data && data.channels) || [];
+      }
+      (channels || []).forEach(function (c) { state.unreadChannelIds.delete(String(c.id)); });
+      if (String(state.activeServerId) === String(serverId)) renderChannels();
+      toast('Servidor marcado como lido.', 'success');
+    } catch (err) {
+      toast(err.message || 'Não foi possível marcar o servidor como lido.', 'error');
+    }
   }
 
   function setActiveDM(userId) {
@@ -1095,6 +1123,9 @@
       state.serverRoles = membersData?.roles || [];
       state.serverOwnerId = membersData?.ownerId || null;
       state.localNicknames = membersData?.localNicknames || {};
+      // Entra em todas as salas de canal do servidor (não só a ativa) para que
+      // o indicador de não lido funcione mesmo sem abrir cada canal.
+      state.channels.forEach(function (c) { window.ChatSocket.joinChannel(c.id); });
       renderChannels(); renderServerMembers();
       if (String(state.activeServerId) === String(serverId) && state.channels.length) {
         await openChannel(state.channels[0].id);
@@ -1312,6 +1343,10 @@
       if (kind === 'dm' && !belongsToActiveDM) {
         const author = msg.author || {};
         window.App?.showIncomingDMNotice?.(author);
+      }
+      if (kind === 'channel' && !belongsToActiveChannel && msg.channelId) {
+        state.unreadChannelIds.add(String(msg.channelId));
+        renderChannels();
       }
     }
   }
@@ -1973,6 +2008,9 @@
     setActiveServer: setActiveServer,
     setActiveChannel: setActiveChannel,
     setActiveDM: setActiveDM,
+    openServer: openServer,
+    markChannelRead: markChannelRead,
+    markServerRead: markServerRead,
     handleIncomingMessage: handleIncomingMessage,
     showIncomingDMNotice: showIncomingDMNotice,
     handleMessageDeleted: handleMessageDeleted,
