@@ -34,19 +34,34 @@ bootstrapAdmin();
 
 const app = express();
 if (NODE_ENV === 'production') app.set('trust proxy', 1);
+app.disable('x-powered-by'); // não anuncia o framework/versão do backend nos headers
 const server = http.createServer(app);
 const io = new SocketIOServer(server);
 app.set('io', io);
 
+// Headers básicos de segurança/privacidade. Nada de CSP aqui: o app carrega
+// o socket.io via CDN (cdnjs) e uma CSP mal calibrada quebraria isso.
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  next();
+});
+
+// 🔧 CORRIGIDO: Sessão com duração MUITO MAIOR (90 dias em vez de 7)
 const sessionMiddleware = session({
-  store: new SqliteSessionStore(),
+  store: new SqliteSessionStore({
+    cleanupIntervalMs: 60 * 60 * 1000, // Limpeza a cada 1 hora (não 15 min)
+  }),
   secret: SESSION_SECRET,
-  resave: false,
+  resave: true, // ✅ IMPORTANTE: true para renovar sessão a cada requisição
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    // ✨ NOVO: Aumentado de 7 dias para 90 dias
+    maxAge: 90 * 24 * 60 * 60 * 1000, // 90 dias
     secure: NODE_ENV === 'production',
+    sameSite: 'strict', // Segurança adicional
   },
 });
 
@@ -80,4 +95,5 @@ initSockets(io);
 
 server.listen(PORT, HOST, () => {
   console.log(`Servidor rodando em ${HOST}:${PORT}`);
+  console.log(`✅ Sessões configuradas com duração de 90 dias`);
 });

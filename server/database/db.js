@@ -14,7 +14,9 @@ CREATE TABLE IF NOT EXISTS users (
   display_name TEXT NOT NULL,
   avatar_url TEXT,
   status TEXT NOT NULL DEFAULT 'offline',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  deleted_at TEXT DEFAULT NULL,
+  is_deleted INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS friendships (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,8 +25,8 @@ CREATE TABLE IF NOT EXISTS friendships (
   requester_id INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY(friend_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,
+  FOREIGN KEY(friend_id) REFERENCES users(id) ON DELETE SET NULL,
   UNIQUE(user_id, friend_id)
 );
 CREATE TABLE IF NOT EXISTS servers (
@@ -33,7 +35,7 @@ CREATE TABLE IF NOT EXISTS servers (
   owner_id INTEGER NOT NULL,
   invite_code TEXT UNIQUE NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE TABLE IF NOT EXISTS server_members (
   server_id INTEGER NOT NULL,
@@ -64,7 +66,7 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY(channel_id) REFERENCES channels(id) ON DELETE CASCADE,
   FOREIGN KEY(from_user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY(to_user_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY(to_user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id);
 CREATE INDEX IF NOT EXISTS idx_messages_dm ON messages(from_user_id, to_user_id);
@@ -170,7 +172,7 @@ CREATE TABLE IF NOT EXISTS user_local_nicknames (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY(owner_user_id,target_user_id),
   FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY(target_user_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY(target_user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE TABLE IF NOT EXISTS sessions (
   sid TEXT PRIMARY KEY,
@@ -195,6 +197,14 @@ for (const [table, column, definition] of [
   if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
+// Adicionar colunas de soft delete se não existirem
+const userCols = db.prepare('PRAGMA table_info(users)').all().map(c => c.name);
+if (!userCols.includes('deleted_at')) {
+  db.exec('ALTER TABLE users ADD COLUMN deleted_at TEXT DEFAULT NULL');
+}
+if (!userCols.includes('is_deleted')) {
+  db.exec('ALTER TABLE users ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0');
+}
 
 // Compatibilidade com versões do node:sqlite que expõem DatabaseSync sem
 // o helper .transaction(). O projeto usa transações explícitas para manter

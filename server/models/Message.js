@@ -38,6 +38,12 @@ const Message = {
     return info.changes > 0;
   },
 
+  deleteDMConversation(userA, userB) {
+    const info = db.prepare(`DELETE FROM messages WHERE (from_user_id=? AND to_user_id=?) OR (from_user_id=? AND to_user_id=?)`)
+      .run(userA, userB, userB, userA);
+    return info.changes;
+  },
+
   editContent(id, content) {
     db.prepare("UPDATE messages SET content=?, edited_at=datetime('now') WHERE id=?").run(content, id);
     return Message.findById(id);

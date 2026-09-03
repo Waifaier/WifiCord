@@ -71,6 +71,10 @@
         if (window.App) window.App.handleMessageDeleted(data);
       });
 
+      this.socket.on('dm:cleared', function (data) {
+        if (window.App) window.App.handleDMCleared(data);
+      });
+
       this.socket.on('message:edited', function (data) {
         if (window.App) window.App.handleMessageEdited(data);
       });
@@ -171,6 +175,11 @@
     deleteMessage(messageId, callback) {
       if (!this.socket) return;
       this.socket.emit('message:delete', { messageId }, callback);
+    },
+
+    clearDM(userId, callback) {
+      if (!this.socket) return;
+      this.socket.emit('dm:clear', { userId }, callback);
     },
 
     editMessage(messageId, content, callback) {
