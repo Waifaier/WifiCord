@@ -523,6 +523,9 @@
     const own = state.currentUser && String(author.id) === String(state.currentUser.id);
     const isEditableContent = !String(msg.content||'').startsWith('__MEDIA__:') && !String(msg.content||'').startsWith('__STICKER__:') && !String(msg.content||'').startsWith('__SUPER__:');
     const editedLabel = msg.editedAt ? '<span class="message-edited-tag" title="Editada">(editado)</span>' : '';
+    const pinnedTag = msg.pinnedAt
+      ? '<span class="message-pinned-tag" title="Mensagem fixada">' + (window.WCIcons ? window.WCIcons.pin : '📌') + ' Fixada</span>'
+      : '';
     const pinBtn = state.activeChannelId
       ? '<button type="button" class="message-pin-btn" data-pin-message="' + escapeHtml(msg.id) + '" title="' + (msg.pinnedAt ? 'Desafixar mensagem' : 'Fixar mensagem') + '" aria-label="Fixar mensagem">' + (window.WCIcons ? window.WCIcons.pin : '📌') + '</button>'
       : '';
@@ -536,6 +539,7 @@
       '<span class="message-author">' + escapeHtml(displayAuthor) + (member && String(member.id)===String(state.serverOwnerId)?' 👑':'') + '</span>' +
       '<span class="message-time">' + escapeHtml(formatTime(msg.createdAt)) + '</span>' +
       editedLabel +
+      pinnedTag +
       pinBtn +
       (own && isEditableContent ? '<button type="button" class="message-edit-btn" data-edit-message="' + escapeHtml(msg.id) + '" title="Editar mensagem" aria-label="Editar mensagem">' + (window.WCIcons ? window.WCIcons.edit : '✏️') + '</button>' : '') +
       (own ? '<button type="button" class="message-delete-btn" data-delete-message="' + escapeHtml(msg.id) + '" title="Apagar mensagem" aria-label="Apagar mensagem">' + (window.WCIcons ? window.WCIcons.trash : '🗑️') + '</button>' : '') +
@@ -767,6 +771,19 @@
     item.classList.toggle('pinned', !!pinnedAt);
     const btn = item.querySelector('[data-pin-message]');
     if (btn) btn.title = pinnedAt ? 'Desafixar mensagem' : 'Fixar mensagem';
+    const header = item.querySelector('.message-header');
+    let tag = item.querySelector('.message-pinned-tag');
+    if (pinnedAt) {
+      if (!tag && header) {
+        tag = document.createElement('span');
+        tag.className = 'message-pinned-tag';
+        tag.title = 'Mensagem fixada';
+        tag.innerHTML = (window.WCIcons ? window.WCIcons.pin : '📌') + ' Fixada';
+        header.insertBefore(tag, btn || null);
+      }
+    } else if (tag) {
+      tag.remove();
+    }
   }
 
   function handleMessagePinChanged(data) {

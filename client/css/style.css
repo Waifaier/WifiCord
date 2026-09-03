@@ -1672,3 +1672,90 @@ body { min-width: 0; min-height: 100dvh; overflow: hidden; }
 .incoming-call-btn:active { transform: scale(.94); }
 .incoming-call-reject { background: var(--danger); }
 .incoming-call-accept { background: var(--status-online); }
+
+/* =========================================================================
+   AJUSTES: bolhas de mensagem estilo chat (minhas à direita, outras à
+   esquerda), destaque de mensagem fixada e transições mais suaves.
+   ========================================================================= */
+.message-item {
+  align-items: flex-end;
+  transition: background .18s ease;
+}
+.message-item.own {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+.message-item .message-body {
+  max-width: 68%;
+  display: flex;
+  flex-direction: column;
+}
+.message-item:not(.own) .message-body { align-items: flex-start; }
+.message-item.own .message-body { align-items: flex-end; }
+.message-item.own .message-header { flex-direction: row-reverse; }
+.message-item.own .message-reactions { justify-content: flex-end; }
+
+.message-item .message-content {
+  background: rgba(255, 255, 255, .05);
+  border: 1px solid rgba(255, 255, 255, .06);
+  border-radius: 14px 14px 14px 4px;
+  padding: 8px 12px;
+  transition: transform .15s ease, box-shadow .15s ease, background .18s ease;
+}
+.message-item.own .message-content {
+  background: linear-gradient(135deg, var(--accent, #7c5cff), #6b46e8);
+  border-color: transparent;
+  color: #fff;
+  border-radius: 14px 14px 4px 14px;
+}
+.message-item .message-content:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .18);
+}
+.message-item.own .message-time { color: rgba(255, 255, 255, .75); }
+
+/* Mensagem fixada: destaque visível na própria mensagem, não só no ícone */
+.message-item.pinned {
+  background: rgba(124, 92, 255, .07);
+  border-radius: 10px;
+}
+.message-item.pinned .message-content {
+  border-color: rgba(124, 92, 255, .45);
+  box-shadow: 0 0 0 1px rgba(124, 92, 255, .25);
+}
+.message-pinned-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--accent-secondary, #8b5cf6);
+  background: rgba(139, 92, 246, .14);
+  padding: 2px 7px;
+  border-radius: 999px;
+  animation: pinned-tag-in .22s ease both;
+}
+.message-pinned-tag .icon-svg { width: 11px; height: 11px; }
+@keyframes pinned-tag-in {
+  from { opacity: 0; transform: scale(.7); }
+  to { opacity: 1; transform: scale(1); }
+}
+.message-pin-btn { transition: opacity .12s ease, background .12s ease, color .12s ease, transform .12s ease; }
+.message-item.pinned .message-pin-btn { transform: rotate(-25deg); }
+
+/* Reações com pequena entrada suave */
+.message-reactions .message-reaction {
+  transition: transform .12s ease, background .12s ease, border-color .12s ease;
+}
+.message-reactions .message-reaction:hover { transform: translateY(-1px) scale(1.05); }
+
+/* Avatar com leve resposta ao passar o mouse, mais "vivo" */
+.message-avatar img, .message-avatar .avatar-fallback {
+  transition: transform .18s ease;
+}
+.message-item:hover .message-avatar img,
+.message-item:hover .message-avatar .avatar-fallback {
+  transform: scale(1.04);
+}
