@@ -1708,6 +1708,9 @@
         showDMPanel();
         closeMobileNav();
         if (el.chatTitle) el.chatTitle.textContent = 'Selecione uma conversa';
+        if (el.messagesList) el.messagesList.innerHTML = '';
+        el.chatPeerAvatar?.classList.add('hidden'); if (el.chatPeerAvatar) el.chatPeerAvatar.innerHTML = '';
+        el.deleteDMBtn?.classList.add('hidden');
         setChatEnabled(false);
       });
     }

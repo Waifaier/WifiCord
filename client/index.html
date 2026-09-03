@@ -7,52 +7,74 @@
 <link rel="icon" href="/assets/logo.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-<section id="loading-screen" class="loading-screen"><img src="/assets/logo.svg" alt=""><div class="loading-mark">WifiCord</div><p id="loading-phrase"></p><div class="loading-bar"><i></i></div></section>
+<section id="loading-screen" class="loading-screen">
+  <div class="signal-mark signal-mark-sm">
+    <span class="signal-arc signal-arc-3"></span>
+    <span class="signal-arc signal-arc-2"></span>
+    <span class="signal-arc signal-arc-1"></span>
+    <span class="signal-dot"></span>
+  </div>
+  <div class="loading-mark">WifiCord</div>
+  <p id="loading-phrase"></p>
+</section>
 <script>document.addEventListener('DOMContentLoaded',function(){var l=document.getElementById('loading-screen');if(l){l.classList.add('loading-hide');setTimeout(function(){l.remove();},500);}});</script>
 
 <!-- ===================== TELA DE AUTENTICAÇÃO ===================== -->
 <section id="auth-screen" class="screen">
-  <div class="auth-card">
-    <div class="auth-brand">
-      <div class="brand-logo"><img src="/assets/logo.svg" alt="WifiCord"></div>
-      <h1>WifiCord</h1>
-      <p class="text-muted">Converse em tempo real com seus amigos e servidores.</p>
+  <div class="auth-shell">
+    <aside class="auth-showcase" aria-hidden="true">
+      <div class="signal-mark">
+        <span class="signal-arc signal-arc-3"></span>
+        <span class="signal-arc signal-arc-2"></span>
+        <span class="signal-arc signal-arc-1"></span>
+        <span class="signal-dot"></span>
+      </div>
+      <p class="auth-showcase-title">Sua conversa,<br>sempre no ar.</p>
+      <p class="auth-showcase-sub">Servidores, chamadas e amigos em um só lugar — sem travar, sem ruído.</p>
+    </aside>
+
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="brand-logo"><img src="/assets/logo.svg" alt="WifiCord"></div>
+        <h1>WifiCord</h1>
+        <p class="text-muted">Converse em tempo real com seus amigos e servidores.</p>
+      </div>
+
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" data-tab="login">Entrar</button>
+        <button type="button" class="auth-tab" data-tab="register">Criar conta</button>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <label>Email
+          <input type="email" name="email" required autocomplete="email">
+        </label>
+        <label>Senha
+          <input type="password" name="password" required autocomplete="current-password">
+        </label>
+        <button type="submit" class="btn btn-primary">Entrar</button>
+      </form>
+
+      <form id="register-form" class="auth-form hidden">
+        <label>Nome de usuário
+          <input type="text" name="username" required minlength="3" maxlength="32" autocomplete="username">
+        </label>
+        <label>Nome de exibição
+          <input type="text" name="displayName" maxlength="64" autocomplete="nickname">
+        </label>
+        <label>Email
+          <input type="email" name="email" required autocomplete="email">
+        </label>
+        <label>Senha
+          <input type="password" name="password" required minlength="6" autocomplete="new-password">
+        </label>
+        <button type="submit" class="btn btn-primary">Criar conta</button>
+      </form>
     </div>
-
-    <div class="auth-tabs">
-      <button type="button" class="auth-tab active" data-tab="login">Entrar</button>
-      <button type="button" class="auth-tab" data-tab="register">Criar conta</button>
-    </div>
-
-    <form id="login-form" class="auth-form">
-      <label>Email
-        <input type="email" name="email" required autocomplete="email">
-      </label>
-      <label>Senha
-        <input type="password" name="password" required autocomplete="current-password">
-      </label>
-      <button type="submit" class="btn btn-primary">Entrar</button>
-    </form>
-
-    <form id="register-form" class="auth-form hidden">
-      <label>Nome de usuário
-        <input type="text" name="username" required minlength="3" maxlength="32" autocomplete="username">
-      </label>
-      <label>Nome de exibição
-        <input type="text" name="displayName" maxlength="64" autocomplete="nickname">
-      </label>
-      <label>Email
-        <input type="email" name="email" required autocomplete="email">
-      </label>
-      <label>Senha
-        <input type="password" name="password" required minlength="6" autocomplete="new-password">
-      </label>
-      <button type="submit" class="btn btn-primary">Criar conta</button>
-    </form>
   </div>
 </section>
 
