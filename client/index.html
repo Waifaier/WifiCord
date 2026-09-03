@@ -111,7 +111,15 @@
         <span id="current-user-name" class="user-name"></span>
         <span id="current-user-username" class="user-username"></span>
       </div>
-      <button type="button" id="admin-btn" class="btn btn-icon hidden" title="Painel administrativo">🛡️</button><button type="button" id="store-btn" class="btn btn-icon" title="Loja e pontos">🛍️</button><button type="button" id="games-btn" class="btn btn-icon" title="Minigames">🎮</button><button type="button" id="settings-btn" class="btn btn-icon" title="Configurações">⚙️</button>
+      <div class="user-bar-more-wrap">
+        <button type="button" id="user-more-btn" class="btn btn-icon" title="Mais opções" aria-label="Mais opções">⋯</button>
+        <div id="user-more-menu" class="user-bar-more-menu hidden">
+          <button type="button" id="admin-btn" class="btn btn-icon hidden" title="Painel administrativo">🛡️</button>
+          <button type="button" id="store-btn" class="btn btn-icon" title="Loja e pontos">🛍️</button>
+          <button type="button" id="games-btn" class="btn btn-icon" title="Minigames">🎮</button>
+        </div>
+      </div>
+      <button type="button" id="settings-btn" class="btn btn-icon" title="Configurações">⚙️</button>
       <button type="button" id="logout-btn" class="btn btn-icon" title="Sair">⏻</button><div id="mini-call-dock" class="mini-call-dock hidden"><span class="mini-call-status">📞 Em chamada</span><button id="mini-call-mic" title="Microfone">🎤</button><button id="mini-call-cam" title="Câmera">📷</button><button id="mini-call-screen" title="Apresentar">🖥️</button><button id="mini-call-headphones" title="Desligar fone">🎧</button><button id="mini-call-hangup" class="danger" title="Desligar call">📵</button></div>
     </div>
   </aside>

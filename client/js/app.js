@@ -537,7 +537,7 @@
       '<span class="message-time">' + escapeHtml(formatTime(msg.createdAt)) + '</span>' +
       editedLabel +
       pinBtn +
-      (own && isEditableContent ? '<button type="button" class="message-edit-btn" data-edit-message="' + escapeHtml(msg.id) + '" title="Editar mensagem" aria-label="Editar mensagem">✏️</button>' : '') +
+      (own && isEditableContent ? '<button type="button" class="message-edit-btn" data-edit-message="' + escapeHtml(msg.id) + '" title="Editar mensagem" aria-label="Editar mensagem">' + (window.WCIcons ? window.WCIcons.edit : '✏️') + '</button>' : '') +
       (own ? '<button type="button" class="message-delete-btn" data-delete-message="' + escapeHtml(msg.id) + '" title="Apagar mensagem" aria-label="Apagar mensagem">' + (window.WCIcons ? window.WCIcons.trash : '🗑️') + '</button>' : '') +
       '</div>' +
       '<div class="message-content" data-raw-content="' + escapeHtml(msg.content) + '">' + formatMessageContent(msg.content) + '</div>' +

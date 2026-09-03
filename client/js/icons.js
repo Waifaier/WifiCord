@@ -27,6 +27,8 @@
     maximize: svg('<path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/>'),
     pin: svg('<path d="M9 4h6l1 6 3 3v2H5v-2l3-3z"/><path d="M12 15v6"/>'),
     trash: svg('<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/>'),
+    edit: svg('<path d="M4 20l1-4L16 5l4 4L9 20H5v-1z"/><path d="M14 7l3 3"/>'),
+    more: svg('<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'),
   };
 
   function setIcon(id, name) {
@@ -42,7 +44,7 @@
     setIcon('games-btn', 'games');
     setIcon('settings-btn', 'settings');
     setIcon('logout-btn', 'logout');
-    setIcon('start-voice-call-btn', 'phone');
+    setIcon('user-more-btn', 'more');    setIcon('start-voice-call-btn', 'phone');
     setIcon('start-video-call-btn', 'video');
     setIcon('media-btn', 'image');
     setIcon('emoji-btn', 'smile');
@@ -64,6 +66,23 @@
 
     const stageEmpty = document.querySelector('.call-stage-empty');
     if (stageEmpty) stageEmpty.innerHTML = ICONS.phone;
+
+    const moreBtn = document.getElementById('user-more-btn');
+    const moreMenu = document.getElementById('user-more-menu');
+    if (moreBtn && moreMenu) {
+      moreBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        moreMenu.classList.toggle('hidden');
+      });
+      moreMenu.querySelectorAll('button').forEach(function (b) {
+        b.addEventListener('click', function () { moreMenu.classList.add('hidden'); });
+      });
+      document.addEventListener('click', function (e) {
+        if (!moreMenu.classList.contains('hidden') && !moreMenu.contains(e.target) && e.target !== moreBtn) {
+          moreMenu.classList.add('hidden');
+        }
+      });
+    }
   }
 
   document.addEventListener('DOMContentLoaded', applyStaticIcons);
