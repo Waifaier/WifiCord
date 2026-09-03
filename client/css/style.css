@@ -2188,3 +2188,6 @@ input[type="checkbox"]:hover { border-color: var(--accent-primary-start); }
 .media-edit-btn:active { transform: scale(.94); }
 .media-edit-btn-banner { right: 10px; bottom: 10px; border-color: var(--bg-elevated); background: rgba(15, 11, 30, .65); backdrop-filter: blur(4px); }
 .media-edit-btn-banner:hover { background: var(--accent-primary-start); }
+.server-icon-wrap { position: relative; display: inline-block; width: 72px; height: 72px; margin-top: 6px; }
+.server-icon-preview { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; background: #292440; display: block; cursor: pointer; }
+.server-banner-box { position: relative; height: 84px; border-radius: 10px; background: #292440 center/cover; cursor: pointer; margin-top: 6px; }

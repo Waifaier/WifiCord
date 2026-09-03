@@ -65,7 +65,7 @@ const sessionMiddleware = session({
   },
 });
 
-app.use(express.json({ limit: '3mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(sessionMiddleware);
 app.use(express.static(path.join(__dirname, '..', 'client')));
 app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d', index: false }));
@@ -87,6 +87,13 @@ app.get('*', (req, res, next) => {
 
 app.use((err, req, res, next) => {
   console.error(err);
+  if (err && err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Arquivo(s) muito grande(s). Escolha uma imagem menor e tente novamente.' });
+  }
+  const status = Number(err && (err.status || err.statusCode)) || 500;
+  if (status < 500 && err && err.message) {
+    return res.status(status).json({ error: err.message });
+  }
   res.status(500).json({ error: 'Erro interno do servidor.' });
 });
 
