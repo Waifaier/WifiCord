@@ -2191,3 +2191,115 @@ input[type="checkbox"]:hover { border-color: var(--accent-primary-start); }
 .server-icon-wrap { position: relative; display: inline-block; width: 72px; height: 72px; margin-top: 6px; }
 .server-icon-preview { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; background: #292440; display: block; cursor: pointer; }
 .server-banner-box { position: relative; height: 84px; border-radius: 10px; background: #292440 center/cover; cursor: pointer; margin-top: 6px; }
+
+/* ===================================================================
+   REDESIGN PREMIUM — Dark Glassmorphism Roxo/Neon (adição não-destrutiva)
+   =================================================================== */
+:root{
+  --rd-bg-1:#080711; --rd-bg-2:#0d0a18; --rd-bg-3:#100c20; --rd-bg-4:#151027;
+  --rd-purple:#8b5cf6; --rd-purple-2:#a78bfa; --rd-purple-deep:#6d28d9;
+  --rd-glass:rgba(255,255,255,.045); --rd-glass-strong:rgba(255,255,255,.07);
+  --rd-border:rgba(167,139,250,.16); --rd-border-soft:rgba(255,255,255,.06);
+  --rd-shadow:0 20px 60px rgba(0,0,0,.5);
+  --rd-glow:0 0 0 1px rgba(139,92,246,.25), 0 0 22px rgba(139,92,246,.28);
+  --rd-radius:16px;
+}
+@media (prefers-reduced-motion: reduce){ *{ animation-duration:.001ms !important; transition-duration:.001ms !important; } }
+
+body{
+  background:
+    radial-gradient(900px 500px at 15% -10%, rgba(139,92,246,.16), transparent 60%),
+    radial-gradient(700px 500px at 100% 20%, rgba(99,102,241,.10), transparent 55%),
+    linear-gradient(180deg, var(--rd-bg-1), var(--rd-bg-2) 45%, var(--rd-bg-3));
+}
+
+#server-rail{
+  background:rgba(13,10,24,.55); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+  border-right:1px solid var(--rd-border-soft); box-shadow:none;
+}
+.rail-btn{ border-radius:14px !important; transition:transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease; }
+.rail-btn:hover{ background:var(--rd-glass-strong); border-radius:14px !important; transform:translateY(-2px); }
+.rail-btn.active, .server-item.active{
+  background:linear-gradient(135deg, rgba(139,92,246,.28), rgba(99,102,241,.16)) !important;
+  border:1px solid var(--rd-purple) !important; box-shadow:var(--rd-glow) !important;
+}
+
+#sidebar, #dm-panel, #channels-panel{
+  background:rgba(15,12,26,.55); backdrop-filter:blur(22px); -webkit-backdrop-filter:blur(22px);
+  border-right:1px solid var(--rd-border-soft);
+}
+.sidebar-header{ padding-bottom:10px; }
+.sidebar-header h2{ font-family:'Space Grotesk', sans-serif; font-weight:700; }
+.sidebar-header .btn-small, #add-friend-btn{
+  background:linear-gradient(135deg, var(--rd-purple), var(--rd-purple-deep)) !important;
+  border:none !important; border-radius:10px !important; box-shadow:0 8px 20px rgba(139,92,246,.35);
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+.sidebar-header .btn-small:hover, #add-friend-btn:hover{ transform:translateY(-1px); box-shadow:0 10px 26px rgba(139,92,246,.5); }
+
+.sidebar-section{
+  background:var(--rd-glass); border:1px solid var(--rd-border-soft); border-radius:var(--rd-radius);
+  padding:14px; margin:10px 12px;
+}
+.sidebar-section h3{ opacity:.65; letter-spacing:.08em; }
+.list:empty::before{
+  content:attr(data-empty-text);
+}
+#friend-requests-list:empty, #friend-list:empty{
+  display:flex; align-items:center; justify-content:center; text-align:center;
+  min-height:80px; color:var(--text-muted); font-size:12.5px; padding:6px;
+}
+.list .list-item, .list li{ border-radius:12px !important; transition:background .15s ease, transform .15s ease; }
+.list .list-item:hover, .list li:hover{ background:var(--rd-glass-strong) !important; transform:translateX(2px); }
+
+#user-bar{
+  background:var(--rd-glass); backdrop-filter:blur(16px); border:1px solid var(--rd-border-soft);
+  border-radius:14px; margin:10px; box-shadow:var(--rd-shadow);
+}
+#user-bar .avatar-fallback, #user-bar .avatar-img{ box-shadow:0 0 0 2px rgba(139,92,246,.4); }
+
+#chat-header{
+  background:rgba(15,12,26,.5); backdrop-filter:blur(18px); border-bottom:1px solid var(--rd-border-soft);
+}
+.chat-header-actions .btn-icon{
+  background:var(--rd-glass); border:1px solid var(--rd-border-soft); border-radius:12px;
+  transition:box-shadow .18s ease, transform .18s ease, border-color .18s ease;
+}
+.chat-header-actions .btn-icon:hover{
+  border-color:var(--rd-purple); box-shadow:0 0 16px rgba(139,92,246,.35); transform:translateY(-1px);
+}
+
+.messages-list:empty{
+  position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:14px; min-height:320px; text-align:center;
+}
+.messages-list:empty::before{
+  content:"💬"; font-size:56px;
+  filter:drop-shadow(0 0 24px rgba(139,92,246,.55));
+}
+.messages-list:empty::after{
+  content:"Escolha um amigo na barra lateral para começar a conversar.";
+  color:var(--text-muted); font-size:13.5px; max-width:340px;
+}
+
+#message-form{
+  background:var(--rd-glass-strong); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+  border:1px solid var(--rd-border); border-radius:20px; box-shadow:var(--rd-shadow);
+  margin:12px; padding:10px 14px; transition:box-shadow .2s ease, border-color .2s ease;
+}
+#message-form:focus-within{ border-color:var(--rd-purple); box-shadow:var(--rd-glow), var(--rd-shadow); }
+#message-input{ background:transparent !important; border:none !important; }
+.composer-btn{ border-radius:10px; transition:background .15s ease, transform .15s ease; }
+.composer-btn:hover{ background:var(--rd-glass-strong); transform:translateY(-1px); }
+#message-form .btn-primary{
+  background:linear-gradient(135deg, var(--rd-purple), var(--rd-purple-deep)) !important;
+  border:none !important; border-radius:12px !important; box-shadow:0 8px 22px rgba(139,92,246,.4);
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+#message-form .btn-primary:hover{ transform:translateY(-1px); box-shadow:0 10px 28px rgba(139,92,246,.55); }
+#message-form .btn-primary:active{ transform:translateY(0) scale(.97); }
+
+.modal, #modal-overlay .modal{
+  background:rgba(17,13,30,.75) !important; backdrop-filter:blur(24px) !important; -webkit-backdrop-filter:blur(24px) !important;
+  border:1px solid var(--rd-border) !important; box-shadow:var(--rd-shadow) !important;
+}
