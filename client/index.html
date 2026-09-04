@@ -84,6 +84,7 @@
   <button id="mobile-menu-btn" type="button" aria-label="Abrir menu">☰</button>
 
   <nav id="server-rail">
+    <div class="rail-logo" aria-hidden="true"><span></span></div>
     <button type="button" id="home-btn" data-action="home" class="rail-btn active" title="Início">🏠</button>
     <div class="rail-divider"></div>
     <ul id="dm-quick-list" class="dm-quick-list" aria-label="Conversas recentes"></ul>
@@ -96,8 +97,11 @@
   <aside id="sidebar">
     <div id="dm-panel">
       <div class="sidebar-header">
-        <h2>Amigos</h2>
-        <button type="button" id="add-friend-btn" class="btn btn-small">Adicionar</button>
+        <div><h2>Amigos</h2><p class="sidebar-header-sub">Conecte-se com quem importa</p></div>
+        <button type="button" id="add-friend-btn" class="btn btn-small">+ Adicionar</button>
+      </div>
+      <div class="friend-search-wrap">
+        <input type="text" id="friend-search-input" class="friend-search-input" placeholder="Buscar amigos...">
       </div>
       <div class="sidebar-section">
         <h3>Solicitações</h3>
@@ -153,7 +157,7 @@
 
   <main id="main-panel">
     <header id="chat-header">
-      <div id="chat-peer-avatar" class="chat-peer-avatar hidden"></div><h2 id="chat-title">Selecione uma conversa</h2>
+      <div id="chat-peer-avatar" class="chat-peer-avatar hidden"></div><div class="chat-title-wrap"><h2 id="chat-title">Selecione uma conversa</h2><p class="chat-title-sub">Suas mensagens, ideias e momentos em um só lugar.</p></div>
       <div id="chat-header-actions" class="chat-header-actions">
         <button type="button" id="start-voice-call-btn" class="btn-icon" title="Chamada de voz">📞</button>
         <button type="button" id="start-video-call-btn" class="btn-icon" title="Chamada de vídeo">🎥</button>
@@ -184,6 +188,17 @@
     </div>
 
     <ul id="messages-list" class="messages-list"></ul>
+
+    <div id="chat-empty-hero" class="chat-empty-hero" aria-hidden="true">
+      <div class="chat-empty-icon">💬</div>
+      <h2 class="chat-empty-title">Selecione uma <span>conversa</span></h2>
+      <p class="chat-empty-sub">Escolha um amigo na barra lateral para começar a conversar.</p>
+      <div class="chat-empty-cards">
+        <div class="chat-empty-card"><span class="chat-empty-card-icon">👥</span><b>Faça novos amigos</b><small>Conecte-se com a galera</small></div>
+        <div class="chat-empty-card"><span class="chat-empty-card-icon">💬</span><b>Converse livremente</b><small>Troque ideias e momentos</small></div>
+        <div class="chat-empty-card"><span class="chat-empty-card-icon">🔒</span><b>Tudo com segurança</b><small>Suas conversas protegidas</small></div>
+      </div>
+    </div>
 
     <div id="typing-indicator" class="typing-indicator"></div>
 
@@ -432,6 +447,7 @@
 <div id="toast-container" class="toast-container"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<script src="/js/redesign-ui.js"></script>
 <script src="/js/icons.js"></script>
 <script src="/js/socket.js"></script>
 <script src="/js/sounds.js"></script>
