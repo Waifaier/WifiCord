@@ -2294,122 +2294,253 @@ body{
 }
 
 /* ===================================================================
-   REDESIGN v2 — Estrutura flutuante + hero + hierarquia (adição)
+   REDESIGN v3 — Refinamento: profundidade, hierarquia, hero premium
    =================================================================== */
 :root{
-  --rd2-purple:#8b5cf6; --rd2-purple-2:#a970ff; --rd2-purple-3:#c084fc; --rd2-purple-deep:#6d3df5;
-  --rd2-panel:rgba(255,255,255,.045); --rd2-panel-strong:rgba(255,255,255,.075);
-  --rd2-border:rgba(167,139,250,.18);
+  --rd3-purple:#8b5cf6; --rd3-purple-2:#a970ff; --rd3-purple-3:#c084fc; --rd3-purple-deep:#6d3df5;
+  --rd3-panel-weak:rgba(255,255,255,.03);
+  --rd3-panel:rgba(20,16,34,.5);
+  --rd3-panel-strong:rgba(24,19,40,.68);
+  --rd3-border:rgba(167,139,250,.14);
+  --rd3-border-strong:rgba(167,139,250,.28);
+  --rd3-edge:inset 0 1px 0 rgba(255,255,255,.06), inset 0 0 0 1px rgba(255,255,255,.02);
 }
 
-/* --- App inteiro como painel de vidro flutuante sobre fundo espacial --- */
-body{ padding:14px; box-sizing:border-box; }
+/* --- Fundo: profundidade sem exagero --- */
+body{ padding:18px; box-sizing:border-box; }
 body::before{
   content:''; position:fixed; inset:0; z-index:-1; pointer-events:none;
   background:
-    radial-gradient(2px 2px at 20% 30%, rgba(200,180,255,.5), transparent 60%),
-    radial-gradient(2px 2px at 70% 15%, rgba(200,180,255,.4), transparent 60%),
-    radial-gradient(1.5px 1.5px at 85% 60%, rgba(200,180,255,.35), transparent 60%),
-    radial-gradient(1.5px 1.5px at 40% 80%, rgba(200,180,255,.3), transparent 60%),
-    radial-gradient(900px 520px at 12% 0%, rgba(139,92,246,.20), transparent 62%),
-    radial-gradient(760px 560px at 100% 30%, rgba(109,61,245,.14), transparent 58%),
-    radial-gradient(700px 480px at 55% 100%, rgba(139,92,246,.10), transparent 55%),
-    linear-gradient(180deg, #07060d, #0b0913 45%, #100c1c 100%);
+    radial-gradient(1.5px 1.5px at 18% 22%, rgba(210,195,255,.45), transparent 60%),
+    radial-gradient(1.5px 1.5px at 68% 12%, rgba(210,195,255,.35), transparent 60%),
+    radial-gradient(1.5px 1.5px at 88% 55%, rgba(210,195,255,.3), transparent 60%),
+    radial-gradient(1.5px 1.5px at 35% 78%, rgba(210,195,255,.28), transparent 60%),
+    radial-gradient(1000px 560px at 8% -4%, rgba(139,92,246,.16), transparent 60%),
+    radial-gradient(820px 620px at 102% 26%, rgba(109,61,245,.12), transparent 58%),
+    radial-gradient(680px 460px at 48% 108%, rgba(139,92,246,.08), transparent 55%),
+    linear-gradient(180deg, #060509, #09070f 45%, #0d0a18 100%);
 }
+
+/* --- Casca do app: painel de vidro flutuante --- */
 #app-screen{
-  height:calc(100dvh - 28px) !important; width:calc(100% - 28px) !important; margin:0 auto !important;
-  border-radius:24px !important; border:1px solid var(--rd2-border); overflow:hidden !important;
-  box-shadow:0 50px 140px rgba(0,0,0,.65), 0 0 0 1px rgba(0,0,0,.4), 0 0 90px rgba(139,92,246,.08);
-  column-gap:1px; background:rgba(0,0,0,.25);
+  height:calc(100dvh - 36px) !important; width:calc(100% - 36px) !important; margin:0 auto !important;
+  border-radius:26px !important; overflow:hidden !important;
+  background:rgba(6,5,10,.4);
+  border:1px solid rgba(255,255,255,.07);
+  box-shadow:
+    0 60px 160px rgba(0,0,0,.7),
+    0 0 0 1px rgba(139,92,246,.06),
+    0 0 100px rgba(139,92,246,.10),
+    inset 0 1px 0 rgba(255,255,255,.05);
 }
 
-/* --- Rail --- */
-#server-rail{ display:flex !important; flex-direction:column; align-items:center; gap:10px; padding:16px 10px; }
-.rail-logo{ width:42px; height:42px; border-radius:50%; margin-bottom:6px; display:grid; place-items:center;
-  background:radial-gradient(circle at 35% 30%, var(--rd2-purple-3), var(--rd2-purple-deep) 70%);
-  box-shadow:0 0 18px rgba(139,92,246,.55), inset 0 0 8px rgba(255,255,255,.25); }
-.rail-logo span{ width:16px; height:16px; border-radius:50%; background:rgba(255,255,255,.35); }
+/* --- Rail: coluna de ícones, sem card próprio, luz discreta --- */
+#server-rail{
+  display:flex !important; flex-direction:column; align-items:center; gap:12px; padding:20px 12px;
+  background:linear-gradient(180deg, rgba(255,255,255,.02), transparent 30%);
+}
+.rail-logo{
+  width:40px; height:40px; border-radius:50%; margin-bottom:8px; display:grid; place-items:center;
+  background:radial-gradient(circle at 32% 28%, var(--rd3-purple-3), var(--rd3-purple-deep) 72%);
+  box-shadow:0 0 0 1px rgba(255,255,255,.12), 0 0 22px rgba(139,92,246,.55), inset 0 0 8px rgba(255,255,255,.3);
+}
+.rail-logo span{ width:14px; height:14px; border-radius:50%; background:rgba(255,255,255,.4); }
+.rail-btn{
+  width:44px !important; height:44px !important; display:grid !important; place-items:center;
+  border-radius:14px !important; color:var(--text-muted) !important;
+  background:transparent !important; border:1px solid transparent !important;
+  transition:transform .18s ease, box-shadow .2s ease, background .2s ease, border-color .2s ease, color .2s ease;
+}
+.rail-btn:hover{
+  background:rgba(255,255,255,.05) !important; border-color:rgba(255,255,255,.08) !important;
+  transform:translateY(-2px); color:var(--text-primary) !important;
+}
+.rail-btn.active, .server-item.active{
+  background:linear-gradient(155deg, rgba(139,92,246,.32), rgba(109,61,245,.14)) !important;
+  border:1px solid var(--rd3-border-strong) !important; color:#fff !important;
+  box-shadow:0 0 0 1px rgba(139,92,246,.15), 0 0 22px rgba(139,92,246,.4), inset 0 1px 0 rgba(255,255,255,.12) !important;
+}
+.rail-divider{ width:26px; height:1px; background:rgba(255,255,255,.08); margin:2px 0; }
 
-/* --- Sidebar / painel de amigos --- */
-#sidebar{ display:flex !important; flex-direction:column; }
-.sidebar-header{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:18px 16px 6px; }
-.sidebar-header h2{ font-family:'Space Grotesk', sans-serif; font-size:20px; font-weight:800; letter-spacing:-.01em; }
-.sidebar-header-sub{ margin:2px 0 0; font-size:11.5px; color:var(--text-muted); }
-.friend-search-wrap{ padding:10px 16px 4px; }
+/* --- Painel de Amigos: card de vidro independente e "flutuante" --- */
+#sidebar{
+  display:flex !important; flex-direction:column;
+  margin:14px 14px 14px 0; border-radius:22px;
+  background:var(--rd3-panel); backdrop-filter:blur(26px); -webkit-backdrop-filter:blur(26px);
+  border:1px solid var(--rd3-border);
+  box-shadow:0 30px 80px rgba(0,0,0,.45), var(--rd3-edge);
+}
+.sidebar-header{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:22px 20px 4px; }
+.sidebar-header h2{ font-family:'Space Grotesk', sans-serif; font-size:21px; font-weight:800; letter-spacing:-.01em; margin:0; }
+.sidebar-header-sub{ margin:3px 0 0; font-size:11.5px; color:var(--text-muted); }
+.sidebar-header .btn-small, #add-friend-btn{
+  background:linear-gradient(135deg, var(--rd3-purple), var(--rd3-purple-deep)) !important;
+  border:1px solid rgba(255,255,255,.14) !important; border-radius:11px !important;
+  padding:9px 15px !important; font-weight:700; font-size:12.5px;
+  box-shadow:0 10px 26px rgba(139,92,246,.4), inset 0 1px 0 rgba(255,255,255,.2);
+  transition:transform .15s ease, box-shadow .15s ease; white-space:nowrap;
+}
+.sidebar-header .btn-small:hover, #add-friend-btn:hover{ transform:translateY(-1px); box-shadow:0 12px 32px rgba(139,92,246,.55), inset 0 1px 0 rgba(255,255,255,.25); }
+
+.friend-search-wrap{ padding:16px 20px 6px; position:relative; }
 .friend-search-input{
-  width:100%; padding:10px 14px; border-radius:12px; border:1px solid var(--rd2-border);
-  background:var(--rd2-panel); color:var(--text-primary); font-size:13px; outline:none;
-  transition:border-color .18s ease, box-shadow .18s ease;
+  width:100%; padding:11px 14px 11px 38px; border-radius:12px; border:1px solid rgba(255,255,255,.07);
+  background:rgba(255,255,255,.035); color:var(--text-primary); font-size:13px; outline:none;
+  transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.friend-search-wrap::before{
+  content:'🔍'; position:absolute; left:34px; top:50%; transform:translateY(-50%); font-size:12px; opacity:.55; pointer-events:none;
 }
 .friend-search-input::placeholder{ color:var(--text-muted); }
-.friend-search-input:focus{ border-color:var(--rd2-purple); box-shadow:0 0 0 3px rgba(139,92,246,.18); }
+.friend-search-input:focus{ border-color:var(--rd3-purple); background:rgba(139,92,246,.06); box-shadow:0 0 0 3px rgba(139,92,246,.14); }
 
 .sidebar-section{
-  background:var(--rd2-panel); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
-  border:1px solid rgba(255,255,255,.055); border-radius:18px;
-  padding:16px; margin:8px 12px; box-shadow:inset 0 1px 0 rgba(255,255,255,.04), 0 12px 30px rgba(0,0,0,.25);
+  background:rgba(255,255,255,.025); backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,.05); border-radius:16px;
+  padding:16px 14px; margin:9px 16px; box-shadow:var(--rd3-edge);
 }
-.sidebar-section h3{ font-size:11px; font-weight:800; letter-spacing:.09em; opacity:.6; margin:0 0 10px 4px; }
+.sidebar-section h3{ font-size:10.5px; font-weight:800; letter-spacing:.1em; opacity:.55; margin:0 0 12px 4px; }
+#dm-panel{ padding-bottom:8px; }
 
-/* estados vazios como pequenos cards de vidro */
 .empty-state{
-  list-style:none; display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px;
-  padding:26px 14px; border-radius:14px; border:1px dashed rgba(167,139,250,.22);
-  background:radial-gradient(circle at 50% 0%, rgba(139,92,246,.09), transparent 70%);
-  color:var(--text-muted); font-size:12.5px; line-height:1.5;
+  list-style:none; display:flex; flex-direction:column; align-items:center; text-align:center; gap:10px;
+  padding:28px 14px; border-radius:14px; border:1px dashed rgba(167,139,250,.2);
+  background:radial-gradient(circle at 50% 0%, rgba(139,92,246,.08), transparent 70%);
+  color:var(--text-muted); font-size:12.5px; line-height:1.55;
 }
 .empty-state::before{
-  content:'👤'; display:grid; place-items:center; width:40px; height:40px; border-radius:50%; font-size:16px;
-  background:var(--rd2-panel-strong); box-shadow:0 0 16px rgba(139,92,246,.3);
+  content:'👤'; display:grid; place-items:center; width:42px; height:42px; border-radius:50%; font-size:17px;
+  background:linear-gradient(150deg, rgba(139,92,246,.28), rgba(109,61,245,.1));
+  box-shadow:0 0 0 1px rgba(255,255,255,.08), 0 0 18px rgba(139,92,246,.32);
 }
 #friend-list .empty-state::before{ content:'👥'; }
 
-/* --- Área principal / header --- */
-#main-panel{ display:flex !important; flex-direction:column; }
-#chat-header{ display:flex; align-items:center; gap:14px; padding:16px 22px; min-height:64px; }
-.chat-title-wrap{ display:flex; flex-direction:column; gap:2px; min-width:0; }
-#chat-header h2{ font-family:'Space Grotesk', sans-serif; font-size:18px; font-weight:800; }
-.chat-title-sub{ margin:0; font-size:12px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#main-panel:has(#messages-list:not(:empty)) .chat-title-sub{ display:none; }
+.list .list-item, .list li:not(.empty-state):not(.error-state){
+  border-radius:12px !important; padding:9px 10px !important; transition:background .15s ease, transform .15s ease;
+}
+.list .list-item:hover, .list li:not(.empty-state):hover{ background:rgba(255,255,255,.05) !important; transform:translateX(2px); }
 
-/* --- Hero de estado vazio --- */
+/* --- User bar (perfil) --- */
+#user-bar{
+  margin:0 14px 14px; padding:12px 14px !important;
+  background:rgba(255,255,255,.035); backdrop-filter:blur(14px);
+  border:1px solid rgba(255,255,255,.06); border-radius:16px;
+  box-shadow:var(--rd3-edge), 0 14px 34px rgba(0,0,0,.3);
+}
+#user-bar .avatar-fallback, #user-bar .avatar-img{
+  box-shadow:0 0 0 2px rgba(139,92,246,.45), 0 0 12px rgba(139,92,246,.35);
+}
+
+/* --- Área principal / header --- */
+#main-panel{ display:flex !important; flex-direction:column; min-width:0; }
+#chat-header{
+  display:flex; align-items:center; gap:14px; padding:20px 26px 16px; min-height:60px;
+  background:transparent; border-bottom:1px solid rgba(255,255,255,.05);
+}
+.chat-title-wrap{ display:flex; flex-direction:column; gap:3px; min-width:0; }
+#chat-header h2{ font-family:'Space Grotesk', sans-serif; font-size:19px; font-weight:800; letter-spacing:-.01em; }
+.chat-title-sub{ margin:0; font-size:12.5px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#main-panel:has(#messages-list:not(:empty)) .chat-title-sub{ display:none; }
+.chat-header-actions .btn-icon{
+  width:40px; height:40px; display:grid; place-items:center;
+  background:rgba(255,255,255,.035); border:1px solid rgba(255,255,255,.07); border-radius:12px;
+  transition:box-shadow .18s ease, transform .18s ease, border-color .18s ease, background .18s ease;
+}
+.chat-header-actions .btn-icon:hover{
+  border-color:var(--rd3-border-strong); background:rgba(139,92,246,.1);
+  box-shadow:0 0 18px rgba(139,92,246,.3); transform:translateY(-1px);
+}
+
+/* --- Hero de estado vazio: ponto focal real da tela --- */
 .chat-empty-hero{ display:none; }
 #messages-list:empty ~ .chat-empty-hero{
   display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
-  flex:1; gap:16px; padding:24px; position:relative;
+  flex:1; gap:22px; padding:40px 24px; position:relative; min-height:0;
 }
 .chat-empty-hero::before{
-  content:''; position:absolute; top:8%; left:50%; width:420px; height:420px; transform:translateX(-50%);
-  background:radial-gradient(circle, rgba(139,92,246,.28), transparent 68%); filter:blur(10px); pointer-events:none; z-index:0;
+  content:''; position:absolute; top:2%; left:50%; width:560px; height:560px; max-width:90vw; transform:translateX(-50%);
+  background:radial-gradient(circle, rgba(139,92,246,.24), transparent 66%); filter:blur(6px); pointer-events:none; z-index:0;
 }
 .chat-empty-icon{
-  position:relative; z-index:1; width:110px; height:110px; display:grid; place-items:center; font-size:46px;
-  border-radius:32px; background:linear-gradient(145deg, rgba(139,92,246,.28), rgba(109,61,245,.10));
-  border:1px solid rgba(167,139,250,.3);
-  box-shadow:0 0 60px rgba(139,92,246,.45), inset 0 1px 0 rgba(255,255,255,.15);
-  animation:rdFloat 4.5s ease-in-out infinite;
+  position:relative; z-index:1; width:132px; height:132px; display:grid; place-items:center; font-size:54px;
+  border-radius:38px;
+  background:linear-gradient(150deg, rgba(139,92,246,.32), rgba(109,61,245,.08));
+  border:1px solid rgba(167,139,250,.35);
+  box-shadow:0 0 0 1px rgba(255,255,255,.06), 0 0 90px rgba(139,92,246,.5), 0 20px 60px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.18);
+  animation:rd3Float 5s ease-in-out infinite;
 }
-@keyframes rdFloat{ 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-10px);} }
-.chat-empty-title{ position:relative; z-index:1; margin:0; font-family:'Space Grotesk', sans-serif; font-size:clamp(24px,3vw,34px); font-weight:800; }
-.chat-empty-title span{ color:var(--rd2-purple-3); text-shadow:0 0 26px rgba(192,132,252,.55); }
-.chat-empty-sub{ position:relative; z-index:1; margin:0; color:var(--text-muted); font-size:14px; max-width:420px; }
-.chat-empty-cards{ position:relative; z-index:1; display:flex; flex-wrap:wrap; gap:12px; justify-content:center; margin-top:14px; }
+@keyframes rd3Float{ 0%,100%{ transform:translateY(0) scale(1);} 50%{ transform:translateY(-12px) scale(1.02);} }
+.chat-empty-title{
+  position:relative; z-index:1; margin:0; font-family:'Space Grotesk', sans-serif;
+  font-size:clamp(28px,3.4vw,40px); font-weight:800; letter-spacing:-.01em;
+}
+.chat-empty-title span{ color:var(--rd3-purple-3); text-shadow:0 0 34px rgba(192,132,252,.6); }
+.chat-empty-sub{ position:relative; z-index:1; margin:0; color:var(--text-muted); font-size:14.5px; max-width:440px; }
+.chat-empty-cards{ position:relative; z-index:1; display:flex; flex-wrap:wrap; gap:14px; justify-content:center; margin-top:6px; max-width:760px; }
 .chat-empty-card{
-  display:flex; flex-direction:column; align-items:flex-start; gap:6px; text-align:left; width:190px;
-  padding:14px 16px; border-radius:16px; background:var(--rd2-panel); border:1px solid rgba(255,255,255,.06);
-  backdrop-filter:blur(14px); transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  display:flex; flex-direction:column; align-items:flex-start; gap:8px; text-align:left; width:210px;
+  padding:18px 18px 20px; border-radius:18px;
+  background:linear-gradient(160deg, rgba(255,255,255,.05), rgba(255,255,255,.015));
+  border:1px solid rgba(255,255,255,.07);
+  box-shadow:var(--rd3-edge), 0 16px 40px rgba(0,0,0,.3);
+  backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+  transition:transform .2s ease, border-color .2s ease, box-shadow .2s ease;
 }
-.chat-empty-card:hover{ transform:translateY(-3px); border-color:rgba(167,139,250,.35); box-shadow:0 14px 34px rgba(139,92,246,.18); }
+.chat-empty-card:hover{
+  transform:translateY(-4px); border-color:rgba(167,139,250,.4);
+  box-shadow:var(--rd3-edge), 0 20px 50px rgba(139,92,246,.22);
+}
 .chat-empty-card-icon{
-  width:34px; height:34px; display:grid; place-items:center; border-radius:10px; font-size:15px;
-  background:linear-gradient(135deg, rgba(139,92,246,.35), rgba(109,61,245,.15)); box-shadow:0 0 14px rgba(139,92,246,.3);
+  width:38px; height:38px; display:grid; place-items:center; border-radius:11px; font-size:16px;
+  background:linear-gradient(140deg, rgba(139,92,246,.4), rgba(109,61,245,.14));
+  box-shadow:0 0 0 1px rgba(255,255,255,.08), 0 0 18px rgba(139,92,246,.35);
 }
-.chat-empty-card b{ font-size:13px; font-weight:700; }
-.chat-empty-card small{ color:var(--text-muted); font-size:11.5px; }
+.chat-empty-card b{ font-size:13.5px; font-weight:700; }
+.chat-empty-card small{ color:var(--text-muted); font-size:11.5px; line-height:1.4; }
 
-@media (max-width:640px){
-  body{ padding:0; }
-  #app-screen{ border-radius:0 !important; height:100dvh !important; width:100% !important; }
+/* --- Barra de mensagem: componente flutuante --- */
+#message-form{
+  background:rgba(22,17,36,.6) !important; backdrop-filter:blur(28px) !important; -webkit-backdrop-filter:blur(28px) !important;
+  border:1px solid rgba(167,139,250,.16) !important; border-radius:22px !important;
+  box-shadow:0 26px 70px rgba(0,0,0,.5), var(--rd3-edge), 0 0 0 1px rgba(0,0,0,.15) !important;
+  margin:0 20px 20px !important; padding:12px 16px !important;
+  display:flex; align-items:center; gap:10px;
+  transition:border-color .2s ease, box-shadow .2s ease;
+}
+#message-form:focus-within{
+  border-color:var(--rd3-border-strong) !important;
+  box-shadow:0 0 0 1px rgba(139,92,246,.2), 0 0 34px rgba(139,92,246,.28), 0 26px 70px rgba(0,0,0,.5) !important;
+}
+#message-input{ background:transparent !important; border:none !important; font-size:14px; }
+.composer-btn{ width:36px; height:36px; display:grid; place-items:center; border-radius:11px; font-size:17px; transition:background .15s ease, transform .15s ease; }
+.composer-btn:hover{ background:rgba(255,255,255,.06); transform:translateY(-1px); }
+#message-form .btn-primary{
+  background:linear-gradient(135deg, var(--rd3-purple), var(--rd3-purple-deep)) !important;
+  border:1px solid rgba(255,255,255,.16) !important; border-radius:14px !important;
+  padding:11px 22px !important; font-weight:700; font-size:13.5px;
+  box-shadow:0 12px 30px rgba(139,92,246,.45), inset 0 1px 0 rgba(255,255,255,.22) !important;
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+#message-form .btn-primary:hover{ transform:translateY(-1px); box-shadow:0 16px 38px rgba(139,92,246,.6), inset 0 1px 0 rgba(255,255,255,.28) !important; }
+#message-form .btn-primary:active{ transform:translateY(0) scale(.96); }
+
+/* --- Modais: mesma linguagem de vidro --- */
+.modal, #modal-overlay .modal{
+  background:rgba(15,11,26,.78) !important; backdrop-filter:blur(28px) !important; -webkit-backdrop-filter:blur(28px) !important;
+  border:1px solid var(--rd3-border) !important; border-radius:20px !important;
+  box-shadow:0 40px 100px rgba(0,0,0,.6), var(--rd3-edge) !important;
+}
+
+@media (max-width:900px){
+  #sidebar{ margin:10px; border-radius:18px; }
+  .chat-empty-icon{ width:100px; height:100px; font-size:42px; }
   .chat-empty-cards{ flex-direction:column; align-items:stretch; }
   .chat-empty-card{ width:auto; }
 }
+@media (max-width:640px){
+  body{ padding:0; }
+  #app-screen{ border-radius:0 !important; height:100dvh !important; width:100% !important; }
+  #sidebar{ margin:0; border-radius:0; }
+  #message-form{ margin:0 10px 10px !important; border-radius:18px !important; }
+}
+@media (prefers-reduced-motion: reduce){ .chat-empty-icon{ animation:none; } }
