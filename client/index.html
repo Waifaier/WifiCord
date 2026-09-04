@@ -286,25 +286,157 @@
       </nav>
       <div class="settings-content">
         <div class="settings-pane active" data-settings-pane="profile">
-          <h4>Perfil</h4>
-          <p class="text-muted">Informações da sua conta no WifiCord.</p>
-          <div id="settings-profile-banner" class="profile-banner-preview">
-            <button type="button" class="media-edit-btn media-edit-btn-banner" id="settings-banner-edit-btn" title="Alterar banner" aria-label="Alterar banner"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
-            <input type="file" id="settings-banner-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
-          </div>
-          <div class="settings-avatar-wrap">
-            <img id="settings-avatar-preview" class="settings-avatar-preview" alt="Preview">
-            <button type="button" class="media-edit-btn" id="settings-avatar-edit-btn" title="Alterar foto de perfil" aria-label="Alterar foto de perfil"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+  <div class="profile-editor-head">
+    <div>
+      <h4>Personalizar perfil</h4>
+      <p class="text-muted">Monte uma identidade visual do seu jeito. As mudanças aparecem no preview antes de salvar.</p>
+    </div>
+  </div>
+
+  <div class="wc-profile-editor">
+    <div class="wc-profile-controls">
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Identidade</span><small>Informações básicas</small></div>
+        <div class="wc-editor-grid">
+          <label>Nome de exibição<input type="text" id="settings-display-name" maxlength="64" placeholder="Seu nome"></label>
+          <label>Nome de usuário<input type="text" id="settings-username" disabled></label>
+          <label>Pronomes<input type="text" id="settings-profile-pronouns" maxlength="32" placeholder="Opcional"></label>
+          <label>Sobre você<textarea id="settings-bio" maxlength="190" placeholder="Conte algo sobre você..."></textarea></label>
+        </div>
+      </section>
+
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Imagem</span><small>Avatar e banner</small></div>
+        <div class="wc-media-actions">
+          <div class="wc-media-box">
+            <img class="wc-media-thumb wc-media-avatar-thumb" id="settings-avatar-preview" alt="Preview do avatar">
+            <div><strong>Avatar</strong><small>PNG, JPG, WEBP ou GIF</small></div>
+            <button type="button" class="btn btn-small" id="settings-avatar-edit-btn">Alterar</button>
             <input type="file" id="settings-avatar-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
           </div>
-          <label>Nome de exibição<input type="text" id="settings-display-name" maxlength="64"></label>
-          <label>Nome de usuário<input type="text" id="settings-username" disabled></label>
-          <label>Sobre você<textarea id="settings-bio" maxlength="190" placeholder="Conte algo sobre você..."></textarea></label>
-          <div class="profile-custom-grid"><label>Cor do perfil<input type="color" id="settings-profile-color" value="#7c5cff"></label><label>Layout<select id="settings-profile-layout"><option value="classic">Clássico</option><option value="compact">Compacto</option><option value="banner">Banner amplo</option><option value="glass">Vidro</option></select></label><label>Brilho<select id="settings-profile-glow"><option value="none">Nenhum</option><option value="soft">Suave</option><option value="strong">Forte</option><option value="rainbow">Arco-íris</option></select></label><label>Emblema<select id="settings-profile-badge"><option value="none">Nenhum</option><option value="star">⭐ Estrela</option><option value="fire">🔥 Fogo</option><option value="rocket">🚀 Foguete</option><option value="crown">👑 Coroa</option></select></label></div>
-          <button type="button" id="settings-save-profile" class="btn btn-primary">Salvar perfil</button>
-          <div class="profile-status-editor"><h5>Status</h5><div class="status-options"><button type="button" data-status="online">🟢 Online</button><button type="button" data-status="away">🌙 Ausente</button><button type="button" data-status="offline">⚫ Offline</button></div><div class="status-custom-row"><input id="settings-status-emoji" maxlength="4" placeholder="🙂"><input id="settings-status-text" maxlength="128" placeholder="Status personalizado"></div><button type="button" id="settings-save-status" class="btn btn-small">Salvar status</button></div>
+          <div class="wc-media-box">
+            <div class="wc-media-thumb wc-media-banner-thumb" id="settings-profile-banner"></div>
+            <div><strong>Banner</strong><small>Imagem ou cor</small></div>
+            <button type="button" class="btn btn-small" id="settings-banner-edit-btn">Alterar</button>
+            <input type="file" id="settings-banner-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+          </div>
         </div>
-        <div class="settings-pane" data-settings-pane="profile-effects">
+      </section>
+
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Tema</span><small>Escolha uma base e personalize</small></div>
+        <div class="wc-preset-row" id="wc-theme-presets">
+          <button type="button" data-theme-preset="galactic">🌌 Galactic</button>
+          <button type="button" data-theme-preset="aurora">🌈 Aurora</button>
+          <button type="button" data-theme-preset="cyber">⚡ Cyber</button>
+          <button type="button" data-theme-preset="void">🖤 Void</button>
+          <button type="button" data-theme-preset="frost">❄️ Frost</button>
+          <button type="button" data-theme-preset="minimal">◻ Minimal</button>
+        </div>
+        <div class="wc-color-grid">
+          <label>Cor principal<input type="color" id="settings-profile-primary" value="#7c5cff"></label>
+          <label>Cor secundária<input type="color" id="settings-profile-secondary" value="#2f1b63"></label>
+          <label>Cor do destaque<input type="color" id="settings-profile-accent" value="#b58cff"></label>
+          <label>Cor do texto<input type="color" id="settings-profile-text" value="#f4f0ff"></label>
+        </div>
+        <div class="wc-select-grid">
+          <label>Gradiente<select id="settings-profile-gradient"><option value="linear">Linear</option><option value="radial">Radial</option></select></label>
+          <label>Direção<select id="settings-profile-angle"><option value="135deg">Diagonal</option><option value="90deg">Vertical</option><option value="0deg">Horizontal</option><option value="225deg">Invertido</option></select></label>
+          <label>Glow<select id="settings-profile-glow"><option value="none">Nenhum</option><option value="soft">Suave</option><option value="strong">Forte</option><option value="rainbow">Arco-íris</option></select></label>
+          <label>Layout<select id="settings-profile-layout"><option value="classic">Clássico</option><option value="compact">Compacto</option><option value="banner">Banner amplo</option><option value="glass">Vidro</option></select></label>
+        </div>
+      </section>
+
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Estilo do nome</span><small>Faça seu nome ter personalidade</small></div>
+        <div class="wc-select-grid">
+          <label>Fonte<select id="settings-name-font">
+            <option value="modern">Modern</option><option value="elegant">Elegant</option><option value="pixel">Pixel</option><option value="retro">Retro</option><option value="cyber">Cyber</option><option value="gothic">Gothic</option><option value="bold">Bold</option><option value="rounded">Rounded</option>
+          </select></label>
+          <label>Cor<select id="settings-name-color-mode"><option value="solid">Sólida</option><option value="gradient">Gradiente</option></select></label>
+          <label>Efeito<select id="settings-name-effect">
+            <option value="none">Normal</option><option value="neon">Neon</option><option value="glow">Glow</option><option value="shimmer">Shimmer</option><option value="rainbow">Rainbow</option><option value="gold">Gold</option><option value="ice">Ice</option><option value="holographic">Holográfico</option><option value="glitch">Glitch</option>
+          </select></label>
+          <label>Animação<select id="settings-name-animation"><option value="none">Nenhuma</option><option value="shimmer">Shimmer</option><option value="pulse">Glow Pulse</option><option value="flow">Gradient Flow</option><option value="glitch">Glitch</option></select></label>
+        </div>
+        <div class="wc-name-options">
+          <label>Cor do nome<input type="color" id="settings-name-color" value="#ffffff"></label>
+          <label>Segunda cor<input type="color" id="settings-name-color2" value="#a970ff"></label>
+          <label>Tamanho<input type="range" id="settings-name-size" min="20" max="42" value="30"></label>
+          <label>Peso<select id="settings-name-weight"><option value="600">Semibold</option><option value="700">Bold</option><option value="800">Extra bold</option></select></label>
+        </div>
+      </section>
+
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Decoração</span><small>Detalhes visuais</small></div>
+        <div class="wc-preset-row" id="wc-frame-presets">
+          <button type="button" data-frame="none">Sem moldura</button>
+          <button type="button" data-frame="neon">💜 Neon</button>
+          <button type="button" data-frame="galactic">🪐 Galactic</button>
+          <button type="button" data-frame="chrome">◈ Chrome</button>
+          <button type="button" data-frame="holographic">◇ Holographic</button>
+        </div>
+        <div class="wc-select-grid">
+          <label>Decoração<select id="settings-profile-decoration"><option value="none">Nenhuma</option><option value="stars">✦ Estrelas</option><option value="orbit">🪐 Órbita</option><option value="spark">✨ Spark</option><option value="cyber">⚡ Cyber</option></select></label>
+          <label>Emblema<select id="settings-profile-badge"><option value="none">Nenhum</option><option value="star">⭐ Estrela</option><option value="fire">🔥 Fogo</option><option value="rocket">🚀 Foguete</option><option value="crown">👑 Coroa</option></select></label>
+          <label>Placa de nome<select id="settings-nameplate"><option value="none">Nenhuma</option><option value="minimal">Minimal</option><option value="neon">Neon</option><option value="cyber">Cyber</option><option value="galaxy">Galaxy</option><option value="chrome">Chrome</option></select></label><label>Tag<input id="settings-profile-tag" maxlength="16" placeholder="DEV"></label>
+        </div>
+      </section>
+
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Atividade</span><small>O que você está fazendo</small></div>
+        <div class="wc-select-grid">
+          <label>Tipo<select id="settings-activity-type"><option value="">Sem atividade</option><option value="game">🎮 Jogando</option><option value="music">🎵 Ouvindo</option><option value="watching">📺 Assistindo</option><option value="coding">💻 Programando</option><option value="creating">🎨 Criando</option><option value="studying">📚 Estudando</option><option value="working">⚙️ Trabalhando</option></select></label>
+          <label>Título<input id="settings-activity-title" maxlength="80" placeholder="Ex.: Minecraft"></label>
+        </div>
+        <label>Descrição<input id="settings-activity-description" maxlength="120" placeholder="Ex.: Construindo algo novo"></label>
+      </section>
+
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Conexões</span><small>Links que aparecem no perfil</small></div>
+        <div class="wc-connections-grid">
+          <input id="settings-connection-1-name" maxlength="24" placeholder="GitHub">
+          <input id="settings-connection-1-url" maxlength="200" placeholder="https://...">
+          <input id="settings-connection-2-name" maxlength="24" placeholder="YouTube">
+          <input id="settings-connection-2-url" maxlength="200" placeholder="https://...">
+          <input id="settings-connection-3-name" maxlength="24" placeholder="Website">
+          <input id="settings-connection-3-url" maxlength="200" placeholder="https://...">
+        </div>
+      </section>
+
+      <section class="wc-editor-section wc-status-section">
+        <div class="wc-editor-section-title"><span>Status</span><small>Seu estado atual</small></div>
+        <div class="status-options"><button type="button" data-status="online">🟢 Online</button><button type="button" data-status="away">🌙 Ausente</button><button type="button" data-status="offline">⚫ Offline</button></div>
+        <div class="status-custom-row"><input id="settings-status-emoji" maxlength="4" placeholder="🙂"><input id="settings-status-text" maxlength="128" placeholder="Status personalizado"></div>
+        <button type="button" id="settings-save-status" class="btn btn-small">Salvar status</button>
+      </section>
+
+      <div class="wc-editor-actions">
+        <button type="button" id="wc-profile-reset" class="btn btn-ghost">Restaurar padrão</button>
+        <button type="button" id="settings-save-profile" class="btn btn-primary">Salvar perfil</button>
+      </div>
+    </div>
+
+    <aside class="wc-profile-live">
+      <div class="wc-live-label"><span>PREVIEW</span><small>Ao vivo</small></div>
+      <div class="wc-preview-card" id="wc-profile-preview">
+        <div class="wc-preview-banner" id="wc-preview-banner"></div>
+        <div class="wc-preview-avatar-wrap" id="wc-preview-avatar-wrap"><div class="wc-preview-avatar" id="wc-preview-avatar"></div></div>
+        <div class="wc-preview-body">
+          <div class="wc-preview-name-row"><h3 id="wc-preview-name">Usuário</h3><span id="wc-preview-nameplate"></span></div>
+          <span class="wc-preview-username" id="wc-preview-username">@usuario</span>
+          <div class="wc-preview-badges" id="wc-preview-badges"></div>
+          <p class="wc-preview-bio" id="wc-preview-bio">Sem descrição.</p>
+          <div class="wc-preview-status" id="wc-preview-status"></div>
+          <div class="wc-preview-activity hidden" id="wc-preview-activity"></div>
+          <div class="wc-preview-connections" id="wc-preview-connections"></div>
+        </div>
+      </div>
+      <p class="wc-live-hint">O que você vê aqui é aproximadamente como outras pessoas verão seu perfil.</p>
+    </aside>
+  </div>
+</div>
+<div class="settings-pane" data-settings-pane="profile-effects">
           <h4>✨ Efeitos animados do perfil</h4><p class="text-muted">Recursos premium do WFNA. Escolha como seu perfil aparece para outras pessoas.</p>
           <div class="profile-effects-grid">
             <label>Efeito<select id="settings-profile-effect"><option value="none">Nenhum</option><option value="float">🌌 Flutuar</option><option value="particles">✦ Partículas</option><option value="orbit">🪐 Órbita</option><option value="neon">💠 Neon pulsante</option><option value="rainbow">🌈 Arco-íris</option><option value="fire">🔥 Chamas</option><option value="snow">❄️ Neve</option><option value="hologram">🧬 Holograma</option><option value="glitch">📺 Glitch</option><option value="aurora">🌌 Aurora</option><option value="matrix">🟩 Matrix</option><option value="electric">⚡ Elétrico</option><option value="galaxy">🌠 Galáxia</option></select></label>
@@ -426,15 +558,50 @@
   </div>
 
   <div id="modal-profile" class="modal modal-profile hidden">
-    <div class="profile-card" id="profile-card">
-      <div class="profile-card-banner"></div>
-      <div class="profile-avatar" id="profile-avatar-view"></div><div class="profile-effect-layer" id="profile-effect-layer"></div>
-      <div class="profile-card-body"><h3 id="profile-name">Usuário</h3><span id="profile-username">@usuario</span><p id="profile-bio"></p>
-      <div class="profile-status-line" id="profile-status"></div><div class="profile-stats"><span id="profile-points">0 pontos</span><span id="profile-wfna">WFNA</span></div><div id="profile-actions" class="modal-actions"></div></div>
-    </div><div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Fechar</button></div>
+  <div class="profile-card" id="profile-card">
+    <div class="profile-card-banner">
+      <div class="profile-card-banner-overlay"></div>
+    </div>
+    <div class="profile-avatar" id="profile-avatar-view"></div>
+    <div class="profile-effect-layer" id="profile-effect-layer"></div>
+    <div class="profile-card-body">
+      <div class="profile-identity-row">
+        <div class="profile-identity">
+          <div class="profile-name-wrap"><h3 id="profile-name">Usuário</h3><span id="profile-nameplate"></span></div>
+          <span id="profile-username">@usuario</span>
+          <span id="profile-pronouns" class="profile-pronouns"></span>
+        </div>
+        <div id="profile-actions" class="profile-actions"></div>
+      </div>
+      <div class="profile-badges" id="profile-badges"></div>
+      <div class="profile-status-line" id="profile-status"></div>
+      <div class="profile-activity hidden" id="profile-activity"></div>
+      <div class="profile-about profile-section-block">
+        <span class="profile-section-label">SOBRE MIM</span>
+        <p id="profile-bio"></p>
+      </div>
+      <div class="profile-info-grid">
+        <div class="profile-section-block">
+          <span class="profile-section-label">CARGOS</span>
+          <div id="profile-roles" class="profile-chips"></div>
+        </div>
+        <div class="profile-section-block">
+          <span class="profile-section-label">CONEXÕES</span>
+          <div id="profile-connections" class="profile-chips"></div>
+        </div>
+      </div>
+      <div class="profile-section-block">
+        <span class="profile-section-label">SERVIDORES EM COMUM</span>
+        <div id="profile-common-servers" class="profile-common-servers"></div>
+      </div>
+      <div class="profile-meta" id="profile-meta"></div>
+      <div class="profile-stats" aria-label="Estatísticas"><span id="profile-points">0 pontos</span><span id="profile-wfna">WFNA</span></div>
+    </div>
   </div>
+  <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Fechar</button></div>
+</div>
 
-  <div id="modal-store" class="modal modal-store hidden">
+<div id="modal-store" class="modal modal-store hidden">
     <div class="store-header"><div><h3>Loja do WifiCord</h3><p>Personalize seu perfil com os pontos que você conquista conversando.</p></div><strong id="store-points">0 pontos</strong></div>
     <div id="store-items" class="store-items"></div>
     <div class="wfna-card"><div><b>🚀 WFNA</b><p>Premium: 25.000 pontos ou ativação por R$ 20,00 via checkout configurado.</p><ul class="wfna-benefits"><li>♾️ Super emojis ilimitados</li><li>🎥 Apresentação 1080p, 1440p e 4K</li><li>📦 Arquivos e vídeos de até 4 GB</li><li>✨ Personalização premium do perfil</li><li>🚀 Efeitos e animações premium</li></ul></div><strong id="store-wfna">—</strong><span id="store-super-quota" class="store-super-quota">10 super emojis gratuitos</span><div class="wfna-actions"><button id="store-wfna-buy" class="btn btn-primary">25.000 pontos</button><button id="store-wfna-paid" class="btn btn-small">Pagar R$ 20,00</button></div></div>

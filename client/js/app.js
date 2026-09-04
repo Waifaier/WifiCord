@@ -340,6 +340,7 @@
       }
     }
     openModal('modal-settings');
+    window.ProfileDesigner?.refresh?.();
     window.Settings?.refreshDevices?.();
     if (el.soundToggle) el.soundToggle.checked = window.Sounds?.isEnabled?.() !== false;
   }

@@ -7,6 +7,7 @@ function publicUser(user) {
   if (!user) return null;
   return {
     id: user.id,
+    createdAt: user.created_at || null,
     username: user.username,
     displayName: user.display_name,
     avatarUrl: user.avatar_url,

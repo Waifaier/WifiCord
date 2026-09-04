@@ -5,6 +5,45 @@ const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const { normalizeEmail, isNonEmptyString } = require('../utils/validate');
 
+
+function cleanProfileCustomization(input) {
+  const src = input && typeof input === 'object' ? input : {};
+  const out = {};
+  const colors = ['primary','secondary','accent','text','nameColor','nameColor2'];
+  for (const k of colors) {
+    if (typeof src[k] === 'string' && /^#[0-9a-f]{6}$/i.test(src[k])) out[k] = src[k];
+  }
+  const enums = {
+    gradient:['linear','radial'], angle:['135deg','90deg','0deg','225deg'], glow:['none','soft','strong','rainbow'],
+    layout:['classic','compact','banner','glass'], nameFont:['modern','elegant','pixel','retro','cyber','gothic','bold','rounded'],
+    nameColorMode:['solid','gradient'], nameEffect:['none','neon','glow','shimmer','rainbow','gold','ice','holographic','glitch'],
+    nameAnimation:['none','shimmer','pulse','flow','glitch'], nameWeight:['600','700','800'],
+    frame:['none','neon','galactic','chrome','holographic'], decoration:['none','stars','orbit','spark','cyber'],
+    badge:['none','star','fire','rocket','crown'], nameplate:['none','minimal','neon','cyber','galaxy','chrome']
+  };
+  for (const [k, values] of Object.entries(enums)) {
+    const v = String(src[k] ?? '');
+    if (values.includes(v)) out[k] = v;
+  }
+  if (Number.isFinite(Number(src.nameSize))) out.nameSize = Math.max(20, Math.min(42, Number(src.nameSize)));
+  if (typeof src.pronouns === 'string') out.pronouns = src.pronouns.trim().slice(0,32);
+  if (typeof src.serverTag === 'string') out.serverTag = src.serverTag.trim().replace(/[^a-zA-Z0-9_\- ]/g,'').slice(0,16);
+  if (src.activity && typeof src.activity === 'object') {
+    out.activity = {
+      type: ['','game','music','watching','coding','creating','studying','working'].includes(String(src.activity.type||'')) ? String(src.activity.type||'') : '',
+      title: String(src.activity.title||'').trim().slice(0,80),
+      description: String(src.activity.description||'').trim().slice(0,120)
+    };
+  }
+  if (Array.isArray(src.connections)) {
+    out.connections = src.connections.slice(0,3).map(x => ({
+      name: String(x?.name||'').trim().slice(0,24),
+      url: String(x?.url||'').trim().slice(0,200)
+    })).filter(x => x.name && /^https?:\/\//i.test(x.url));
+  }
+  return out;
+}
+
 const router = express.Router();
 
 function requireAuth(req, res, next) {
@@ -185,22 +224,39 @@ router.post('/avatar', requireAuth, (req, res) => {
 
 router.put('/profile', requireAuth, (req, res) => {
   const current = User.findById(req.session.userId);
-  const displayName = String(req.body.displayName || current.display_name || '').trim().slice(0,64) || current.display_name;
-  const bio = String(req.body.bio || '').trim().slice(0,190);
+  if (!current) return res.status(401).json({ error: 'Não autenticado.' });
+  const displayName = String(req.body.displayName ?? current.display_name ?? '').trim().slice(0,64) || current.display_name;
+  const bio = String(req.body.bio ?? current.bio ?? '').trim().slice(0,190);
+
   function image(v) {
-    if (!v) return null;
-    if (typeof v !== 'string' || !/^data:image\/(png|jpeg|jpg|gif|webp);base64,/i.test(v) || v.length > 2800000) throw new Error('Imagem inválida ou muito grande.');
+    if (v == null || v === '') return null;
+    if (typeof v !== 'string' || !/^data:image\/(png|jpeg|jpg|gif|webp);base64,/i.test(v) || v.length > 2800000) {
+      throw new Error('Imagem inválida ou muito grande. Escolha uma imagem menor.');
+    }
     return v;
   }
+
   try {
-    const avatarUrl = image(req.body.avatarUrl !== undefined ? req.body.avatarUrl : current.avatar_url); if(avatarUrl && /^data:image\/gif;base64,/i.test(avatarUrl) && !current.wfna) throw new Error('Avatar animado exige WFNA.');
-    const bannerUrl = image(req.body.bannerUrl !== undefined ? req.body.bannerUrl : current.banner_url);
+    // Só valida uma imagem quando ela realmente foi enviada.
+    // Isso evita que uma imagem antiga grande impeça salvar apenas nome/bio/tema.
+    const avatarUrl = Object.prototype.hasOwnProperty.call(req.body, 'avatarUrl') ? image(req.body.avatarUrl) : current.avatar_url;
+    const bannerUrl = Object.prototype.hasOwnProperty.call(req.body, 'bannerUrl') ? image(req.body.bannerUrl) : current.banner_url;
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'avatarUrl') && avatarUrl && /^data:image\/gif;base64,/i.test(avatarUrl) && !current.wfna) {
+      throw new Error('Avatar animado exige WFNA.');
+    }
+
     const user = User.updateProfile(req.session.userId, { displayName, avatarUrl, bannerUrl, bio });
     const publicUser = User.toPublic(user);
-    const io=req.app.get('io');
-    if (io) { io.to('user:'+user.id).emit('profile:update',{user:publicUser}); Friendship.listFriends(user.id).forEach(f=>io.to('user:'+f.id).emit('profile:update',{user:publicUser})); }
-    res.json({user:publicUser});
-  } catch (err) { res.status(400).json({error:err.message}); }
+    const io = req.app.get('io');
+    if (io) {
+      io.to('user:' + user.id).emit('profile:update', { user: publicUser });
+      Friendship.listFriends(user.id).forEach(friend => io.to('user:' + friend.id).emit('profile:update', { user: publicUser }));
+    }
+    res.json({ user: publicUser });
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Não foi possível salvar o perfil.' });
+  }
 });
 
 router.put('/status', requireAuth, (req,res)=>{
@@ -211,10 +267,10 @@ router.put('/status', requireAuth, (req,res)=>{
 });
 
 router.put('/settings', requireAuth, (req,res)=>{
-  const allowed=['accent','compact','reduceMotion','notifications','sound','messageSound','privacy','theme','fontSize','chatDensity','showTimestamps','showMemberList','animations','autoplayMedia','showEmbeds','desktopNotifications','mentionNotifications','friendRequests','voiceInputSensitivity','echoCancellation','noiseSuppression','autoGainControl','inputVolume','outputVolume','overlayEffects','stickerAnimations','superEmojiEffects','localNicknames','language','profileEffect','profileEffectSpeed','profileEffectEnabled','profileColor','profileLayout','profileGlow','profileBadge','animatedProfile','inlineMedia','autoDownload','mediaQuality'];
+  const allowed=['accent','compact','reduceMotion','notifications','sound','messageSound','privacy','theme','fontSize','chatDensity','showTimestamps','showMemberList','animations','autoplayMedia','showEmbeds','desktopNotifications','mentionNotifications','friendRequests','voiceInputSensitivity','echoCancellation','noiseSuppression','autoGainControl','inputVolume','outputVolume','overlayEffects','stickerAnimations','superEmojiEffects','localNicknames','language','profileEffect','profileEffectSpeed','profileEffectEnabled','profileColor','profileLayout','profileGlow','profileBadge','animatedProfile','inlineMedia','autoDownload','mediaQuality','profileCustomization'];
   const incoming=req.body && typeof req.body==='object'?req.body:{};
   const clean={};
-  for(const key of allowed) if(Object.prototype.hasOwnProperty.call(incoming,key)) clean[key]=incoming[key];
+  for(const key of allowed) if(Object.prototype.hasOwnProperty.call(incoming,key)) clean[key]=key==='profileCustomization'?cleanProfileCustomization(incoming[key]):incoming[key];
   const user=User.updateSettings(req.session.userId,clean);
   res.json({user:User.toPublic(user)});
 });
@@ -223,7 +279,35 @@ router.get('/profile/:id', requireAuth, (req,res)=>{
   const id=Number(req.params.id);
   const user=User.findById(id);
   if(!user) return res.status(404).json({error:'Usuário não encontrado.'});
-  res.json({user:User.toPublic(user)});
+
+  const commonServers = db.prepare(`
+    SELECT s.id,s.name,s.icon_url,s.owner_id
+    FROM servers s
+    JOIN server_members mine ON mine.server_id=s.id AND mine.user_id=?
+    JOIN server_members target ON target.server_id=s.id AND target.user_id=?
+    ORDER BY s.name COLLATE NOCASE
+    LIMIT 12
+  `).all(req.session.userId,id);
+
+  const roles=[];
+  for(const s of commonServers){
+    const rows=db.prepare(`
+      SELECT r.id,r.name,r.color,r.position
+      FROM server_member_roles smr
+      JOIN server_roles r ON r.id=smr.role_id
+      WHERE smr.server_id=? AND smr.user_id=?
+      ORDER BY r.position DESC,r.id ASC
+    `).all(s.id,id);
+    rows.forEach(r=>roles.push({...r,serverId:s.id,serverName:s.name}));
+  }
+
+  res.json({
+    user:User.toPublic(user),
+    profileContext:{
+      commonServers:commonServers.map(s=>({id:s.id,name:s.name,iconUrl:s.icon_url||null,isOwner:s.owner_id===id})),
+      roles:roles.slice(0,12)
+    }
+  });
 });
 
 
