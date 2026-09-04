@@ -592,6 +592,13 @@ input:focus, textarea:focus {
   min-height: 42px;
 }
 
+/* --- "Ativar administrador" (config. > Avançado) --- */
+.admin-claim-section{ margin-top:24px; padding-top:20px; border-top:1px solid var(--bg-hover); }
+.admin-claim-section h4{ margin:0 0 6px; }
+.admin-claim-section label{ display:block; margin:14px 0 10px; }
+.admin-claim-status{ margin:10px 0 0; font-size:13px; color:var(--text-muted); min-height:1em; }
+.admin-claim-status.error{ color:#e35c5c; }
+
 /* ===================== MODAIS ===================== */
 
 .modal-overlay {

@@ -1,4 +1,6 @@
 const express = require('express');
+const crypto = require('crypto');
+const db = require('../database/db');
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const { normalizeEmail, isNonEmptyString } = require('../utils/validate');
@@ -238,4 +240,66 @@ router.get('/rtc-config', requireAuth, (req, res) => {
   res.json({ iceServers });
 });
 
+// ---------------------------------------------------------------------
+// Ativação do primeiro administrador ("Ativar administrador" nas config).
+//
+// Propositalmente NÃO usa nenhum código embutido no client-side: o valor
+// só existe em ADMIN_CLAIM_CODE, uma variável de ambiente do servidor
+// (Render → Environment). O endpoint só funciona enquanto NÃO existir
+// nenhum administrador no banco — assim que o primeiro é criado, essa
+// via fica permanentemente desativada (mesma trava de segurança usada em
+// scripts/admin-setup.js), então não vira uma porta aberta pra sempre.
+// ---------------------------------------------------------------------
+
+function hasAnyAdmin() {
+  return !!db.prepare("SELECT 1 FROM users WHERE role='admin' LIMIT 1").get();
+}
+
+function codeMatches(provided) {
+  const expected = String(process.env.ADMIN_CLAIM_CODE || '');
+  if (!expected) return false;
+  const a = Buffer.from(String(provided || ''));
+  const b = Buffer.from(expected);
+  // Compara sempre um par de buffers do mesmo tamanho, pra não vazar por
+  // timing o tamanho do código configurado quando o comprimento não bate.
+  if (a.length !== b.length) {
+    crypto.timingSafeEqual(b, b);
+    return false;
+  }
+  return crypto.timingSafeEqual(a, b);
+}
+
+// Limite simples de tentativas por usuário (em memória; reinicia com o
+// processo, o que é aceitável aqui pois o objetivo é só dificultar força
+// bruta casual, não é a única linha de defesa — o código também precisa
+// bater com uma variável de ambiente que só o dono do deploy conhece).
+const claimAttempts = new Map();
+function claimAllowed(userId) {
+  const now = Date.now();
+  const rec = claimAttempts.get(userId);
+  if (!rec || now > rec.resetAt) { claimAttempts.set(userId, { count: 1, resetAt: now + 15 * 60000 }); return true; }
+  if (rec.count >= 5) return false;
+  rec.count += 1;
+  return true;
+}
+
+router.get('/admin-claim-available', requireAuth, (req, res) => {
+  const configured = !!String(process.env.ADMIN_CLAIM_CODE || '').trim();
+  res.json({ available: configured && !hasAnyAdmin() });
+});
+
+router.post('/claim-admin', requireAuth, (req, res) => {
+  if (hasAnyAdmin()) return res.status(400).json({ error: 'Já existe um administrador configurado.' });
+  if (!String(process.env.ADMIN_CLAIM_CODE || '').trim()) return res.status(404).json({ error: 'Recurso não disponível.' });
+  if (!claimAllowed(req.session.userId)) return res.status(429).json({ error: 'Muitas tentativas. Tente novamente mais tarde.' });
+
+  const code = String(req.body?.code || '');
+  if (!codeMatches(code)) return res.status(400).json({ error: 'Código incorreto.' });
+
+  const updated = User.setRole(req.session.userId, 'admin');
+  claimAttempts.delete(req.session.userId);
+  res.json({ ok: true, user: User.toPublic(updated) });
+});
+
 module.exports = { router, requireAuth };
+

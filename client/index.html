@@ -351,6 +351,15 @@
           <label class="settings-toggle"><input type="checkbox" id="settings-local-nicknames" checked> Usar apelidos locais</label>
           <label>Idioma<select id="settings-language"><option value="pt-BR">Português (Brasil)</option><option value="en-US">English</option><option value="es-ES">Español</option></select></label>
           <label>Qualidade de mídia<select id="settings-media-quality"><option value="auto">Automática</option><option value="high">Alta</option><option value="data-saver">Economia de dados</option></select></label><label class="settings-toggle"><input type="checkbox" id="settings-animated-profile" checked> Permitir animações no perfil</label><label class="settings-toggle"><input type="checkbox" id="settings-inline-media" checked> Mostrar mídia dentro do chat</label><label class="settings-toggle"><input type="checkbox" id="settings-auto-download"> Download automático de arquivos</label><button type="button" id="settings-save-advanced" class="btn btn-primary">Salvar configurações avançadas</button>
+          <div id="admin-claim-section" class="admin-claim-section hidden">
+            <h4>Ativar administrador</h4>
+            <p class="text-muted">Disponível apenas enquanto este WifiCord ainda não tiver nenhum administrador. Peça o código a quem configurou o servidor (variável de ambiente <code>ADMIN_CLAIM_CODE</code>).</p>
+            <label>Código de administrador
+              <input type="password" id="admin-claim-code" autocomplete="off" maxlength="128">
+            </label>
+            <button type="button" id="admin-claim-submit" class="btn btn-primary">Ativar administrador</button>
+            <p id="admin-claim-status" class="admin-claim-status"></p>
+          </div>
         </div>
         <div class="settings-pane" data-settings-pane="accessibility">
           <h4>Acessibilidade</h4><p class="text-muted">Ajuste os controles para ficar confortável.</p>
@@ -452,6 +461,7 @@
 <script src="/js/socket.js"></script>
 <script src="/js/sounds.js"></script>
 <script src="/js/settings.js"></script>
+<script src="/js/admin-claim.js"></script>
 <script src="/js/extras.js"></script>
 <script src="/js/media.js"></script>
 <script src="/js/server-settings.js"></script>
