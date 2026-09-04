@@ -79,6 +79,11 @@ const ServerModel = {
     db.prepare(`INSERT INTO server_settings(server_id,settings_json) VALUES(?,?) ON CONFLICT(server_id) DO UPDATE SET settings_json=excluded.settings_json,updated_at=datetime('now')`).run(serverId,JSON.stringify(clean));
     return clean;
   },
+  updateProfile(serverId, { name, iconUrl, bannerUrl }) {
+    db.prepare('UPDATE servers SET name=?, icon_url=?, banner_url=? WHERE id=?')
+      .run(name, iconUrl ?? null, bannerUrl ?? null, serverId);
+    return ServerModel.findById(serverId);
+  },
   toPublic(server) { return {id:server.id,name:server.name,ownerId:server.owner_id,inviteCode:server.invite_code,createdAt:server.created_at,iconUrl:server.icon_url||null,bannerUrl:server.banner_url||null}; },
 };
 module.exports = ServerModel;
