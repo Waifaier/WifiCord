@@ -67,6 +67,32 @@ router.post('/join', requireAuth, async (req, res, next) => {
   }
 });
 
+router.get('/invite/:code/preview', requireAuth, async (req, res, next) => {
+  try {
+    const inviteCode = String(req.params.code || '').trim();
+    const server = await ServerModel.findByInviteCode(inviteCode);
+
+    if (!server) {
+      return res.status(404).json({ error: 'Servidor não encontrado.' });
+    }
+
+    const members = ServerModel.listMembers(server.id);
+    const onlineCount = members.filter(m => m.status && m.status !== 'offline').length;
+
+    res.json({
+      invite: {
+        code: inviteCode,
+        server: ServerModel.toPublic(server),
+        memberCount: members.length,
+        onlineCount: onlineCount,
+        isMember: ServerModel.isMember(server.id, req.session.userId),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/:serverId/members', requireAuth, async (req, res, next) => {
   try {
     const serverId = parsePositiveInt(req.params.serverId);

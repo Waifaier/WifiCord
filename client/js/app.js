@@ -49,8 +49,11 @@
       }catch(_){return '<span>Arquivo de mídia inválido.</span>';}
     }
     const safe=escapeHtml(raw).replace(/\n/g,'<br>');
-    const withLinks=safe.replace(/(https?:\/\/[^\s<]+)/g,function(u){ const m=u.match(/\/invite\/([a-zA-Z0-9_-]+)/); if(m) return '<a class="server-invite-card" href="#" data-invite="'+m[1]+'">🔗 Convite de servidor <strong>'+m[1]+'</strong></a>'; return '<a href="'+u+'" target="_blank" rel="noopener">'+u+'</a>'; });
-    return withLinks.replace(/(^|[\s(])@([a-zA-Z0-9_]{3,32})\b/g,function(full,pre,uname){
+    const withLinks=safe.replace(/(https?:\/\/[^\s<]+)/g,function(u){ const m=u.match(/\/invite\/([a-zA-Z0-9_-]+)/); if(m) return '<div class="server-invite-embed" data-invite-embed="'+m[1]+'">🔗 Convite de servidor <strong>'+m[1]+'</strong></div>'; return '<a href="'+u+'" target="_blank" rel="noopener">'+u+'</a>'; });
+    const withWifiCordCodes=withLinks.replace(/(^|[\s(])wificord\/([a-zA-Z0-9_-]{4,32})\b/gi,function(full,pre,code){
+      return pre+'<div class="server-invite-embed" data-invite-embed="'+escapeHtml(code)+'">🔗 Convite de servidor <strong>'+escapeHtml(code)+'</strong></div>';
+    });
+    return withWifiCordCodes.replace(/(^|[\s(])@([a-zA-Z0-9_]{3,32})\b/g,function(full,pre,uname){
       const known=(state.serverMembers||[]).concat(state.friends||[]).concat(state.currentUser?[state.currentUser]:[]);
       const user=known.find(u=>u&&u.username&&u.username.toLowerCase()===uname.toLowerCase());
       if(!user) return full;
@@ -572,6 +575,7 @@
     }
     el.messagesList.innerHTML = messages.map(messageItemHtml).join('');
     hydrateCodePreviews();
+    hydrateInviteEmbeds();
     // Histórico nunca dispara efeitos novamente ao abrir a conversa.
     scrollMessagesToBottom();
   }
@@ -913,6 +917,46 @@
     }
   }
 
+  function buildInviteEmbedMarkup(invite) {
+    const server = invite.server || {};
+    const name = escapeHtml(server.name || 'Servidor');
+    const iconUrl = server.iconUrl;
+    const iconHtml = iconUrl
+      ? '<img src="' + escapeHtml(iconUrl) + '" alt="' + name + '">'
+      : '<span>' + escapeHtml((server.name || '?').trim().charAt(0).toUpperCase()) + '</span>';
+    const createdLabel = (function(){ try { return new Date(server.createdAt).toLocaleDateString([], { month: 'short', year: 'numeric' }); } catch(_) { return ''; } })();
+    return (
+      '<div class="invite-embed-icon">' + iconHtml + '</div>' +
+      '<div class="invite-embed-body">' +
+      '<div class="invite-embed-name">' + name + '</div>' +
+      '<div class="invite-embed-meta">' +
+      '<span class="invite-embed-dot online"></span>' + invite.onlineCount + ' online' +
+      '<span class="invite-embed-dot"></span>' + invite.memberCount + ' membros' +
+      '</div>' +
+      (createdLabel ? '<div class="invite-embed-since">Desde ' + escapeHtml(createdLabel) + '</div>' : '') +
+      '<button type="button" class="invite-embed-join" data-invite-join="' + escapeHtml(invite.code) + '" data-invite-server-id="' + escapeHtml(server.id) + '" data-invite-is-member="' + (invite.isMember ? '1' : '0') + '">' +
+      (invite.isMember ? 'Ir para o Servidor' : 'Entrar no Servidor') +
+      '</button>' +
+      '</div>'
+    );
+  }
+
+  async function hydrateInviteEmbeds() {
+    if (!el.messagesList) return;
+    const blocks = el.messagesList.querySelectorAll('.server-invite-embed[data-invite-embed]:not([data-hydrated])');
+    for (const block of blocks) {
+      block.setAttribute('data-hydrated', '1');
+      const code = block.getAttribute('data-invite-embed');
+      try {
+        const data = await api('/api/servers/invite/' + encodeURIComponent(code) + '/preview');
+        block.innerHTML = buildInviteEmbedMarkup(data.invite);
+        block.classList.add('invite-embed-loaded');
+      } catch (_) {
+        block.textContent = '🔗 Convite de servidor inválido ou expirado.';
+      }
+    }
+  }
+
   function toggleFocusMode() {
     if (!el.appScreen) return;
     const active = el.appScreen.classList.toggle('focus-mode');
@@ -949,6 +993,7 @@
     el.messagesList.insertAdjacentHTML('beforeend', messageItemHtml(msg));
     maybeSuperEffect(msg.content);
     hydrateCodePreviews();
+    hydrateInviteEmbeds();
 
     if (own || wasNearBottom) {
       scrollMessagesToBottom();
@@ -1502,6 +1547,7 @@
       }
     }
     hydrateCodePreviews();
+    hydrateInviteEmbeds();
   }
 
   // ---------------------------------------------------------------------
@@ -1925,6 +1971,14 @@
           const item = pinBtn.closest('.message-item');
           const currentlyPinned = item && item.classList.contains('pinned');
           return togglePinMessage(pinBtn.getAttribute('data-pin-message'), !currentlyPinned);
+        }
+        const joinBtn = e.target.closest('[data-invite-join]');
+        if (joinBtn) {
+          e.preventDefault();
+          if (joinBtn.getAttribute('data-invite-is-member') === '1') {
+            return openServer(joinBtn.getAttribute('data-invite-server-id'));
+          }
+          return joinServerByCode(joinBtn.getAttribute('data-invite-join'));
         }
       });
     }
