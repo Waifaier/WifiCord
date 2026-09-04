@@ -989,6 +989,14 @@
     if (el.messageInput) el.messageInput.disabled = !enabled;
     const sendBtn = el.messageForm ? el.messageForm.querySelector('button[type="submit"]') : null;
     if (sendBtn) sendBtn.disabled = !enabled;
+    // O composer só deve existir no layout quando há de fato uma conversa
+    // (canal de texto ou DM) para a qual uma mensagem possa ser enviada.
+    // Reaproveitamos o mesmo booleano `enabled` que já é calculado em todo
+    // ponto de transição de estado (init, home, abrir servidor, abrir canal
+    // de voz, abrir canal de texto, abrir DM) em vez de criar uma nova fonte
+    // de verdade — isso remove o composer do fluxo do layout (display:none)
+    // e não apenas o esconde visualmente.
+    if (el.messageForm) el.messageForm.classList.toggle('hidden', !enabled);
     if (window.Call && window.Call.updateCallButtonsState) window.Call.updateCallButtonsState();
   }
 

@@ -179,7 +179,13 @@ input:focus, textarea:focus {
 
 #app-screen {
   display: grid;
-  grid-template-columns: 76px 260px 1fr;
+  /* minmax(0, 1fr) e não só "1fr": sem o mínimo 0 explícito, essa coluna
+     nunca pode encolher além do conteúdo mais largo lá dentro (uma mensagem
+     longa, por exemplo), o que empurra a área principal para fora da
+     viewport (overflow horizontal). As camadas de CSS mais recentes deste
+     arquivo já corrigem isso via !important, mas a regra base é mantida seg
+     ura aqui também para não depender só delas. */
+  grid-template-columns: 76px 260px minmax(0, 1fr);
   height: 100vh;
   background: var(--bg-deepest);
 }
@@ -1429,8 +1435,16 @@ body { min-width: 0; min-height: 100dvh; overflow: hidden; }
 #chat-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-header-actions { min-width: max-content; }
 #messages-list { min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; }
-#message-form { min-width: 0; width: 100%; }
-#message-input { min-width: 0; width: 100%; resize: none; }
+#message-form { min-width: 0; width: 100%; box-sizing: border-box; }
+/* O textarea precisa dividir o espaço com os botões de mídia/emoji/figurinha
+   e o botão "Enviar" dentro do mesmo container flex. "width: 100%" força o
+   item a pedir 100% da largura do container mesmo com os irmãos ocupando
+   espaço, o que é a causa estrutural do botão "Enviar" ficar espremido ou
+   parcialmente fora da área visível quando o painel de membros está aberto
+   ou a janela é mais estreita. "flex: 1 1 0%" faz o textarea crescer/encolher
+   corretamente dentro do espaço realmente disponível, sempre respeitando os
+   botões ao lado. */
+#message-input { min-width: 0; flex: 1 1 0%; width: auto; resize: none; box-sizing: border-box; }
 .message-content, .message-text, .message-item { min-width: 0; overflow-wrap: anywhere; }
 
 .avatar-img,
@@ -2254,11 +2268,26 @@ body::before{
 }
 #dm-panel, #channels-panel{ display:flex; flex-direction:column; min-width:0; min-height:0; }
 
-.sidebar-header{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:22px 20px 4px; }
-.sidebar-header > div{ min-width:0; }
+/* Cabeçalho do sidebar (título "Amigos" / nome do servidor + ações).
+   Causa raiz do corte: o título tinha overflow:hidden (necessário para o
+   ellipsis) mas nenhum piso de largura nem prioridade sobre os botões de
+   ação. Em flexbox, overflow != visible zera a largura mínima automática
+   do item, então ele encolhia antes mesmo de faltar espaço de verdade.
+   Agora: o título tem prioridade (flex-basis maior, cresce para preencher),
+   e as ações nunca encolhem (flex:0 0 auto). Se ainda assim não couber tudo
+   numa linha, o cabeçalho quebra (flex-wrap) e as ações vão para a linha de
+   baixo — sem cortar nome nem botão. O ellipsis só entra quando o nome é
+   realmente maior que a linha inteira disponível. */
+.sidebar-header{
+  display:flex; align-items:center; flex-wrap:wrap; justify-content:space-between;
+  gap:6px 12px; padding:22px 20px 4px;
+}
+.sidebar-header > div,
+.sidebar-header > h2{ min-width:0; flex:1 1 140px; }
 .sidebar-header h2{ font-family:'Space Grotesk', sans-serif; font-size:19px; font-weight:800; margin:0;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .sidebar-header-sub{ margin:3px 0 0; font-size:11.5px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sidebar-header .channel-header-actions{ flex:0 0 auto; min-width:max-content; }
 .sidebar-header .btn-small, #add-friend-btn{
   flex-shrink:0;
   background:linear-gradient(135deg, var(--rd-purple), var(--rd-purple-deep)) !important;
