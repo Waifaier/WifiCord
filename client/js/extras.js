@@ -46,14 +46,14 @@ async function saveSettings(patch,msg='Configurações salvas.') {
 }
 
 const THEMES={
-  galactic:{primary:'#7c5cff',secondary:'#24104d',accent:'#c59cff',text:'#f6f1ff',gradient:'radial',angle:'135deg',glow:'soft'},
-  aurora:{primary:'#7c5cff',secondary:'#0b4960',accent:'#7cf7dc',text:'#f3ffff',gradient:'linear',angle:'135deg',glow:'soft'},
-  cyber:{primary:'#7c5cff',secondary:'#160c2d',accent:'#00e5ff',text:'#f6f8ff',gradient:'linear',angle:'90deg',glow:'strong'},
+  galactic:{primary:'#5865F2',secondary:'#24104d',accent:'#c59cff',text:'#f6f1ff',gradient:'radial',angle:'135deg',glow:'soft'},
+  aurora:{primary:'#5865F2',secondary:'#0b4960',accent:'#7cf7dc',text:'#f3ffff',gradient:'linear',angle:'135deg',glow:'soft'},
+  cyber:{primary:'#5865F2',secondary:'#160c2d',accent:'#00e5ff',text:'#f6f8ff',gradient:'linear',angle:'90deg',glow:'strong'},
   void:{primary:'#4a3b68',secondary:'#08080d',accent:'#9d8abf',text:'#eee9f8',gradient:'radial',angle:'135deg',glow:'none'},
   frost:{primary:'#647cff',secondary:'#173d68',accent:'#a9e8ff',text:'#f2fbff',gradient:'linear',angle:'135deg',glow:'soft'},
   minimal:{primary:'#786b96',secondary:'#17151e',accent:'#ffffff',text:'#f5f2f8',gradient:'linear',angle:'90deg',glow:'none'}
 };
-const DEFAULT_PROFILE={primary:'#7c5cff',secondary:'#24104d',accent:'#c59cff',text:'#f6f1ff',gradient:'radial',angle:'135deg',glow:'soft',layout:'classic',nameFont:'modern',nameColorMode:'solid',nameColor:'#ffffff',nameColor2:'#a970ff',nameEffect:'none',nameAnimation:'none',nameSize:30,nameWeight:700,frame:'none',decoration:'none',badge:'none',nameplate:'none',pronouns:'',activity:{type:'',title:'',description:''},connections:[]};
+const DEFAULT_PROFILE={primary:'#5865F2',secondary:'#24104d',accent:'#c59cff',text:'#f6f1ff',gradient:'radial',angle:'135deg',glow:'soft',layout:'classic',nameFont:'modern',nameColorMode:'solid',nameColor:'#ffffff',nameColor2:'#a970ff',nameEffect:'none',nameAnimation:'none',nameSize:30,nameWeight:700,frame:'none',decoration:'none',badge:'none',nameplate:'none',pronouns:'',activity:{type:'',title:'',description:''},connections:[]};
 
 function getProfile(){return window.App?.getState?.()?.currentUser?.settings?.profileCustomization||{}}
 function value(id, fallback=''){return document.getElementById(id)?.value ?? fallback}

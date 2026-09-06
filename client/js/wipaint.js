@@ -13,7 +13,7 @@
   const S = {
     canvas: null, ctx: null,
     tool: 'brush', brush: 'classic',
-    color: '#7c5cff', size: 12, opacity: 1,
+    color: '#5865F2', size: 12, opacity: 1,
     grid: false, snap: false, zoom: 1,
     drawing: false, pointerId: null, last: null, start: null,
     marquee: null, selection: null, transform: null,
@@ -191,11 +191,11 @@
   }
   function drawMarquee(){
     const r=norm(S.marquee.start,S.marquee.end),c=S.ctx;c.save();
-    c.fillStyle='#7c5cff16';c.fillRect(r.x,r.y,r.width,r.height);
-    c.strokeStyle='#7c5cff';c.lineWidth=2;c.setLineDash([7,5]);c.strokeRect(r.x,r.y,r.width,r.height);c.restore();
+    c.fillStyle='#5865F216';c.fillRect(r.x,r.y,r.width,r.height);
+    c.strokeStyle='#5865F2';c.lineWidth=2;c.setLineDash([7,5]);c.strokeRect(r.x,r.y,r.width,r.height);c.restore();
   }
   function drawSelection(r){
-    const c=S.ctx;c.save();c.strokeStyle='#7c5cff';c.lineWidth=2;c.setLineDash([7,5]);c.strokeRect(r.x,r.y,r.width,r.height);
+    const c=S.ctx;c.save();c.strokeStyle='#5865F2';c.lineWidth=2;c.setLineDash([7,5]);c.strokeRect(r.x,r.y,r.width,r.height);
     c.setLineDash([]);for(const h of Object.values(handles(r))){c.fillStyle='#fff';c.beginPath();c.rect(h.x-5,h.y-5,10,10);c.fill();c.stroke();}
     c.restore();
   }
@@ -741,13 +741,13 @@
       #modal-wipaint .wipaint-frame-actions{display:flex;flex-wrap:wrap;gap:6px}
       #modal-wipaint .wipaint-frames{display:flex;gap:6px;overflow:auto;padding:4px 0}
       #modal-wipaint .wipaint-frame{min-width:58px;padding:7px 8px;border:1px solid #ffffff18;border-radius:8px;background:#171422;color:#eee;cursor:pointer}
-      #modal-wipaint .wipaint-frame.active{background:#322a55;border-color:#7c5cff}
+      #modal-wipaint .wipaint-frame.active{background:#322a55;border-color:#5865F2}
       #modal-wipaint .wipaint-frame small{display:block;color:#9a92b3;font-size:10px;margin-top:2px}
       #modal-wipaint .wipaint-side .wipaint-effects{display:flex;flex-wrap:wrap;gap:6px}
       #modal-wipaint .wipaint-side h5{margin:8px 0 2px}
       #modal-wipaint .wipaint-toolbar{position:relative}
       #modal-wipaint .wipaint-toolbar select{max-width:240px}
-      #modal-wipaint .wipaint-toolbar .wipaint-range input[type="range"]{accent-color:#7c5cff}
+      #modal-wipaint .wipaint-toolbar .wipaint-range input[type="range"]{accent-color:#5865F2}
       #modal-wipaint #wipaint-canvas{transform-origin:top left}
     `;
     document.head.appendChild(style);

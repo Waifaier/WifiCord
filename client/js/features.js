@@ -14,7 +14,7 @@ function avatar(u){
   const decor=decorName?' decoration-'+esc(String(decorName).replace(/^decor-/,'')):'';
   const effectClass=effect?' profile-mini-effect-'+esc(effect):'';
   const rocket=u?.wfna?'<span class="wfna-profile-rocket" aria-label="WFNA">🚀</span>':'';
-  return `<span class="profile-avatar-decorated${frame}${decor}${effectClass}" style="--profile-color:${esc(ps.primary||ps.profileColor||'#7c5cff')}">${inner}<i class="avatar-frame-overlay"></i><b class="avatar-decoration-overlay"></b><em class="avatar-effect-overlay"></em>${rocket}</span>`;
+  return `<span class="profile-avatar-decorated${frame}${decor}${effectClass}" style="--profile-color:${esc(ps.primary||ps.profileColor||'#5865F2')}">${inner}<i class="avatar-frame-overlay"></i><b class="avatar-decoration-overlay"></b><em class="avatar-effect-overlay"></em>${rocket}</span>`;
 }
 function rocket(){const o=document.createElement('div');o.className='rocket-overlay show';o.innerHTML='<div class="rocket-trail"></div><div class="rocket">🚀</div>';document.body.appendChild(o);setTimeout(()=>o.remove(),2200);}
 async function profile(id){
@@ -22,7 +22,7 @@ async function profile(id){
     const d=await api('/api/auth/profile/'+id),u=d.user,me=String(u.id)===String(window.App?.getState?.()?.currentUser?.id);
     const c=$('profile-card');if(!c)throw Error('Perfil indisponível.');
     const ps={...(u.settings?.profileCustomization||{})};
-    const color=ps.primary||ps.profileColor||'#7c5cff',secondary=ps.secondary||'#24104d',accent=ps.accent||'#c59cff',text=ps.text||'#f6f1ff';
+    const color=ps.primary||ps.profileColor||'#5865F2',secondary=ps.secondary||'#24104d',accent=ps.accent||'#c59cff',text=ps.text||'#f6f1ff';
     c.className='profile-card';c.dataset.glow=ps.glow||'none';c.dataset.font=ps.nameFont||'modern';c.dataset.nameEffect=ps.nameEffect||'none';c.dataset.nameAnimation=ps.nameAnimation||'none';c.style.setProperty('--profile-color',color);c.style.setProperty('--profile-secondary',secondary);c.style.setProperty('--profile-accent',accent);c.style.setProperty('--profile-text',text);c.style.setProperty('--name-color',ps.nameColor||'#ffffff');c.style.setProperty('--name-color2',ps.nameColor2||accent);c.style.setProperty('--name-size',(Number(ps.nameSize)||30)+'px');c.style.setProperty('--name-weight',String(ps.nameWeight||700));c.dataset.colorMode=ps.nameColorMode||'solid';
     const banner=c.querySelector('.profile-card-banner');
     if(banner){
