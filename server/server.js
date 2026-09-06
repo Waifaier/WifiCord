@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const express = require('express');
 const session = require('express-session');
 const SqliteSessionStore = require('./session/SqliteSessionStore');
+const compression = require('./middleware/compress');
 const { UPLOAD_DIR } = require('./storage');
 const http = require('http');
 const { Server: SocketIOServer } = require('socket.io');
@@ -65,9 +66,18 @@ const sessionMiddleware = session({
   },
 });
 
+// Compressão (gzip/br) do HTML/CSS/JS/JSON: reduz bastante o volume de dados
+// trafegado no celular e acelera o carregamento, sem exigir dependências novas.
+app.use(compression());
+
 app.use(express.json({ limit: '10mb' }));
 app.use(sessionMiddleware);
-app.use(express.static(path.join(__dirname, '..', 'client')));
+
+// Cache agressivo para os arquivos estáticos do client (css/js/imagens).
+// O navegador para de rebaixar o app com um round-trip a cada reload:
+// passa a usar a cópia local por até 1 dia e ainda revalida por ETag.
+const staticOpts = { maxAge: '1d', etag: true, lastModified: true };
+app.use(express.static(path.join(__dirname, '..', 'client'), staticOpts));
 app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d', index: false }));
 
 app.use('/api/auth', authRouter);

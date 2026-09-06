@@ -29,6 +29,7 @@
     trash: svg('<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/>'),
     edit: svg('<path d="M4 20l1-4L16 5l4 4L9 20H5v-1z"/><path d="M14 7l3 3"/>'),
     more: svg('<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'),
+    menu: svg('<path d="M4 7h16M4 12h16M4 17h16"/>'),
   };
 
   function setIcon(id, name) {
@@ -38,7 +39,9 @@
 
   function applyStaticIcons() {
     setIcon('home-btn', 'home');
+    setIcon('mobile-menu-btn', 'menu');
     setIcon('join-server-btn', 'link');
+    setIcon('server-settings-btn', 'settings');
     setIcon('admin-btn', 'shield');
     setIcon('store-btn', 'store');
     setIcon('games-btn', 'games');

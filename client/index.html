@@ -5,9 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WifiCord</title>
 <link rel="icon" href="/assets/logo.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -74,6 +71,10 @@
         </label>
         <button type="submit" class="btn btn-primary">Criar conta</button>
       </form>
+
+      <p style="text-align:center;margin-top:18px;font-size:12px;color:var(--text-muted);">
+        Ao continuar, você concorda com os <a href="/legal.html" target="_blank" style="color:var(--accent-secondary);">Termos de Uso e a Política de Privacidade</a>.
+      </p>
     </div>
   </div>
 </section>
@@ -81,7 +82,7 @@
 <!-- ===================== APP ===================== -->
 <section id="app-screen" class="screen hidden">
 
-  <button id="mobile-menu-btn" type="button" aria-label="Abrir menu">☰</button>
+  <button id="mobile-menu-btn" type="button" aria-label="Abrir menu"></button>
 
   <nav id="server-rail">
     <div class="rail-logo" aria-hidden="true"><span></span></div>
@@ -116,7 +117,7 @@
     <div id="channels-panel" class="hidden">
       <div class="sidebar-header">
         <h2 id="active-server-name">Servidor</h2>
-        <div class="channel-header-actions"><button type="button" id="server-settings-btn" class="btn btn-icon" title="Configurações avançadas do servidor">⚙️</button><button type="button" id="add-channel-btn" class="btn btn-small">+ Canal</button></div>
+        <div class="channel-header-actions"><button type="button" id="server-settings-btn" class="btn btn-icon" title="Configurações avançadas do servidor"></button><button type="button" id="add-channel-btn" class="btn btn-small">+ Canal</button></div>
       </div>
       <div class="sidebar-section">
         <h3>Canais</h3>
@@ -622,20 +623,24 @@
 
 <div id="toast-container" class="toast-container"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
-<script src="/js/redesign-ui.js"></script>
-<script src="/js/icons.js"></script>
-<script src="/js/socket.js"></script>
-<script src="/js/sounds.js"></script>
-<script src="/js/settings.js"></script>
-<script src="/js/admin-claim.js"></script>
-<script src="/js/extras.js"></script>
-<script src="/js/media.js"></script>
-<script src="/js/server-settings.js"></script>
-<script src="/js/features.js"></script>
-<script src="/js/games.js"></script>
-<script src="/js/app.js"></script>
-<script src="/js/call.js"></script>
-<script src="/js/auth.js"></script>
+<!-- defer: baixa os 15 arquivos em paralelo (em vez de um por vez, em série)
+     e só executa depois do HTML pronto, mantendo a MESMA ordem de execução
+     de antes. Isso reduz bastante o tempo até o app ficar interativo,
+     principalmente em conexões móveis/wifi mais lentas. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js" defer></script>
+<script src="/js/redesign-ui.js" defer></script>
+<script src="/js/icons.js" defer></script>
+<script src="/js/socket.js" defer></script>
+<script src="/js/sounds.js" defer></script>
+<script src="/js/settings.js" defer></script>
+<script src="/js/admin-claim.js" defer></script>
+<script src="/js/extras.js" defer></script>
+<script src="/js/media.js" defer></script>
+<script src="/js/server-settings.js" defer></script>
+<script src="/js/features.js" defer></script>
+<script src="/js/games.js" defer></script>
+<script src="/js/app.js" defer></script>
+<script src="/js/call.js" defer></script>
+<script src="/js/auth.js" defer></script>
 </body>
 </html>

@@ -187,7 +187,7 @@
     const effect = entity.wfna && ps.profileEffectEnabled && ps.profileEffect && ps.profileEffect !== 'none' ? ps.profileEffect : '';
     const color = ps.profileColor || '#7c5cff';
     const inner = entity.avatarUrl
-      ? '<img class="avatar-img" src="' + escapeHtml(entity.avatarUrl) + '" alt="' + escapeHtml(label) + '">'
+      ? '<img class="avatar-img" src="' + escapeHtml(entity.avatarUrl) + '" alt="' + escapeHtml(label) + '" loading="lazy" decoding="async">'
       : '<div class="avatar-fallback">' + escapeHtml(initialFor(label)) + '</div>';
     const frameClass = frame ? ' frame-' + escapeHtml(frame.replace(/^frame-/,'') ) : '';
     const decorClass = decoration ? ' decoration-' + escapeHtml(decoration.replace(/^decor-/,'') ) : '';
@@ -923,7 +923,7 @@
     const name = escapeHtml(server.name || 'Servidor');
     const iconUrl = server.iconUrl;
     const iconHtml = iconUrl
-      ? '<img src="' + escapeHtml(iconUrl) + '" alt="' + name + '">'
+      ? '<img src="' + escapeHtml(iconUrl) + '" alt="' + name + '" loading="lazy" decoding="async">'
       : '<span>' + escapeHtml((server.name || '?').trim().charAt(0).toUpperCase()) + '</span>';
     const createdLabel = (function(){ try { return new Date(server.createdAt).toLocaleDateString([], { month: 'short', year: 'numeric' }); } catch(_) { return ''; } })();
     return (

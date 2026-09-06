@@ -11,7 +11,12 @@
     connect() {
       if (this.socket) return this.socket;
 
-      this.socket = io(); // mesma origem: cookies de sessão são enviados automaticamente
+      // mesma origem: cookies de sessão são enviados automaticamente.
+      // transports: tenta WebSocket direto (sem passar primeiro por long-polling),
+      // o que economiza uma rodada de requisições HTTP na conexão inicial e deixa
+      // o app "de pé" mais rápido em redes móveis/wifi. Se a rede bloquear
+      // WebSocket, o Socket.IO cai para polling automaticamente.
+      this.socket = io({ transports: ['websocket', 'polling'] });
 
       this.socket.on('connect', function () {
         if (window.App && window.App.refreshFriendsRealtime) window.App.refreshFriendsRealtime();

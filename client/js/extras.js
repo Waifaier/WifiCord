@@ -213,7 +213,7 @@ document.getElementById('settings-save-profile-effects')?.addEventListener('clic
     items=list; index=0;
     b.innerHTML=list.map((u,i)=>{
       const label=u.displayName||u.username;
-      const av=u.avatarUrl?`<img src="${escM(u.avatarUrl)}" alt="">`:`<div class="avatar-fallback">${escM(label.trim().charAt(0).toUpperCase())}</div>`;
+      const av=u.avatarUrl?`<img src="${escM(u.avatarUrl)}" alt="" loading="lazy" decoding="async">`:`<div class="avatar-fallback">${escM(label.trim().charAt(0).toUpperCase())}</div>`;
       return `<div class="mention-autocomplete-item${i===0?' active':''}" data-index="${i}">${av}<span class="mention-name">${escM(label)}</span><span class="mention-username">@${escM(u.username)}</span></div>`;
     }).join('');
     Array.from(b.querySelectorAll('.mention-autocomplete-item')).forEach(el=>{
