@@ -532,6 +532,7 @@
       await state.pc.setLocalDescription(offer);
       window.ChatSocket?.sendCallOffer?.({ toUserId: target, sdp: state.pc.localDescription, callType: type, renegotiation: false });
       state.negotiationReady = true;
+      window.Sounds?.startLoop('ringback'); // toc-toc de "chamando..." pra quem ligou
     } catch (e) {
       window.App?.toast(e.message || 'Não foi possível iniciar a chamada.', 'error');
       endCall(false);
@@ -567,7 +568,10 @@
       return;
     }
     state.pendingOffer = data;
-    window.Sounds?.play('call-incoming');
+    // 'call-incoming' não existe em sounds.js (só toca um beep genérico
+    // uma única vez) — o som de toque de verdade é o loop 'incoming', que
+    // nunca era chamado. É por isso que "o som de chamada não funciona".
+    window.Sounds?.startLoop('incoming');
     if (el.incomingText) el.incomingText.textContent = `${friendName(data.fromUserId)} está te ligando (${data.callType === 'audio' ? 'voz' : 'vídeo'}).`;
     if (el.incomingAvatar) el.incomingAvatar.innerHTML = avatarMarkup(user(data.fromUserId));
     $('modal-overlay')?.classList.remove('hidden');
@@ -596,6 +600,7 @@
   async function accept() {
     const d = state.pendingOffer;
     if (!d) return;
+    window.Sounds?.stopLoop();
     closeModals();
     try {
       await prepare(d.fromUserId, d.callType || 'video', true);
@@ -616,6 +621,7 @@
   function reject() {
     if (state.pendingOffer) window.ChatSocket?.sendCallHangup?.({ toUserId: state.pendingOffer.fromUserId });
     state.pendingOffer = null;
+    window.Sounds?.stopLoop();
     closeModals();
     window.Sounds?.play('call-leave');
   }
@@ -628,6 +634,7 @@
       state.isSettingRemoteAnswerPending = false;
       await flushCandidates(state.pc);
       setCallStatus('Conectado', 'connected');
+      window.Sounds?.stopLoop(); // para o ringback assim que a outra pessoa atende
     } catch (e) {
       state.isSettingRemoteAnswerPending = false;
       console.error('Resposta WebRTC inválida:', e);
@@ -652,6 +659,7 @@
   }
 
   function endCall(notify) {
+    window.Sounds?.stopLoop(); // garante que ringback/toque não fica preso tocando
     if (state.groupMode) {
       window.ChatSocket?.leaveServerCall?.({ serverId: state.groupServerId, channelId: state.groupChannelId });
       for (const id of [...state.groupPeers.keys()]) removeGroupPeer(id);
@@ -1184,6 +1192,7 @@
   function handleHangup(data) {
     if (state.pendingOffer && (!data || String(data.fromUserId) === String(state.pendingOffer.fromUserId))) {
       state.pendingOffer = null; closeModals();
+      window.Sounds?.stopLoop();
     }
     if (state.inCall && (!data || String(data.fromUserId) === String(state.targetUserId))) endCall(false);
   }

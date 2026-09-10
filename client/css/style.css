@@ -1034,8 +1034,14 @@ body { min-height:100vh; }
 .mini-call-dock .danger { background:var(--danger); }
 #user-bar { position:relative; }
 
-/* Call becomes an in-conversation stage; outside the active call DM it is minimized. */
-.call-bar { flex:0 0 auto; max-height:min(48vh,560px); overflow:hidden; }
+/* Call becomes an in-conversation stage; outside the active call DM it is minimized.
+   flex:1 1 auto (em vez de 0 0 auto) deixa o call-bar ENCOLHER quando header +
+   call-bar + composer não cabem no viewport — sem isso ele sempre reivindicava
+   sua altura em vh "cheia" e o resto da coluna (empty-state do chat, composer)
+   acabava desenhando por cima dos controles da chamada em janelas mais baixas
+   (a media query de emergência só cobria <620px de altura, deixando uma faixa
+   de ~620-750px sem proteção nenhuma). */
+.call-bar { flex:1 1 auto; min-height:0; max-height:min(48vh,560px); overflow:hidden; }
 .call-stage { min-height:180px; max-height:38vh; position:relative; display:grid; place-items:center; overflow:hidden; border-radius:14px; background:radial-gradient(circle at center,#25203f,#100d1d 72%); }
 .call-stage .call-participant-avatar { position:absolute; z-index:4; width:104px; height:104px; border-radius:50%; display:grid; place-items:center; background:var(--bg-elevated); border:4px solid var(--bg-hover); box-shadow:0 16px 45px rgba(0,0,0,.35); overflow:hidden; }
 .call-stage .call-participant-avatar img { width:100%; height:100%; object-fit:cover; }
@@ -1610,8 +1616,12 @@ body { min-width: 0; min-height: 100dvh; overflow: hidden; }
 .call-stage {
   position: relative !important;
   width: 100% !important;
-  height: clamp(280px, 52vh, 620px) !important;
-  min-height: 260px !important;
+  /* flex (não height fixo em vh) deixa o stage ceder espaço pro resto da
+     coluna (topbar da chamada + controles + o que sobra da janela) em vez
+     de sempre exigir 52vh mesmo quando isso não cabe — ver comentário em
+     .call-bar acima sobre o bug de sobreposição em janelas mais baixas. */
+  flex: 1 1 auto !important;
+  min-height: 220px !important;
   max-height: calc(100dvh - 220px) !important;
   display: grid !important;
   place-items: center !important;
@@ -2432,6 +2442,10 @@ body{ padding:0; background: var(--bg-deepest); }
 #messages-list:empty ~ .chat-empty-hero{
   display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
   flex:1; gap:18px; padding:32px 24px; position:relative; min-height:0;
+  /* Sem overflow:hidden aqui, se essa área ficar espremida (call-bar + composer
+     ocupando quase tudo) o conteúdo (ícone/título/cartões) vazava pra cima dos
+     vizinhos em vez de só cortar — segurança extra além do fix de flex acima. */
+  overflow: hidden;
 }
 .chat-empty-icon{
   position:relative; z-index:1; width:110px; height:110px; display:grid; place-items:center; font-size:44px;
