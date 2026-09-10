@@ -233,7 +233,25 @@
     typingLocalTimer: null,
     searchMatches: [],
     searchIndex: -1,
+    tabUnreadCount: 0,
   };
+
+  // ---------------------------------------------------------------------
+  // Título da aba: quando chega mensagem nova com a aba em segundo plano,
+  // o título vira "(3) WifiCord" — igual Discord/WhatsApp Web — pra dar
+  // pra notar sem precisar deixar a aba aberta em foco o tempo todo.
+  // ---------------------------------------------------------------------
+  const BASE_TITLE = document.title || 'WifiCord';
+  function bumpUnreadTitle() {
+    if (!document.hidden) return;
+    state.tabUnreadCount++;
+    document.title = '(' + state.tabUnreadCount + ') ' + BASE_TITLE;
+  }
+  function clearUnreadTitle() {
+    if (state.tabUnreadCount === 0) return;
+    state.tabUnreadCount = 0;
+    document.title = BASE_TITLE;
+  }
 
   // ---------------------------------------------------------------------
   // Elementos
@@ -1394,6 +1412,7 @@
     }
     if (!isOwn && !already) {
       window.Sounds?.play('message');
+      bumpUnreadTitle();
       if (kind === 'dm' && !belongsToActiveDM) {
         const author = msg.author || {};
         window.App?.showIncomingDMNotice?.(author);
@@ -1924,6 +1943,13 @@
         closeModals();
       }
     });
+
+    // Volta o título da aba ao normal assim que a pessoa volta a ver a
+    // conversa (troca de aba ou minimizado não conta como "lida").
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) clearUnreadTitle();
+    });
+    window.addEventListener('focus', clearUnreadTitle);
 
     if (el.messageSearchInput) {
       el.messageSearchInput.addEventListener('input', runMessageSearch);
