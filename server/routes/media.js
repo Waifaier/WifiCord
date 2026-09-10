@@ -36,6 +36,37 @@ const ALLOWED = new Set([
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
+// A extensão salva em disco é SEMPRE escolhida pelo servidor a partir do
+// mime detectado — nunca a partir do nome de arquivo enviado pelo cliente.
+// Isso fecha um caminho de XSS armazenado: sem isso, alguém podia mandar
+// Content-Type "application/octet-stream" (permitido, pra arquivos
+// genéricos) com um X-File-Name terminando em ".html" e conseguir um
+// arquivo .html de verdade salvo em /uploads, servido pelo mesmo domínio
+// do app e executado como página normal pelo navegador de quem abrisse o
+// link. Com a extensão fixada pelo mime, isso não é mais possível.
+const SAFE_EXTENSION_BY_MIME = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+  'image/avif': '.avif',
+  'video/mp4': '.mp4',
+  'video/webm': '.webm',
+  'video/quicktime': '.mov',
+  'video/x-matroska': '.mkv',
+  'audio/mpeg': '.mp3',
+  'audio/ogg': '.ogg',
+  'audio/wav': '.wav',
+  'audio/webm': '.webm',
+  'application/pdf': '.pdf',
+  'application/zip': '.zip',
+  'application/x-7z-compressed': '.7z',
+  'application/x-rar-compressed': '.rar',
+  'text/plain': '.txt',
+  'application/json': '.json',
+  'application/octet-stream': '.bin',
+};
+
 function safeName(name) {
   return String(name || 'arquivo')
     .replace(/[^a-zA-Z0-9._-]+/g, '_')
@@ -107,7 +138,7 @@ router.post('/upload', requireAuth, async (req, res) => {
       });
     }
 
-    const ext = path.extname(name).slice(0, 12);
+    const ext = SAFE_EXTENSION_BY_MIME[mime] || '.bin';
 
     const filename =
       `${Date.now()}-${crypto.randomBytes(10).toString('hex')}${ext}`;

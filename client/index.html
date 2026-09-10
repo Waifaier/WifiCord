@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WifiCord</title>
 <link rel="icon" href="/assets/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -24,6 +27,7 @@
 <section id="auth-screen" class="screen">
   <div class="auth-shell">
     <aside class="auth-showcase" aria-hidden="true">
+      <canvas id="auth-orbit"></canvas>
       <div class="signal-mark">
         <span class="signal-arc signal-arc-3"></span>
         <span class="signal-arc signal-arc-2"></span>
@@ -191,13 +195,13 @@
     <ul id="messages-list" class="messages-list"></ul>
 
     <div id="chat-empty-hero" class="chat-empty-hero" aria-hidden="true">
-      <div class="chat-empty-icon">💬</div>
+      <div class="chat-empty-icon" data-icon="chat"></div>
       <h2 class="chat-empty-title">Selecione uma <span>conversa</span></h2>
       <p class="chat-empty-sub">Escolha um amigo na barra lateral para começar a conversar.</p>
       <div class="chat-empty-cards">
-        <div class="chat-empty-card"><span class="chat-empty-card-icon">👥</span><b>Faça novos amigos</b><small>Conecte-se com a galera</small></div>
-        <div class="chat-empty-card"><span class="chat-empty-card-icon">💬</span><b>Converse livremente</b><small>Troque ideias e momentos</small></div>
-        <div class="chat-empty-card"><span class="chat-empty-card-icon">🔒</span><b>Tudo com segurança</b><small>Suas conversas protegidas</small></div>
+        <div class="chat-empty-card"><span class="chat-empty-card-icon" data-icon="users"></span><b>Faça novos amigos</b><small>Conecte-se com a galera</small></div>
+        <div class="chat-empty-card"><span class="chat-empty-card-icon" data-icon="chat"></span><b>Converse livremente</b><small>Troque ideias e momentos</small></div>
+        <div class="chat-empty-card"><span class="chat-empty-card-icon" data-icon="lock"></span><b>Tudo com segurança</b><small>Suas conversas protegidas</small></div>
       </div>
     </div>
 
@@ -407,7 +411,7 @@
 
       <section class="wc-editor-section wc-status-section">
         <div class="wc-editor-section-title"><span>Status</span><small>Seu estado atual</small></div>
-        <div class="status-options"><button type="button" data-status="online">🟢 Online</button><button type="button" data-status="away">🌙 Ausente</button><button type="button" data-status="offline">⚫ Offline</button></div>
+        <div class="status-options"><button type="button" data-status="online"><i class="status-dot-icon"></i>Online</button><button type="button" data-status="away"><i class="status-dot-icon"></i>Ausente</button><button type="button" data-status="offline"><i class="status-dot-icon"></i>Offline</button></div>
         <div class="status-custom-row"><input id="settings-status-emoji" maxlength="4" placeholder="🙂"><input id="settings-status-text" maxlength="128" placeholder="Status personalizado"></div>
         <button type="button" id="settings-save-status" class="btn btn-small">Salvar status</button>
       </section>
@@ -530,10 +534,10 @@
 
   <div id="modal-share-screen" class="modal modal-share-screen hidden">
     <div class="share-header"><div><h3>Compartilhar sua tela</h3><p class="text-muted">Escolha o que compartilhar e a qualidade da apresentação.</p></div><span class="share-lock" id="share-quality-badge">720p</span></div>
-    <div class="share-tabs"><button class="share-tab active" data-share-tab="screen">🖥️ Tela</button><button class="share-tab" data-share-tab="window">🪟 Janela</button><button class="share-tab" data-share-tab="tab">🌐 Aba</button></div>
-    <div class="share-pane active" data-share-pane="screen"><div class="share-source-card"><div class="share-source-icon">🖥️</div><div><b>Tela inteira</b><small>Mostra tudo o que estiver na tela.</small></div></div></div>
-    <div class="share-pane" data-share-pane="window"><div class="share-source-card"><div class="share-source-icon">🪟</div><div><b>Janela</b><small>Compartilhe apenas uma janela.</small></div></div></div>
-    <div class="share-pane" data-share-pane="tab"><div class="share-source-card"><div class="share-source-icon">🌐</div><div><b>Aba do navegador</b><small>Ideal para vídeos e sites.</small></div></div></div>
+    <div class="share-tabs"><button class="share-tab active" data-share-tab="screen"><span data-icon="monitor"></span> Tela</button><button class="share-tab" data-share-tab="window"><span data-icon="window"></span> Janela</button><button class="share-tab" data-share-tab="tab"><span data-icon="globe"></span> Aba</button></div>
+    <div class="share-pane active" data-share-pane="screen"><div class="share-source-card"><div class="share-source-icon" data-icon="monitor"></div><div><b>Tela inteira</b><small>Mostra tudo o que estiver na tela.</small></div></div></div>
+    <div class="share-pane" data-share-pane="window"><div class="share-source-card"><div class="share-source-icon" data-icon="window"></div><div><b>Janela</b><small>Compartilhe apenas uma janela.</small></div></div></div>
+    <div class="share-pane" data-share-pane="tab"><div class="share-source-card"><div class="share-source-icon" data-icon="globe"></div><div><b>Aba do navegador</b><small>Ideal para vídeos e sites.</small></div></div></div>
     <div class="resolution-grid"><button data-resolution="720">720p<small>Sem WFNA</small></button><button data-resolution="1080">1080p<small>WFNA</small></button><button data-resolution="1440">1440p<small>WFNA</small></button><button data-resolution="2160">4K<small>WFNA</small></button></div>
     <label class="settings-toggle"><input type="checkbox" id="share-system-audio"> Compartilhar áudio do sistema (quando disponível)</label>
     <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Cancelar</button><button id="share-screen-confirm" class="btn btn-primary">Começar apresentação</button></div>
@@ -628,6 +632,8 @@
      de antes. Isso reduz bastante o tempo até o app ficar interativo,
      principalmente em conexões móveis/wifi mais lentas. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
+<script src="/js/auth-3d.js" defer></script>
 <script src="/js/redesign-ui.js" defer></script>
 <script src="/js/icons.js" defer></script>
 <script src="/js/socket.js" defer></script>

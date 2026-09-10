@@ -65,8 +65,42 @@ const ServerModel = {
   },
   getLocalNickname(ownerId,targetId){ return db.prepare('SELECT nickname FROM user_local_nicknames WHERE owner_user_id=? AND target_user_id=?').get(ownerId,targetId)?.nickname || null; },
   createRole(serverId,name,color,position,permissions={}){ const info=db.prepare('INSERT INTO server_roles(server_id,name,color,position,is_default,permissions_json) VALUES(?,?,?,?,0,?)').run(serverId,String(name).trim().slice(0,32),String(color||'#99aab5'),Number(position)||0,JSON.stringify(permissions)); return db.prepare('SELECT * FROM server_roles WHERE id=?').get(info.lastInsertRowid); },
+  findRole(serverId,roleId){ return db.prepare('SELECT * FROM server_roles WHERE id=? AND server_id=?').get(roleId,serverId); },
+  updateRole(serverId,roleId,{name,color,position,permissions}={}){
+    const current=ServerModel.findRole(serverId,roleId); if(!current) return null;
+    db.prepare('UPDATE server_roles SET name=?,color=?,position=?,permissions_json=? WHERE id=? AND server_id=?').run(
+      String(name??current.name).trim().slice(0,32)||current.name,
+      String(color||current.color||'#99aab5'),
+      Number.isFinite(Number(position))?Number(position):current.position,
+      JSON.stringify(permissions&&typeof permissions==='object'?permissions:JSON.parse(current.permissions_json||'{}')),
+      roleId,serverId
+    );
+    const updated=ServerModel.findRole(serverId,roleId);
+    return {id:updated.id,name:updated.name,color:updated.color,position:updated.position,isDefault:!!updated.is_default,permissions:JSON.parse(updated.permissions_json||'{}')};
+  },
   assignRole(serverId,userId,roleId){ db.prepare('INSERT OR IGNORE INTO server_member_roles(server_id,user_id,role_id) VALUES(?,?,?)').run(serverId,userId,roleId); },
   removeRole(serverId,userId,roleId){ db.prepare('DELETE FROM server_member_roles WHERE server_id=? AND user_id=? AND role_id=?').run(serverId,userId,roleId); },
+  countChannels(serverId){ return db.prepare('SELECT COUNT(*) n FROM channels WHERE server_id=?').get(serverId).n; },
+  // "Mídia do servidor" é a mídia que já foi de fato compartilhada nos
+  // canais desse servidor (mensagens __MEDIA__:...), não qualquer upload
+  // de qualquer membro feito em qualquer lugar do app.
+  listServerMedia(serverId){
+    const rows=db.prepare(`
+      SELECT m.content FROM messages m
+      JOIN channels c ON c.id = m.channel_id
+      WHERE c.server_id = ? AND m.content LIKE '__MEDIA__:%'
+      ORDER BY m.id DESC LIMIT 400
+    `).all(serverId);
+    const seen=new Set(); const result=[];
+    for(const r of rows){
+      let media; try{ media=JSON.parse(r.content.slice(10)); }catch(_){ continue; }
+      const id=Number(media?.id); if(!id||seen.has(id)) continue; seen.add(id);
+      const mf=db.prepare('SELECT * FROM media_files WHERE id=?').get(id);
+      if(mf) result.push(mf);
+      if(result.length>=200) break;
+    }
+    return result;
+  },
   getSettings(serverId) {
     const row = db.prepare('SELECT settings_json FROM server_settings WHERE server_id=?').get(serverId);
     let settings={}; try{settings=row?.settings_json?JSON.parse(row.settings_json):{}}catch(_){settings={};}

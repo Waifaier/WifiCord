@@ -4,9 +4,11 @@ const db=require('../database/db');
 const User=require('../models/User');
 const {requireAuth}=require('./auth');
 const router=express.Router();
-const COOLDOWN=0;
+const COOLDOWN=10000; // 10s entre partidas — impede farm automatizado via chamadas diretas à API
 const MAX_REWARD=500;
+const MIN_MS_PER_POINT=300; // uma partida real não sobe o placar mais rápido que isso
 const active=new Map();
+const lastFinishAt=new Map(); // userId -> timestamp da última partida encerrada
 
 function ensureTable(){
   db.exec(`CREATE TABLE IF NOT EXISTS minigame_sessions (id TEXT PRIMARY KEY,user_id INTEGER NOT NULL,game TEXT NOT NULL,started_at INTEGER NOT NULL,finished_at INTEGER,reward INTEGER NOT NULL DEFAULT 0,score INTEGER NOT NULL DEFAULT 0,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)`);
@@ -17,12 +19,15 @@ ensureTable();
 router.get('/status',requireAuth,(req,res)=>{
   const uid=req.session.userId;
   const last=db.prepare("SELECT started_at,finished_at,score,reward FROM minigame_sessions WHERE user_id=? AND game='flappy-cubes' ORDER BY started_at DESC LIMIT 1").get(uid);
-  const available=true; const next=0;
-  res.json({game:'flappy-cubes',available,nextAvailableAt:available?null:next,last:last||null,user:User.toPublic(User.findById(uid))});
+  const nextAvailableAt=(lastFinishAt.get(uid)||0)+COOLDOWN;
+  const available=Date.now()>=nextAvailableAt;
+  res.json({game:'flappy-cubes',available,nextAvailableAt:available?null:nextAvailableAt,last:last||null,user:User.toPublic(User.findById(uid))});
 });
 
 router.post('/flappy-cubes/start',requireAuth,(req,res)=>{
   const uid=req.session.userId, now=Date.now();
+  const nextAvailableAt=(lastFinishAt.get(uid)||0)+COOLDOWN;
+  if(now<nextAvailableAt) return res.status(429).json({error:'Aguarde um pouco antes de jogar de novo.',nextAvailableAt});
   const id=crypto.randomUUID();
   db.prepare("INSERT INTO minigame_sessions(id,user_id,game,started_at) VALUES(?,?,?,?)").run(id,uid,'flappy-cubes',now);
   active.set(id,{userId:uid,startedAt:now});
@@ -30,11 +35,22 @@ router.post('/flappy-cubes/start',requireAuth,(req,res)=>{
 });
 
 router.post('/flappy-cubes/finish',requireAuth,(req,res)=>{
-  const uid=req.session.userId, id=String(req.body.sessionId||''), score=Math.max(0,Math.min(500,Math.floor(Number(req.body.score)||0)));
+  const uid=req.session.userId, id=String(req.body.sessionId||'');
   const session=active.get(id) || db.prepare("SELECT * FROM minigame_sessions WHERE id=? AND user_id=? AND game='flappy-cubes'").get(id,uid);
-  if(!session || Number(session.userId)!==Number(uid)) return res.status(400).json({error:'Partida inválida.'});
+  const startedAt=Number(session && (session.startedAt ?? session.started_at));
+  if(!session || Number(session.userId ?? session.user_id)!==Number(uid) || !Number.isFinite(startedAt)) return res.status(400).json({error:'Partida inválida.'});
   const row=db.prepare('SELECT * FROM minigame_sessions WHERE id=?').get(id);
   if(row?.finished_at) return res.status(409).json({error:'Esta partida já foi encerrada.'});
+
+  // O placar nunca é aceito só porque o cliente mandou: ele é limitado ao
+  // que é fisicamente possível alcançar no tempo real de jogo daquela
+  // sessão (marcada no servidor em /start). Isso impede chamar /finish
+  // direto na API com um placar alto sem ter jogado de verdade.
+  const elapsedMs=Date.now()-startedAt;
+  const plausibleMax=Math.max(0,Math.floor(elapsedMs/MIN_MS_PER_POINT));
+  const requestedScore=Math.max(0,Math.min(500,Math.floor(Number(req.body.score)||0)));
+  const score=Math.min(requestedScore,plausibleMax);
+
   const reward=Math.min(MAX_REWARD,score*10);
   const tx=db.transaction(()=>{
     db.prepare('UPDATE minigame_sessions SET finished_at=?,score=?,reward=? WHERE id=?').run(Date.now(),score,reward,id);
@@ -44,7 +60,8 @@ router.post('/flappy-cubes/finish',requireAuth,(req,res)=>{
     }
   });
   tx(); active.delete(id);
-  res.json({ok:true,score,reward,user:User.toPublic(User.findById(uid)),nextAvailableAt:null});
+  lastFinishAt.set(uid,Date.now());
+  res.json({ok:true,score,reward,user:User.toPublic(User.findById(uid)),nextAvailableAt:Date.now()+COOLDOWN});
 });
 
 module.exports=router;

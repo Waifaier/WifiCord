@@ -78,7 +78,27 @@ app.use(sessionMiddleware);
 // passa a usar a cópia local por até 1 dia e ainda revalida por ETag.
 const staticOpts = { maxAge: '1d', etag: true, lastModified: true };
 app.use(express.static(path.join(__dirname, '..', 'client'), staticOpts));
-app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d', index: false }));
+
+// Arquivos enviados por usuários (uploads) nunca devem ser interpretados
+// como HTML/JS pelo navegador, mesmo que algum arquivo antigo tenha
+// ficado salvo com uma extensão inesperada. Qualquer extensão fora desta
+// lista de mídia conhecida é servida como download genérico, nunca inline.
+const UPLOADS_INLINE_SAFE_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif',
+  '.mp4', '.webm', '.mov', '.mkv',
+  '.mp3', '.ogg', '.wav', '.pdf',
+]);
+app.use('/uploads', express.static(UPLOAD_DIR, {
+  maxAge: '7d',
+  index: false,
+  setHeaders(res, filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    if (!UPLOADS_INLINE_SAFE_EXTENSIONS.has(ext)) {
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Disposition', 'attachment');
+    }
+  },
+}));
 
 app.use('/api/auth', authRouter);
 app.use('/api/friends', friendsRouter);

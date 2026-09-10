@@ -1,0 +1,112 @@
+// Órbita 3D discreta atrás da tela de entrada (login/registro).
+// Requisitos que este arquivo respeita de propósito:
+// - Nunca quebra a tela de login se o WebGL ou o Three.js não estiverem
+//   disponíveis: nesse caso simplesmente não desenha nada (o CSS já cobre
+//   o fundo com um degradê estático).
+// - Para de renderizar assim que a tela de entrada sai de vista (depois do
+//   login) e quando a aba não está visível, para não gastar GPU/bateria à
+//   toa em segundo plano.
+// - Respeita "prefers-reduced-motion": desenha um quadro único parado, sem
+//   loop de animação.
+(function () {
+  function start() {
+    var canvas = document.getElementById('auth-orbit');
+    var authScreen = document.getElementById('auth-screen');
+    if (!canvas || !authScreen || typeof THREE === 'undefined') return;
+
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    var renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+    } catch (_) {
+      return; // sem WebGL: fica só o degradê CSS, sem erro nenhum no console
+    }
+
+    var scene = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+    camera.position.set(0, 0, 6.2);
+
+    var group = new THREE.Group();
+    var geometry = new THREE.IcosahedronGeometry(2.1, 1);
+
+    var wireframe = new THREE.LineSegments(
+      new THREE.WireframeGeometry(geometry),
+      new THREE.LineBasicMaterial({ color: 0x7c5cff, transparent: true, opacity: 0.55 })
+    );
+    group.add(wireframe);
+
+    var vertexCount = geometry.attributes.position.count;
+    var points = [];
+    for (var i = 0; i < vertexCount; i++) {
+      points.push(new THREE.Vector3(
+        geometry.attributes.position.getX(i),
+        geometry.attributes.position.getY(i),
+        geometry.attributes.position.getZ(i)
+      ));
+    }
+    var dots = new THREE.Points(
+      new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.PointsMaterial({ color: 0x22d3ee, size: 0.05, transparent: true, opacity: 0.9 })
+    );
+    group.add(dots);
+
+    scene.add(group);
+    var light = new THREE.PointLight(0x7c5cff, 1.2);
+    light.position.set(3, 2, 4);
+    scene.add(light);
+    scene.add(new THREE.AmbientLight(0x22d3ee, 0.3));
+
+    function resize() {
+      var w = canvas.clientWidth;
+      var h = canvas.clientHeight;
+      if (!w || !h) return;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+
+    var resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
+    if (resizeObserver) resizeObserver.observe(canvas);
+    window.addEventListener('resize', resize);
+    resize();
+
+    var frameId = null;
+
+    function isVisible() {
+      return !authScreen.classList.contains('hidden') && !document.hidden && canvas.clientWidth > 0;
+    }
+
+    function renderFrame(t) {
+      if (!isVisible()) { frameId = null; return; }
+      group.rotation.y = t * 0.00018;
+      group.rotation.x = Math.sin(t * 0.00012) * 0.25;
+      renderer.render(scene, camera);
+      frameId = requestAnimationFrame(renderFrame);
+    }
+
+    function maybeStart() {
+      if (reduceMotion) {
+        if (isVisible()) { resize(); renderer.render(scene, camera); }
+        return;
+      }
+      if (isVisible() && frameId === null) frameId = requestAnimationFrame(renderFrame);
+    }
+
+    // A tela de entrada troca a classe "hidden" via JS de app.js/auth.js
+    // depois do login — observamos isso para pausar o loop sem precisar
+    // mexer nesses outros arquivos.
+    var classObserver = new MutationObserver(maybeStart);
+    classObserver.observe(authScreen, { attributes: true, attributeFilter: ['class'] });
+    document.addEventListener('visibilitychange', maybeStart);
+
+    maybeStart();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
+  } else {
+    start();
+  }
+})();

@@ -912,7 +912,6 @@ router.post('/:serverId/channels', requireAuth, async (req, res, next) => {
       : [];
 
     if (
-      isPrivate &&
       !(await ServerModel.canManage(
         serverId,
         req.session.userId
@@ -920,7 +919,7 @@ router.post('/:serverId/channels', requireAuth, async (req, res, next) => {
     ) {
       return res.status(403).json({
         error:
-          'Somente administradores podem criar canais privados.',
+          'Somente administradores do servidor podem criar canais.',
       });
     }
 

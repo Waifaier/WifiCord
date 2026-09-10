@@ -30,6 +30,13 @@
     edit: svg('<path d="M4 20l1-4L16 5l4 4L9 20H5v-1z"/><path d="M14 7l3 3"/>'),
     more: svg('<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'),
     menu: svg('<path d="M4 7h16M4 12h16M4 17h16"/>'),
+    chat: svg('<path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/>'),
+    users: svg('<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2c2.8.4 4.5 2.6 4.5 5.8"/>'),
+    lock: svg('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>'),
+    monitor: svg('<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>'),
+    window: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><circle cx="6.5" cy="6.5" r=".4" fill="currentColor" stroke="none"/>'),
+    globe: svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.5 4 5.6 4 9s-1.4 6.5-4 9c-2.6-2.5-4-5.6-4-9s1.4-6.5 4-9z"/>'),
+    sparkles: svg('<path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>'),
   };
 
   function setIcon(id, name) {
@@ -63,6 +70,15 @@
     setIcon('mini-call-hangup', 'phone-off');
     setIcon('incoming-call-accept', 'phone');
     setIcon('incoming-call-reject', 'phone-off');
+    setIcon('sticker-btn', 'sparkles');
+
+    // Qualquer elemento marcado com data-icon="nome" recebe o SVG
+    // correspondente. Usado nos lugares gerados/estáticos do HTML que não
+    // têm um id fixo (cartões do estado vazio, abas de compartilhar tela).
+    document.querySelectorAll('[data-icon]').forEach(function (el) {
+      var name = el.getAttribute('data-icon');
+      if (ICONS[name]) el.innerHTML = ICONS[name];
+    });
 
     const miniStatus = document.querySelector('.mini-call-status');
     if (miniStatus) miniStatus.innerHTML = ICONS.phone + ' Em chamada';

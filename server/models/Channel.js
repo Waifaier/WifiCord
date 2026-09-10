@@ -61,6 +61,11 @@ const Channel = {
     return Channel.findById(id);
   },
 
+  delete(id) {
+    const info = db.prepare('DELETE FROM channels WHERE id = ?').run(id);
+    return info.changes > 0;
+  },
+
   toPublic(channel) {
     const ow = parseOverwrites(channel);
     return {
