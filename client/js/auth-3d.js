@@ -27,12 +27,15 @@
     var camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
     camera.position.set(0, 0, 6.2);
 
+    // Detalhe 0 (icosaedro simples, 20 faces) em vez de 1 (80 faces):
+    // menos linhas cruzando a tela, leitura mais limpa como acento, não
+    // como uma "teia" cobrindo o painel inteiro.
     var group = new THREE.Group();
-    var geometry = new THREE.IcosahedronGeometry(2.1, 1);
+    var geometry = new THREE.IcosahedronGeometry(2.3, 0);
 
     var wireframe = new THREE.LineSegments(
       new THREE.WireframeGeometry(geometry),
-      new THREE.LineBasicMaterial({ color: 0x7c5cff, transparent: true, opacity: 0.55 })
+      new THREE.LineBasicMaterial({ color: 0x7c5cff, transparent: true, opacity: 0.38 })
     );
     group.add(wireframe);
 
@@ -47,7 +50,7 @@
     }
     var dots = new THREE.Points(
       new THREE.BufferGeometry().setFromPoints(points),
-      new THREE.PointsMaterial({ color: 0x22d3ee, size: 0.05, transparent: true, opacity: 0.9 })
+      new THREE.PointsMaterial({ color: 0x22d3ee, size: 0.06, transparent: true, opacity: 0.6 })
     );
     group.add(dots);
 
