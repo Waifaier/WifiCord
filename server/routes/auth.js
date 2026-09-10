@@ -1,9 +1,10 @@
 const express = require('express');
-const crypto = require('crypto');
 const db = require('../database/db');
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
 const { normalizeEmail, isNonEmptyString } = require('../utils/validate');
+const { makeRateLimiter } = require('../utils/rateLimiter');
+const { codeMatches } = require('../utils/adminAuth');
 
 
 function cleanProfileCustomization(input) {
@@ -47,28 +48,9 @@ function cleanProfileCustomization(input) {
 const router = express.Router();
 
 // Rate limiting simples em memória para rotas sensíveis a força bruta
-// (login/registro). Sem dependência nova: mesmo padrão de janela fixa por
-// IP já usado no cooldown de games.js.
-function makeRateLimiter(windowMs, max) {
-  const hits = new Map();
-  return function (req, res, next) {
-    const key = req.ip || (req.connection && req.connection.remoteAddress) || 'unknown';
-    const now = Date.now();
-    const entry = hits.get(key);
-    if (!entry || now - entry.windowStart > windowMs) {
-      hits.set(key, { count: 1, windowStart: now });
-      return next();
-    }
-    entry.count++;
-    if (entry.count > max) {
-      const retryAfterSec = Math.ceil((entry.windowStart + windowMs - now) / 1000);
-      res.set('Retry-After', String(retryAfterSec));
-      return res.status(429).json({ error: 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' });
-    }
-    next();
-  };
-}
-
+// (login/registro). Implementação em server/utils/rateLimiter.js (testada
+// em test/rateLimiter.test.js), mesmo padrão de janela fixa por IP já
+// usado no cooldown de games.js.
 const loginLimiter = makeRateLimiter(5 * 60 * 1000, 10);   // 10 tentativas / 5 min / IP
 const registerLimiter = makeRateLimiter(60 * 60 * 1000, 6); // 6 contas novas / hora / IP
 
@@ -371,19 +353,8 @@ function hasAnyAdmin() {
   return !!db.prepare("SELECT 1 FROM users WHERE role='admin' LIMIT 1").get();
 }
 
-function codeMatches(provided) {
-  const expected = String(process.env.ADMIN_CLAIM_CODE || '');
-  if (!expected) return false;
-  const a = Buffer.from(String(provided || ''));
-  const b = Buffer.from(expected);
-  // Compara sempre um par de buffers do mesmo tamanho, pra não vazar por
-  // timing o tamanho do código configurado quando o comprimento não bate.
-  if (a.length !== b.length) {
-    crypto.timingSafeEqual(b, b);
-    return false;
-  }
-  return crypto.timingSafeEqual(a, b);
-}
+// codeMatches (comparação de tempo constante) vem de
+// server/utils/adminAuth.js — testada em test/adminAuth.test.js.
 
 // Limite simples de tentativas por usuário (em memória; reinicia com o
 // processo, o que é aceitável aqui pois o objetivo é só dificultar força
@@ -410,7 +381,7 @@ router.post('/claim-admin', requireAuth, (req, res) => {
   if (!claimAllowed(req.session.userId)) return res.status(429).json({ error: 'Muitas tentativas. Tente novamente mais tarde.' });
 
   const code = String(req.body?.code || '');
-  if (!codeMatches(code)) return res.status(400).json({ error: 'Código incorreto.' });
+  if (!codeMatches(code, process.env.ADMIN_CLAIM_CODE)) return res.status(400).json({ error: 'Código incorreto.' });
 
   const updated = User.setRole(req.session.userId, 'admin');
   claimAttempts.delete(req.session.userId);

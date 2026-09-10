@@ -6,7 +6,8 @@
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
-    "admin:setup": "node scripts/admin-setup.js"
+    "admin:setup": "node scripts/admin-setup.js",
+    "test": "node --test"
   },
   "engines": {
     "node": "22.x"

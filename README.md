@@ -132,7 +132,18 @@ Os arquivos de banco, `.env` e uploads não devem ser enviados ao GitHub.
 
 ## Testes
 
-O projeto foi verificado para:
+O projeto tem uma suíte de testes automatizados usando o test runner nativo do Node (`node --test`), sem dependência nova. Cobre a lógica pura/isolada que mais vale a pena testar sem precisar subir servidor ou banco:
+
+```bash
+npm test
+```
+
+- `test/validate.test.js` — validação de entrada (`server/utils/validate.js`).
+- `test/rateLimiter.test.js` — limitador de tentativas por IP usado em login/registro (`server/utils/rateLimiter.js`).
+- `test/gameFairness.test.js` — regra anti-fraude do minigame, que limita o placar ao que é fisicamente possível no tempo real de jogo (`server/utils/gameFairness.js`).
+- `test/adminAuth.test.js` — comparação de tempo constante do código de ativação do primeiro administrador (`server/utils/adminAuth.js`).
+
+Além disso, o projeto foi verificado manualmente para:
 
 - cadastro e login;
 - persistência da conta após reinício;

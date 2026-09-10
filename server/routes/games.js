@@ -3,6 +3,7 @@ const crypto=require('crypto');
 const db=require('../database/db');
 const User=require('../models/User');
 const {requireAuth}=require('./auth');
+const {clampScore,rewardForScore}=require('../utils/gameFairness');
 const router=express.Router();
 const COOLDOWN=10000; // 10s entre partidas — impede farm automatizado via chamadas diretas à API
 const MAX_REWARD=500;
@@ -46,12 +47,10 @@ router.post('/flappy-cubes/finish',requireAuth,(req,res)=>{
   // que é fisicamente possível alcançar no tempo real de jogo daquela
   // sessão (marcada no servidor em /start). Isso impede chamar /finish
   // direto na API com um placar alto sem ter jogado de verdade.
+  // Regra em server/utils/gameFairness.js — testada em test/gameFairness.test.js.
   const elapsedMs=Date.now()-startedAt;
-  const plausibleMax=Math.max(0,Math.floor(elapsedMs/MIN_MS_PER_POINT));
-  const requestedScore=Math.max(0,Math.min(500,Math.floor(Number(req.body.score)||0)));
-  const score=Math.min(requestedScore,plausibleMax);
-
-  const reward=Math.min(MAX_REWARD,score*10);
+  const score=clampScore(req.body.score,elapsedMs,MIN_MS_PER_POINT);
+  const reward=rewardForScore(score,MAX_REWARD);
   const tx=db.transaction(()=>{
     db.prepare('UPDATE minigame_sessions SET finished_at=?,score=?,reward=? WHERE id=?').run(Date.now(),score,reward,id);
     if(reward>0){
