@@ -44,11 +44,38 @@
     fullscreen: false, adminVoiceMutedUntil: 0,
     shareResolution: 720, shareType: 'screen', shareSystemAudio: false,
     groupMode: false, groupServerId: null, groupChannelId: null,
-    groupType: 'audio', groupPeers: new Map()
+    groupType: 'audio', groupPeers: new Map(),
+    qualityTimer: null
   };
 
   const el = {};
   const $ = id => document.getElementById(id);
+
+  // ---------------------------------------------------------------------
+  // Volume individual por participante (0-100%, independente do volume
+  // geral de saída). Guardado por usuário, sobrevive entre chamadas.
+  // ---------------------------------------------------------------------
+  const VOLUMES_KEY = 'wificord-call-user-volumes';
+  let userVolumes = {};
+  try { userVolumes = JSON.parse(localStorage.getItem(VOLUMES_KEY) || '{}') || {}; } catch (_) { userVolumes = {}; }
+
+  function getUserVolume(id) {
+    const v = Number(userVolumes[String(id)]);
+    return Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : 100;
+  }
+  function setUserVolume(id, value) {
+    const v = Math.max(0, Math.min(100, Number(value) || 0));
+    userVolumes[String(id)] = v;
+    try { localStorage.setItem(VOLUMES_KEY, JSON.stringify(userVolumes)); } catch (_) {}
+    return v;
+  }
+  // Combina o volume geral de saída (configurações) com o volume individual
+  // deste participante — os dois são independentes, multiplicam entre si.
+  function combinedVolume(id) {
+    const globalPct = Number(appState()?.currentUser?.settings?.outputVolume ?? 100);
+    const userPct = getUserVolume(id);
+    return Math.max(0, Math.min(1, (globalPct / 100) * (userPct / 100)));
+  }
 
   function cache() {
     Object.assign(el, {
@@ -68,7 +95,10 @@
       miniScreen: $('mini-call-screen'), miniHeadphones: $('mini-call-headphones'), miniHangup: $('mini-call-hangup'),
       serverVoiceBtn: $('start-server-voice-call-btn'), serverVideoBtn: $('start-server-video-call-btn'),
       serverCallGrid: $('server-call-grid'), shareModal: $('modal-share-screen'),
-      shareConfirm: $('share-screen-confirm'), shareSystemAudio: $('share-system-audio')
+      shareConfirm: $('share-screen-confirm'), shareSystemAudio: $('share-system-audio'),
+      qualityDot: $('call-quality-dot'),
+      remoteVolumeBtn: $('call-remote-volume-btn'), remoteVolumeMenu: $('call-remote-volume-menu'),
+      remoteVolumeRange: $('call-remote-volume-range'), remoteVolumeValue: $('call-remote-volume-value')
     });
   }
 
@@ -119,6 +149,15 @@
     }
     if (el.remoteLabel) el.remoteLabel.textContent = friendName(state.targetUserId);
     if (el.remoteLabelTop) el.remoteLabelTop.textContent = friendName(state.targetUserId);
+    syncVolumeUI();
+  }
+
+  // Mantém o slider de volume individual (topo da chamada 1:1) mostrando
+  // o valor salvo pro participante atual, sem precisar abrir/fechar o popover.
+  function syncVolumeUI() {
+    const pct = getUserVolume(state.targetUserId);
+    if (el.remoteVolumeRange) el.remoteVolumeRange.value = String(pct);
+    if (el.remoteVolumeValue) el.remoteVolumeValue.textContent = pct + '%';
   }
 
   function updateButtons() {
@@ -192,7 +231,26 @@
         throw new Error('Nenhuma faixa de microfone foi disponibilizada pelo navegador.');
       }
       audio.enabled = true;
-      stream.getVideoTracks().forEach(t => { t.enabled = video; });
+      // Se o dispositivo for desconectado fisicamente no meio da chamada
+      // (cabo do microfone/webcam puxado, dispositivo desligado), o
+      // navegador encerra a track sozinho — sem isso, a chamada ficava
+      // "muda"/sem câmera sem nenhum aviso visual do que aconteceu.
+      audio.onended = () => {
+        if (!state.inCall) return;
+        state.micEnabled = false;
+        updateButtons();
+        window.App?.toast('O microfone foi desconectado.', 'error');
+      };
+      stream.getVideoTracks().forEach(t => {
+        t.enabled = video;
+        t.onended = () => {
+          if (!state.inCall || !state.camEnabled) return;
+          state.camEnabled = false;
+          updateButtons();
+          ensureVideoPreview();
+          window.App?.toast('A câmera foi desconectada.', 'error');
+        };
+      });
       return stream;
     } catch (e) {
       if (e.name === 'NotAllowedError') throw new Error('Permita o microfone e a câmera nas permissões do navegador.');
@@ -230,7 +288,7 @@
     el.remoteAudio.autoplay = true;
     el.remoteAudio.playsInline = true;
     el.remoteAudio.muted = state.headphonesOff;
-    el.remoteAudio.volume = Math.max(0, Math.min(1, Number(appState()?.currentUser?.settings?.outputVolume ?? 100) / 100));
+    el.remoteAudio.volume = combinedVolume(state.targetUserId);
     window.Settings?.applyOutput?.(el.remoteAudio);
     const play = () => el.remoteAudio?.play?.().catch(() => {});
     play();
@@ -284,9 +342,11 @@
         state.reconnectAttempts = 0;
         setCallStatus('Conectado', 'connected');
         window.Sounds?.play('call-join');
+        startQualityMonitor(pc);
       }
-      if (connection === 'disconnected') scheduleReconnect(pc);
-      if (connection === 'failed') scheduleReconnect(pc, true);
+      if (connection === 'disconnected') { scheduleReconnect(pc); setQuality('unknown'); }
+      if (connection === 'failed') { scheduleReconnect(pc, true); stopQualityMonitor(); }
+      if (connection === 'closed') stopQualityMonitor();
     };
 
     pc.ontrack = e => {
@@ -319,16 +379,25 @@
     return pc;
   }
 
+  // Backoff crescente entre tentativas de reconexão (em ms). "disconnected"
+  // costuma ser uma oscilação passageira de rede (wifi instável, troca de
+  // rede no celular) — vale insistir bastante antes de desistir, em vez de
+  // declarar "conexão perdida" depois de só 2 tentativas rápidas.
+  const RECONNECT_DELAYS = [1500, 3000, 5000, 8000, 13000, 20000];
+  const MAX_RECONNECT_ATTEMPTS = RECONNECT_DELAYS.length;
+
   function scheduleReconnect(pc, forceIceRestart = false) {
     if (!state.inCall || state.pc !== pc || state.reconnectTimer) return;
     setCallStatus('Reconectando…', 'reconnecting');
+    setQuality('unknown');
+    const delay = RECONNECT_DELAYS[Math.min(state.reconnectAttempts, RECONNECT_DELAYS.length - 1)];
     state.reconnectTimer = setTimeout(async () => {
       state.reconnectTimer = null;
       if (!state.inCall || state.pc !== pc) return;
       if (pc.connectionState === 'connected') return;
-      if (state.reconnectAttempts >= 2) {
+      if (state.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
         setCallStatus('Conexão perdida', 'failed');
-        window.App?.toast('A conexão da chamada foi perdida.', 'error');
+        window.App?.toast('A conexão da chamada foi perdida. Tente ligar novamente.', 'error');
         return;
       }
       state.reconnectAttempts += 1;
@@ -337,7 +406,54 @@
           await negotiate(true);
         }
       } catch (e) { console.error('ICE restart:', e); }
-    }, 3000);
+      // Ainda não voltou: agenda a próxima tentativa (com o próximo passo
+      // do backoff), em vez de ficar parado esperando um evento que talvez
+      // não venha (ex.: rede trocou de wifi pra 4G sem disparar 'failed').
+      if (state.inCall && state.pc === pc && pc.connectionState !== 'connected') {
+        scheduleReconnect(pc, false);
+      }
+    }, delay);
+  }
+
+  // ---------------------------------------------------------------------
+  // Indicador de qualidade da chamada (bolinha verde/amarela/vermelha perto
+  // do status "Conectado"), baseado em RTT e perda de pacotes via
+  // RTCPeerConnection.getStats(). Cobre "falta feedback visual de
+  // qualidade/conexão".
+  // ---------------------------------------------------------------------
+  function setQuality(level) {
+    if (el.qualityDot) el.qualityDot.dataset.quality = level;
+  }
+
+  function startQualityMonitor(pc) {
+    stopQualityMonitor();
+    state.qualityTimer = setInterval(async () => {
+      if (!state.inCall || state.pc !== pc || pc.connectionState !== 'connected') return;
+      try {
+        const stats = await pc.getStats();
+        let rttMs = null, lossRatio = 0, packetsTotal = 0, packetsLost = 0;
+        stats.forEach(r => {
+          if (r.type === 'candidate-pair' && r.state === 'succeeded' && r.nominated) {
+            if (Number.isFinite(r.currentRoundTripTime)) rttMs = r.currentRoundTripTime * 1000;
+          }
+          if (r.type === 'inbound-rtp' && !r.isRemote && (r.kind === 'audio' || r.mediaType === 'audio')) {
+            packetsLost += Number(r.packetsLost) || 0;
+            packetsTotal += (Number(r.packetsLost) || 0) + (Number(r.packetsReceived) || 0);
+          }
+        });
+        if (packetsTotal > 0) lossRatio = packetsLost / packetsTotal;
+        let level = 'good';
+        if ((rttMs != null && rttMs > 350) || lossRatio > 0.08) level = 'poor';
+        else if ((rttMs != null && rttMs > 150) || lossRatio > 0.02) level = 'ok';
+        setQuality(level);
+      } catch (_) { /* getStats indisponível/instável: mantém o último valor */ }
+    }, 4000);
+  }
+
+  function stopQualityMonitor() {
+    clearInterval(state.qualityTimer);
+    state.qualityTimer = null;
+    setQuality('unknown');
   }
 
   async function flushCandidates(pc = state.pc) {
@@ -514,6 +630,7 @@
     if (notify && target) window.ChatSocket?.sendCallHangup?.({ toUserId: target });
     clearTimeout(state.reconnectTimer);
     state.reconnectTimer = null;
+    stopQualityMonitor();
     try { state.pc?.close(); } catch (_) {}
     state.localStream?.getTracks().forEach(t => t.stop());
     state.screenStream?.getTracks().forEach(t => t.stop());
@@ -839,12 +956,30 @@
       const tile = document.createElement('div');
       tile.className = 'server-call-tile';
       tile.dataset.userId = id;
-      tile.innerHTML = `<div class="server-call-tile-head"><b>${esc(u.displayName || u.username || 'Usuário')}</b><span class="server-call-tile-state">Conectando</span></div><video autoplay playsinline></video><div class="server-call-tile-avatar">${avatarMarkup(u)}</div>`;
+      const vol = getUserVolume(id);
+      tile.innerHTML = `<div class="server-call-tile-head"><b>${esc(u.displayName || u.username || 'Usuário')}</b><span class="server-call-tile-state">Conectando</span></div><video autoplay playsinline></video><div class="server-call-tile-avatar">${avatarMarkup(u)}</div><div class="server-call-tile-volume-wrap" title="Volume de ${esc(u.displayName || u.username || 'Usuário')}"><span class="server-call-tile-volume-icon">🔊</span><input type="range" class="server-call-tile-volume" min="0" max="100" value="${vol}" aria-label="Volume de ${esc(u.displayName || u.username || 'Usuário')}"></div>`;
       const video = tile.querySelector('video');
       if (peer.video) { video.srcObject = peer.video; video.classList.remove('hidden'); video.play?.().catch(() => {}); }
       else video.classList.add('hidden');
       el.serverCallGrid.appendChild(tile);
     }
+  }
+
+  // Um único listener delegado no grid inteiro, em vez de um por slider —
+  // sobrevive ao innerHTML='' que renderGroupTiles faz a cada participante
+  // que entra/sai.
+  function bindGroupVolumeControl() {
+    el.serverCallGrid?.addEventListener('input', e => {
+      const input = e.target.closest('.server-call-tile-volume');
+      if (!input) return;
+      const tile = input.closest('.server-call-tile');
+      const id = tile?.dataset.userId;
+      if (!id) return;
+      setUserVolume(id, input.value);
+      const peer = groupPeerPc(id);
+      const combined = combinedVolume(id);
+      peer?.audioStreams?.forEach(a => { a.volume = combined; });
+    });
   }
 
   function groupPeerPc(id) { return state.groupPeers.get(String(id)); }
@@ -853,7 +988,7 @@
     const id = String(peerId);
     if (groupPeerPc(id)) return groupPeerPc(id);
     const pc = new RTCPeerConnection(RTC_CONFIG);
-    const peer = { pc, video: null, audioStreams: [], pending: [], makingOffer: false };
+    const peer = { pc, video: null, audioStreams: [], pending: [], makingOffer: false, reconnectTimer: null, reconnectAttempts: 0 };
     try { pc.addTransceiver('audio', { direction: 'sendrecv' }); } catch (_) {}
     try { pc.addTransceiver('video', { direction: 'sendrecv' }); } catch (_) {}
     try { pc.addTransceiver('audio', { direction: 'sendrecv' }); } catch (_) {}
@@ -878,15 +1013,24 @@
       } else {
         const stream = e.streams?.[0] instanceof MediaStream ? e.streams[0] : new MediaStream([e.track]);
         const audioEl = document.createElement('audio');
-        audioEl.autoplay = true; audioEl.playsInline = true; audioEl.srcObject = stream; audioEl.volume = 1;
+        audioEl.autoplay = true; audioEl.playsInline = true; audioEl.srcObject = stream;
+        audioEl.volume = combinedVolume(id);
+        audioEl.muted = state.headphonesOff;
         audioEl.dataset.callPeer = id;
         document.body.appendChild(audioEl); peer.audioStreams.push(audioEl); audioEl.play?.().catch(() => {});
       }
     };
     pc.onconnectionstatechange = () => {
+      const st = pc.connectionState;
       const tile = el.serverCallGrid?.querySelector(`[data-user-id="${CSS.escape(id)}"] .server-call-tile-state`);
-      if (tile) tile.textContent = pc.connectionState === 'connected' ? 'Conectado' : pc.connectionState === 'connecting' ? 'Conectando' : 'Reconectando';
-      if (['failed', 'closed'].includes(pc.connectionState)) removeGroupPeer(id);
+      if (tile) tile.textContent = st === 'connected' ? 'Conectado' : st === 'connecting' ? 'Conectando' : (st === 'disconnected' || st === 'failed') ? 'Reconectando' : 'Conectando';
+      if (st === 'connected') { peer.reconnectAttempts = 0; clearTimeout(peer.reconnectTimer); peer.reconnectTimer = null; }
+      // "disconnected" costuma ser passageiro (oscilação de rede) — tenta
+      // reconectar em vez de derrubar o participante da chamada na hora,
+      // igual já é feito na chamada 1:1 (ver scheduleReconnect).
+      if (st === 'disconnected') scheduleGroupReconnect(id, peer, false);
+      if (st === 'failed') scheduleGroupReconnect(id, peer, true);
+      if (st === 'closed') removeGroupPeer(id);
     };
 
     if (initiator) {
@@ -895,9 +1039,38 @@
     return peer;
   }
 
+  // Mesma ideia de backoff crescente do scheduleReconnect (chamada 1:1),
+  // aplicada por participante da chamada de servidor: cada peer tenta se
+  // reconectar sozinho antes de ser removido da grade de vídeo.
+  function scheduleGroupReconnect(id, peer, forceIceRestart) {
+    if (!state.groupMode || !state.groupPeers.has(id) || peer.reconnectTimer) return;
+    const delay = RECONNECT_DELAYS[Math.min(peer.reconnectAttempts, RECONNECT_DELAYS.length - 1)];
+    peer.reconnectTimer = setTimeout(async () => {
+      peer.reconnectTimer = null;
+      if (!state.groupMode || !state.groupPeers.has(id)) return;
+      if (peer.pc.connectionState === 'connected') { peer.reconnectAttempts = 0; return; }
+      if (peer.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        removeGroupPeer(id);
+        return;
+      }
+      peer.reconnectAttempts += 1;
+      try {
+        if (forceIceRestart || peer.pc.connectionState === 'failed' || peer.pc.connectionState === 'disconnected') {
+          const offer = await peer.pc.createOffer({ iceRestart: true });
+          await peer.pc.setLocalDescription(offer);
+          window.ChatSocket?.sendServerCallOffer?.({ toUserId: Number(id), serverId: state.groupServerId, channelId: state.groupChannelId, callType: state.groupType, sdp: peer.pc.localDescription });
+        }
+      } catch (e) { console.error('ICE restart (chamada de servidor):', e); }
+      if (state.groupMode && state.groupPeers.has(id) && peer.pc.connectionState !== 'connected') {
+        scheduleGroupReconnect(id, peer, false);
+      }
+    }, delay);
+  }
+
   function removeGroupPeer(id) {
     const peer = state.groupPeers.get(String(id));
     if (!peer) return;
+    clearTimeout(peer.reconnectTimer);
     try { peer.pc.close(); } catch (_) {}
     peer.audioStreams?.forEach(a => a.remove());
     state.groupPeers.delete(String(id));
@@ -993,8 +1166,26 @@
     el.miniHeadphones?.addEventListener('click', () => {
       state.headphonesOff = !state.headphonesOff;
       if (el.remoteAudio) el.remoteAudio.muted = state.headphonesOff;
+      for (const peer of state.groupPeers.values()) {
+        peer.audioStreams?.forEach(a => { a.muted = state.headphonesOff; });
+      }
       el.miniHeadphones.textContent = state.headphonesOff ? '🔇' : '🎧';
     });
+    el.remoteVolumeBtn?.addEventListener('click', e => {
+      e.stopPropagation();
+      el.remoteVolumeMenu?.classList.toggle('hidden');
+    });
+    el.remoteVolumeRange?.addEventListener('input', () => {
+      const pct = setUserVolume(state.targetUserId, el.remoteVolumeRange.value);
+      if (el.remoteVolumeValue) el.remoteVolumeValue.textContent = pct + '%';
+      if (el.remoteAudio) el.remoteAudio.volume = combinedVolume(state.targetUserId);
+    });
+    document.addEventListener('click', e => {
+      if (!el.remoteVolumeMenu || el.remoteVolumeMenu.classList.contains('hidden')) return;
+      if (e.target === el.remoteVolumeBtn || el.remoteVolumeMenu.contains(e.target)) return;
+      el.remoteVolumeMenu.classList.add('hidden');
+    });
+    bindGroupVolumeControl();
     document.addEventListener('fullscreenchange', () => { state.fullscreen = !!document.fullscreenElement; });
     navigator.mediaDevices?.addEventListener?.('devicechange', () => window.Settings?.refreshDevices?.());
   }

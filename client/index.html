@@ -174,8 +174,16 @@
     <div id="call-bar" class="call-bar hidden">
       <div class="call-stage">
         <div class="call-stage-topbar">
-          <div class="call-stage-title"><span class="call-live-dot"></span><strong>Chamada</strong><span id="call-connection-status" data-state="connecting">Conectando…</span></div>
-          <div class="call-stage-peer" id="call-remote-label-top">Privado</div>
+          <div class="call-stage-title"><span class="call-live-dot"></span><strong>Chamada</strong><span id="call-connection-status" data-state="connecting">Conectando…</span><span id="call-quality-dot" class="call-quality-dot" data-quality="unknown" title="Qualidade da conexão"></span></div>
+          <div class="call-stage-peer-wrap">
+            <div class="call-stage-peer" id="call-remote-label-top">Privado</div>
+            <span class="call-control-group call-volume-group">
+              <button type="button" id="call-remote-volume-btn" class="call-device-arrow call-volume-btn" title="Volume deste participante" aria-label="Volume deste participante">🔊</button>
+              <div id="call-remote-volume-menu" class="call-device-menu call-volume-menu hidden">
+                <label class="call-volume-row">Volume <span id="call-remote-volume-value">100%</span><input type="range" id="call-remote-volume-range" min="0" max="100" value="100"></label>
+              </div>
+            </span>
+          </div>
         </div>
         <div id="server-call-grid" class="server-call-grid hidden"></div>
         <video id="remote-video" autoplay playsinline aria-label="Vídeo do participante"></video><audio id="remote-audio" autoplay playsinline></audio>
