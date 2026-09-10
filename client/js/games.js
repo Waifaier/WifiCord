@@ -43,6 +43,7 @@ function paletteAt(t){
   return { sky1:mix(PALETTE[i].sky1,PALETTE[j].sky1), sky2:mix(PALETTE[i].sky2,PALETTE[j].sky2), glow:mix(PALETTE[i].glow,PALETTE[j].glow) };
 }
 function hexToRgb(h){h=h.replace('#','');return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+function rgbaFrom(rgbStr,alpha){const m=/rgb\((\d+),(\d+),(\d+)\)/.exec(rgbStr);if(!m)return rgbStr;return `rgba(${m[1]},${m[2]},${m[3]},${alpha})`;}
 
 function open(){document.getElementById('modal-overlay')?.classList.remove('hidden');document.querySelectorAll('.modal').forEach(m=>m.classList.add('hidden'));$('modal-games')?.classList.remove('hidden');refreshStatus();}
 async function api(url,opt={}){opt=Object.assign({},opt,{credentials:'same-origin'});opt.headers=Object.assign({'Content-Type':'application/json'},opt.headers||{});const r=await fetch(url,opt);const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Erro no minigame.');return d;}
@@ -79,7 +80,7 @@ function draw(dt){
     n.x-=n.drift*(dt||0);
     if(n.x<-n.r)n.x=W+n.r; if(n.x>W+n.r)n.x=-n.r;
     const ng=ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,n.r);
-    ng.addColorStop(0,pal.glow+'22');ng.addColorStop(1,pal.glow+'00');
+    ng.addColorStop(0,rgbaFrom(pal.glow,0.13));ng.addColorStop(1,rgbaFrom(pal.glow,0));
     ctx.fillStyle=ng;ctx.beginPath();ctx.arc(n.x,n.y,n.r,0,Math.PI*2);ctx.fill();
   });
 

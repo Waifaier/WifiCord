@@ -159,6 +159,7 @@ document.getElementById('settings-save-profile-effects')?.addEventListener('clic
 // Autocomplete de @menção no composer
 // ---------------------------------------------------------------------
 (function(){
+  const input=document.getElementById('message-input');
   if(!input) return;
   const escM=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let box=null, active=false, tokenStart=-1, tokenEnd=-1, items=[], index=0;
