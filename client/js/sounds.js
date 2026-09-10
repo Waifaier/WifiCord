@@ -92,6 +92,23 @@
     // Feedback genérico
     'success': () => { tone(600, 0, 0.08, { gain: 0.07 }); tone(760, 0.08, 0.08, { gain: 0.07 }); tone(1000, 0.16, 0.14, { gain: 0.07 }); },
     'error': () => { tone(300, 0, 0.14, { gain: 0.08, type: 'square' }); tone(220, 0.12, 0.18, { gain: 0.07, type: 'square' }); },
+
+    // Minigame Flappy Cubes
+    'game-flap': () => tone(520, 0, 0.07, { gain: 0.06, type: 'triangle', glideTo: 700 }),
+    'game-score': () => { tone(880, 0, 0.07, { gain: 0.07, type: 'sine' }); tone(1180, 0.06, 0.09, { gain: 0.06, type: 'sine' }); },
+    'game-over': () => { tone(420, 0, 0.12, { gain: 0.08, type: 'sawtooth' }); tone(280, 0.11, 0.16, { gain: 0.07, type: 'sawtooth' }); tone(180, 0.24, 0.22, { gain: 0.06, type: 'sawtooth' }); },
+    // Uma nota por chamada, avançando por uma escala — usado em loop pelo
+    // startLoop('game-music') como trilha sonora ambiente do minigame.
+    'game-note': (() => {
+      const scale = [220.0, 261.63, 293.66, 329.63, 392.0, 440.0, 523.25];
+      let i = 0;
+      return () => {
+        const freq = scale[i % scale.length];
+        i++;
+        tone(freq, 0, 0.22, { gain: 0.035, type: 'triangle' });
+        if (i % 4 === 0) tone(freq / 2, 0, 0.3, { gain: 0.025, type: 'sine' });
+      };
+    })(),
   };
 
   function play(type) {
@@ -103,12 +120,15 @@
     } catch (_) {}
   }
 
-  // Loops para "ligando" (ringback, chamando alguém) e "recebendo chamada" (tocando).
-  const LOOP_INTERVAL = { incoming: 1600, ringback: 1000 };
+  // Loops para "ligando" (ringback, chamando alguém), "recebendo chamada"
+  // (tocando) e a trilha sonora ambiente do minigame ("game-music" — uma
+  // nota da escala por tick, criando uma linha melódica simples).
+  const LOOP_INTERVAL = { incoming: 1600, ringback: 1000, 'game-music': 260 };
+  const LOOP_SOUND = { incoming: 'call-ring', ringback: 'call-ringback', 'game-music': 'game-note' };
   function startLoop(kind) {
     stopLoop();
     if (!enabled) return;
-    const soundType = kind === 'incoming' ? 'call-ring' : 'call-ringback';
+    const soundType = LOOP_SOUND[kind] || 'call-ringback';
     const interval = LOOP_INTERVAL[kind] || 1500;
     const myToken = ++loopToken;
     play(soundType);
