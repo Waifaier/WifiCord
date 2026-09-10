@@ -45,7 +45,14 @@
     shareResolution: 720, shareType: 'screen', shareSystemAudio: false,
     groupMode: false, groupServerId: null, groupChannelId: null,
     groupType: 'audio', groupPeers: new Map(),
-    qualityTimer: null
+    qualityTimer: null,
+    // Fica false enquanto a troca inicial de oferta/resposta (startCall ou
+    // accept) ainda não terminou. Evita que o próprio navegador dispare
+    // 'negotiationneeded' (por causa dos addTransceiver no pcCreate) e
+    // mande uma OUTRA oferta em paralelo à oferta manual — essa oferta
+    // duplicada chegava do lado de quem atende como se fosse um segundo
+    // convite e derrubava a ligação (ver handleOffer/onnegotiationneeded).
+    negotiationReady: false
   };
 
   const el = {};
@@ -371,6 +378,7 @@
     };
 
     pc.onnegotiationneeded = async () => {
+      if (!state.negotiationReady) return; // troca inicial ainda em andamento — ver comentário no state
       if (!state.inCall || state.groupMode || state.pc !== pc) return;
       if (state.makingOffer) return;
       try { await negotiate(false); } catch (e) { console.error('Renegociação WebRTC:', e); }
@@ -398,6 +406,12 @@
       if (state.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
         setCallStatus('Conexão perdida', 'failed');
         window.App?.toast('A conexão da chamada foi perdida. Tente ligar novamente.', 'error');
+        // Encerra de vez (e avisa o outro lado) em vez de deixar state.inCall
+        // travado em true para sempre — isso deixava o usuário "preso" numa
+        // chamada morta (sem poder ligar pra outra pessoa) e, pior, o outro
+        // lado continuava recebendo ofertas de reconexão para uma chamada
+        // que já não existia mais aqui.
+        endCall(true);
         return;
       }
       state.reconnectAttempts += 1;
@@ -517,6 +531,7 @@
       const offer = await state.pc.createOffer();
       await state.pc.setLocalDescription(offer);
       window.ChatSocket?.sendCallOffer?.({ toUserId: target, sdp: state.pc.localDescription, callType: type, renegotiation: false });
+      state.negotiationReady = true;
     } catch (e) {
       window.App?.toast(e.message || 'Não foi possível iniciar a chamada.', 'error');
       endCall(false);
@@ -529,7 +544,25 @@
       handleRenegotiate(data).catch(console.error);
       return;
     }
+    // Oferta de renegociação/ICE-restart (ver negotiate()/scheduleReconnect)
+    // chegando para uma chamada da qual já não fazemos mais parte: é uma
+    // tentativa "zumbi" de reconexão do outro lado, não uma ligação nova.
+    // Tratar como convite novo fazia essa oferta reaparecer como "fulano
+    // está te ligando" repetidamente (em loop) depois que a chamada já
+    // tinha terminado do nosso lado.
+    if (data.renegotiation && !state.inCall) {
+      window.ChatSocket?.sendCallHangup?.({ toUserId: data.fromUserId });
+      return;
+    }
     if (state.inCall || state.pendingOffer) {
+      // Oferta duplicada do mesmo chamador que já está esperando resposta
+      // (ex.: corrida entre a oferta manual e um 'negotiationneeded'
+      // automático) — só atualiza o convite pendente em vez de derrubar a
+      // ligação que está prestes a ser atendida.
+      if (!state.inCall && state.pendingOffer && !data.renegotiation && String(state.pendingOffer.fromUserId) === String(data.fromUserId)) {
+        state.pendingOffer = data;
+        return;
+      }
       window.ChatSocket?.sendCallHangup?.({ toUserId: data.fromUserId });
       return;
     }
@@ -572,6 +605,7 @@
       await state.pc.setLocalDescription(answer);
       window.ChatSocket?.sendCallAnswer?.({ toUserId: d.fromUserId, sdp: state.pc.localDescription, renegotiation: false });
       state.pendingOffer = null;
+      state.negotiationReady = true;
     } catch (e) {
       window.App?.toast(e.message || 'Não foi possível atender.', 'error');
       state.pendingOffer = null;
@@ -631,6 +665,12 @@
     clearTimeout(state.reconnectTimer);
     state.reconnectTimer = null;
     stopQualityMonitor();
+    // Marca o fim da chamada ANTES de parar as tracks: em teoria .stop()
+    // não deveria disparar 'onended' (só o navegador desconectando o
+    // dispositivo deveria), mas isso varia entre navegadores/webviews — e
+    // os handlers de onended em getLocalStream() só se protegem checando
+    // state.inCall. Ficar defensivo aqui custa nada.
+    state.inCall = false;
     try { state.pc?.close(); } catch (_) {}
     state.localStream?.getTracks().forEach(t => t.stop());
     state.screenStream?.getTracks().forEach(t => t.stop());
@@ -641,9 +681,10 @@
     state.pc = null; state.localStream = null; state.screenStream = null;
     state.screenSender = null; state.systemAudioSender = null;
     state.pendingCandidates = []; state.targetUserId = null; state.pendingOffer = null;
-    state.inCall = false; state.micEnabled = true; state.camEnabled = false;
+    state.micEnabled = true; state.camEnabled = false;
     state.adminVoiceMutedUntil = 0; state._localSpeaking = false; state._remoteSpeaking = false;
     state.reconnectAttempts = 0; state.makingOffer = false; state.ignoreOffer = false;
+    state.negotiationReady = false;
     cleanupMediaElement(el.localVideo); cleanupMediaElement(el.remoteVideo);
     if (el.remoteAudio) { el.remoteAudio.pause?.(); el.remoteAudio.srcObject = null; }
     el.callBar?.classList.remove('audio-call', 'sharing', 'has-remote', 'has-remote-video', 'call-reconnecting');
