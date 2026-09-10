@@ -509,7 +509,7 @@
         const from = req.requester || {};
         return (
           '<li class="friend-request-item" data-friendship-id="' + escapeHtml(req.id) + '">' +
-          avatarHtml({ name: from.displayName, username: from.username, avatarUrl: from.avatarUrl }) +
+          '<div class="avatar-wrap">' + avatarHtml({ name: from.displayName, username: from.username, avatarUrl: from.avatarUrl }) + '</div>' +
           '<span class="friend-request-name">' + escapeHtml(from.displayName || from.username || 'Usuário') + '</span>' +
           '<div class="friend-request-actions">' +
           '<button type="button" class="btn-accept" data-action="accept" data-friendship-id="' + escapeHtml(req.id) + '">Aceitar</button>' +
@@ -2089,10 +2089,26 @@
         api('/api/friends/pending'),
       ]);
       state.friends = (friendsData && friendsData.friends) || [];
-      state.pendingRequests = (pendingData && pendingData.received) || [];
+      const newPending = (pendingData && pendingData.received) || [];
+
+      // Antes disso, um pedido de amizade novo só aparecia se a pessoa
+      // abrisse a aba "Solicitações" por conta própria — nada avisava na
+      // tela. Comparando com a lista anterior, dá pra saber quais pedidos
+      // são realmente novos desde a última sincronização e avisar com um
+      // toast + som, só para esses.
+      const previousIds = new Set(state.pendingRequests.map(function (r) { return String(r.id); }));
+      const freshlyArrived = newPending.filter(function (r) { return !previousIds.has(String(r.id)); });
+
+      state.pendingRequests = newPending;
       renderFriends();
       renderFriendRequests();
       renderDMQuickList();
+
+      freshlyArrived.forEach(function (req) {
+        const from = req.requester || {};
+        toast((from.displayName || from.username || 'Alguém') + ' te enviou um pedido de amizade.', 'info');
+      });
+      if (freshlyArrived.length) window.Sounds?.play?.('notification');
     } catch (_) {
       // O próximo evento/reconexão fará uma nova sincronização.
     }

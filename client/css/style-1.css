@@ -342,7 +342,14 @@ input:focus, textarea:focus {
 .mention-autocomplete-item:hover, .mention-autocomplete-item.active { background: var(--accent); }
 .mention-autocomplete-item:hover .mention-username, .mention-autocomplete-item.active .mention-username { color: #fff; opacity: .85; }
 
-.avatar-wrap { position: relative; display: inline-flex; flex-shrink: 0; }
+/* Sem tamanho fixo aqui, esse container ficava do tamanho do conteúdo
+   dentro dele — e pra quem tem qualquer cosmético de perfil equipado
+   (moldura/decoração/efeito), o avatar vira ".avatar-decorated", cujo
+   tamanho é sempre 100% do pai (ver mais abaixo). Sem essa âncora, o
+   avatar aparecia no tamanho real da imagem enviada (podia ser um
+   upload de vários megapixels) em vez de um círculo pequeno — a "foto
+   gigante" na barra do usuário e na lista de amigos/pedidos. */
+.avatar-wrap { position: relative; display: inline-flex; flex-shrink: 0; width: 40px; height: 40px; }
 
 .avatar-fallback, .avatar-img {
   width: 36px;
@@ -2651,10 +2658,14 @@ input:focus, select:focus, textarea:focus {
   width: 100%;
   height: 100%;
   opacity: .85;
-  pointer-events: none;
+  /* Interativo de propósito: dá pra arrastar e girar (ver auth-3d.js).
+     touch-action:none evita que o gesto vire scroll da página no celular. */
+  cursor: grab;
+  touch-action: none;
   -webkit-mask-image: radial-gradient(closest-side, #000 62%, transparent 100%);
   mask-image: radial-gradient(closest-side, #000 62%, transparent 100%);
 }
+#auth-orbit:active { cursor: grabbing; }
 .auth-showcase-title, .auth-showcase-sub {
   position: relative;
   z-index: 1;
