@@ -2958,12 +2958,21 @@ input:-webkit-autofill:focus {
    Barra de título própria do app desktop (ver frame:false em main.js e
    client/js/titlebar.js — só existe dentro do Electron, nunca numa aba de
    navegador normal). Escura e discreta em vez da barra vermelha padrão do
-   Windows/Linux com o nome do app. Bloco no fim do arquivo pelo mesmo
-   motivo dos de cima: algumas regras antigas de altura de #app-screen/
-   #auth-screen (100vh/100dvh, repetidas em vários pontos do arquivo) já
-   usam !important — só vencendo por ordem (empate de especificidade) dá
-   pra encolher essas telas na altura certa sem caçar e editar cada regra
-   antiga uma por uma. */
+   Windows/Linux com o nome do app.
+
+   MUDANÇA IMPORTANTE: a primeira versão disso encolhia #app-screen/
+   #auth-screen em 32px (height: calc(100dvh - 32px)) pra "abrir espaço"
+   pra barra sem sobrepor nada. Isso quebrou o layout da chamada inteiro
+   (avatar enorme cobrindo a tela, áreas pretas onde devia ter vídeo) —
+   o resto do arquivo tem MUITO código de chamada que assume implicitamente
+   que #app-screen/.call-stage ocupam a viewport inteira (100vh/100dvh)
+   sem desconto nenhum, incluindo contas de JS que usam
+   getBoundingClientRect() pra posicionar coisas. Mexer nessa altura por
+   um lado bagunçou essas contas por outro. Agora a barra é uma faixa fixa
+   SOBREPOSTA no topo (position:fixed), sem tirar nem somar altura de
+   NADA abaixo dela — o resto do app continua exatamente do tamanho que
+   sempre foi, só os 32px mais no topo (que normalmente já são só respiro/
+   ícone do topo da barra lateral) ficam por baixo da faixa. */
 html.has-custom-titlebar #wc-titlebar {
   display: flex;
   align-items: center;
@@ -2974,12 +2983,16 @@ html.has-custom-titlebar #wc-titlebar {
   border-bottom: 1px solid rgba(255,255,255,.06);
   -webkit-app-region: drag;
   user-select: none;
-  /* position+z-index bem alto pra ficar sempre visível/clicável mesmo com
-     um modal aberto por cima (.modal-overlay cobre a tela inteira, mas só
-     com z-index:50) — sem isso não dava pra minimizar/fechar a janela
-     enquanto qualquer modal (configurações, chamada recebida, etc.)
-     estivesse aberto. */
-  position: relative;
+  /* position:fixed cobrindo a largura toda, sempre no topo — não empurra
+     nem encolhe mais nada do resto da página (ver comentário acima). O
+     z-index bem alto garante que fica visível/clicável mesmo com um modal
+     aberto por cima (.modal-overlay cobre a tela inteira, mas só com
+     z-index:50) — sem isso não dava pra minimizar/fechar a janela com
+     qualquer modal (configurações, chamada recebida, etc.) aberto. */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 999999;
 }
 html.has-custom-titlebar #wc-titlebar .wc-titlebar-drag {
@@ -3012,18 +3025,10 @@ html.has-custom-titlebar .wc-titlebar-btn {
   color: #b7b2c6;
   cursor: pointer;
 }
+html.has-custom-titlebar .wc-titlebar-btn svg { width: 14px; height: 14px; overflow: visible; }
 html.has-custom-titlebar .wc-titlebar-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
 html.has-custom-titlebar .wc-titlebar-btn:active { background: rgba(255,255,255,.14); }
 html.has-custom-titlebar .wc-titlebar-btn-close:hover { background: var(--danger, #FF4D6D); color: #fff; }
 html.has-custom-titlebar .wc-ico-restore-back { display: none; }
 html.has-custom-titlebar .wc-titlebar-btn.is-maximized .wc-ico-restore-back { display: block; }
-html.has-custom-titlebar .wc-titlebar-btn.is-maximized .wc-ico-sq { transform: translate(-1.5px,-1.5px); }
-
-/* Encolhe as duas telas principais pela altura da barra — sem isso, como
-   elas usam height:100vh/100dvh fixo, ficariam 32px maiores que o espaço
-   que sobra abaixo da barra e a parte de baixo saía cortada da tela. */
-html.has-custom-titlebar #auth-screen,
-html.has-custom-titlebar #app-screen {
-  height: calc(100dvh - 32px) !important;
-  min-height: 0 !important;
-}
+html.has-custom-titlebar .wc-titlebar-btn.is-maximized .wc-ico-sq { transform: translate(-2px,-2px); }

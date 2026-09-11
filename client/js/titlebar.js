@@ -22,16 +22,16 @@
     '</div>' +
     '<div class="wc-titlebar-controls">' +
       '<button type="button" class="wc-titlebar-btn" id="wc-titlebar-min" title="Minimizar" aria-label="Minimizar">' +
-        '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><rect x="1.5" y="5.6" width="9" height="1" fill="currentColor"/></svg>' +
+        '<svg viewBox="0 0 10 10" aria-hidden="true"><line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>' +
       '</button>' +
       '<button type="button" class="wc-titlebar-btn" id="wc-titlebar-max" title="Maximizar" aria-label="Maximizar">' +
-        '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">' +
-          '<rect class="wc-ico-restore-back" x="3" y="1.5" width="7.5" height="7.5" fill="none" stroke="currentColor" stroke-width="1"/>' +
-          '<rect class="wc-ico-sq" x="1.5" y="3" width="7.5" height="7.5" fill="none" stroke="currentColor" stroke-width="1"/>' +
+        '<svg viewBox="0 0 10 10" aria-hidden="true">' +
+          '<rect class="wc-ico-restore-back" x="3" y="1" width="6" height="6" rx=".5" fill="none" stroke="currentColor" stroke-width="1"/>' +
+          '<rect class="wc-ico-sq" x="1" y="3" width="6" height="6" rx=".5" fill="var(--bg-deepest,#05060C)" stroke="currentColor" stroke-width="1"/>' +
         '</svg>' +
       '</button>' +
       '<button type="button" class="wc-titlebar-btn wc-titlebar-btn-close" id="wc-titlebar-close" title="Fechar" aria-label="Fechar">' +
-        '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" stroke-width="1.1" fill="none"/></svg>' +
+        '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.1" fill="none" stroke-linecap="round"/></svg>' +
       '</button>' +
     '</div>';
 
