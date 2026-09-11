@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Escolher tela ou janela</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, "Segoe UI", Arial, sans-serif; background:#0d0a18; color:#f1eefc; padding:18px; user-select:none; }
+  h1 { font-size:15px; font-weight:700; margin:0 0 4px; }
+  p { margin:0 0 14px; font-size:12px; color:#a9a1bb; }
+  .tabs { display:flex; gap:6px; margin-bottom:12px; }
+  .tab { padding:6px 14px; border-radius:8px; background:#1c1730; border:1px solid #2c2648; color:#cfc9e6; font-size:12px; cursor:pointer; }
+  .tab.active { background:#5b4bd6; color:#fff; border-color:#5b4bd6; }
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; height:340px; overflow-y:auto; padding-right:4px; align-content:start; }
+  .card { border:2px solid #2c2648; border-radius:10px; overflow:hidden; cursor:pointer; background:#151127; text-align:left; padding:0; }
+  .card.selected { border-color:#5b4bd6; box-shadow:0 0 0 2px rgba(91,75,214,.4); }
+  .thumb { width:100%; height:96px; object-fit:cover; background:#000; display:block; }
+  .label { padding:7px 8px; font-size:11px; color:#e5e1f5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .empty { grid-column:1/-1; padding:30px; text-align:center; color:#6f6890; font-size:12px; }
+  .actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+  button.btn { padding:8px 18px; border-radius:8px; border:1px solid #2c2648; background:#1c1730; color:#e5e1f5; font-size:12px; cursor:pointer; }
+  button.btn.primary { background:#5b4bd6; border-color:#5b4bd6; color:#fff; }
+  button.btn:disabled { opacity:.5; cursor:not-allowed; }
+</style>
+</head>
+<body>
+  <h1>Compartilhar tela ou janela</h1>
+  <p>Escolha o que você quer apresentar na chamada.</p>
+  <div class="tabs">
+    <div class="tab active" data-filter="screen">Telas</div>
+    <div class="tab" data-filter="window">Janelas</div>
+  </div>
+  <div class="grid" id="grid"><div class="empty">Carregando…</div></div>
+  <div class="actions">
+    <button class="btn" id="cancel">Cancelar</button>
+    <button class="btn primary" id="confirm" disabled>Compartilhar</button>
+  </div>
+  <script>
+    const { ipcRenderer } = require('electron');
+    let all = [];
+    let filter = 'screen';
+    let selectedId = null;
+    const grid = document.getElementById('grid');
+    const confirmBtn = document.getElementById('confirm');
+
+    function render() {
+      const list = all.filter(function (s) { return filter === 'screen' ? s.isScreen : !s.isScreen; });
+      grid.innerHTML = '';
+      if (!list.length) {
+        grid.innerHTML = '<div class="empty">Nada encontrado.</div>';
+        return;
+      }
+      list.forEach(function (s) {
+        const card = document.createElement('div');
+        card.className = 'card' + (s.id === selectedId ? ' selected' : '');
+        const img = document.createElement('img');
+        img.className = 'thumb';
+        img.src = s.thumbnail || '';
+        img.alt = '';
+        const label = document.createElement('div');
+        label.className = 'label';
+        label.textContent = s.name;
+        card.appendChild(img);
+        card.appendChild(label);
+        card.addEventListener('click', function () { selectedId = s.id; confirmBtn.disabled = false; render(); });
+        card.addEventListener('dblclick', function () { ipcRenderer.send('wifi-screen-picker:choose', s.id); });
+        grid.appendChild(card);
+      });
+    }
+
+    document.querySelectorAll('.tab').forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
+        tab.classList.add('active');
+        filter = tab.dataset.filter;
+        render();
+      });
+    });
+
+    document.getElementById('cancel').addEventListener('click', function () {
+      ipcRenderer.send('wifi-screen-picker:cancel');
+    });
+    confirmBtn.addEventListener('click', function () {
+      if (selectedId) ipcRenderer.send('wifi-screen-picker:choose', selectedId);
+    });
+
+    ipcRenderer.on('wifi-screen-picker:sources', function (_e, sources) {
+      all = sources || [];
+      if (!all.some(function (s) { return s.isScreen; })) filter = 'window';
+      document.querySelectorAll('.tab').forEach(function (t) {
+        t.classList.toggle('active', t.dataset.filter === filter);
+      });
+      render();
+    });
+
+    window.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') ipcRenderer.send('wifi-screen-picker:cancel');
+    });
+  </script>
+</body>
+</html>

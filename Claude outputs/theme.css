@@ -1,0 +1,145 @@
+
+/* ===== Temas do aplicativo (vários presets, incluindo claro e escuro) =====
+   Cada preset redefine as mesmas variáveis do :root padrão — o tema
+   "escuro" é o visual original do app, os demais trocam a paleta inteira. */
+[data-app-theme="claro"] {
+  --bg-deepest: #F3F4FA;
+  --bg-dark: #ECEEF6;
+  --bg-main: #FFFFFF;
+  --bg-elevated: #F7F8FC;
+  --bg-hover: #ECEEF7;
+  --accent-primary-start: #6C4CFF;
+  --accent-primary-end: #0EA5C4;
+  --accent-secondary: #8B6CF0;
+  --accent-violet-deep: #5B3FE0;
+  --accent-cyan: #0EA5C4;
+  --text-primary: #181A2A;
+  --text-secondary: #4A4F68;
+  --text-muted: #868DA8;
+  --glow-violet: rgba(108,76,255,.16);
+  --glow-cyan: rgba(14,165,196,.14);
+  --glass-bg: rgba(255,255,255,.66);
+  --glass-border: rgba(10,10,30,.08);
+}
+[data-app-theme="cyber"] {
+  --bg-deepest: #07040D;
+  --bg-dark: #0C0714;
+  --bg-main: #120A1E;
+  --bg-elevated: #1A1028;
+  --bg-hover: #241536;
+  --accent-primary-start: #FF2E88;
+  --accent-primary-end: #00F0FF;
+  --accent-secondary: #FF6EC7;
+  --accent-violet-deep: #B0179E;
+  --accent-cyan: #00F0FF;
+  --text-primary: #F8F5FF;
+  --text-secondary: #C9B8E6;
+  --text-muted: #8B7AA8;
+  --glow-violet: rgba(255,46,136,.4);
+  --glow-cyan: rgba(0,240,255,.35);
+  --glass-bg: rgba(24,10,32,.6);
+  --glass-border: rgba(255,110,199,.14);
+}
+[data-app-theme="sunset"] {
+  --bg-deepest: #150B08;
+  --bg-dark: #1C0F0A;
+  --bg-main: #24140E;
+  --bg-elevated: #2E1B12;
+  --bg-hover: #3A2417;
+  --accent-primary-start: #FF7A45;
+  --accent-primary-end: #FFC24B;
+  --accent-secondary: #FF9E6D;
+  --accent-violet-deep: #C2410C;
+  --accent-cyan: #FFB199;
+  --text-primary: #FFF3EA;
+  --text-secondary: #E3B79B;
+  --text-muted: #A6816D;
+  --glow-violet: rgba(255,122,69,.4);
+  --glow-cyan: rgba(255,194,75,.3);
+  --glass-bg: rgba(36,20,14,.6);
+  --glass-border: rgba(255,158,109,.14);
+}
+[data-app-theme="floresta"] {
+  --bg-deepest: #050C08;
+  --bg-dark: #08120C;
+  --bg-main: #0C1811;
+  --bg-elevated: #122217;
+  --bg-hover: #182D1F;
+  --accent-primary-start: #34D399;
+  --accent-primary-end: #A3E635;
+  --accent-secondary: #6EE7B7;
+  --accent-violet-deep: #0F766E;
+  --accent-cyan: #5EEAD4;
+  --text-primary: #EFFCF4;
+  --text-secondary: #A9D8BE;
+  --text-muted: #6E9683;
+  --glow-violet: rgba(52,211,153,.35);
+  --glow-cyan: rgba(163,230,53,.25);
+  --glass-bg: rgba(10,24,16,.6);
+  --glass-border: rgba(110,231,183,.14);
+}
+[data-app-theme="meianoite"] {
+  --bg-deepest: #02040D;
+  --bg-dark: #050815;
+  --bg-main: #080C1E;
+  --bg-elevated: #0F1530;
+  --bg-hover: #171F42;
+  --accent-primary-start: #4F6BFF;
+  --accent-primary-end: #38BDF8;
+  --accent-secondary: #818CF8;
+  --accent-violet-deep: #3730A3;
+  --accent-cyan: #38BDF8;
+  --text-primary: #EEF1FF;
+  --text-secondary: #AEB8E6;
+  --text-muted: #6C77A6;
+  --glow-violet: rgba(79,107,255,.4);
+  --glow-cyan: rgba(56,189,248,.3);
+  --glass-bg: rgba(8,12,30,.62);
+  --glass-border: rgba(129,140,248,.14);
+}
+[data-app-theme="quartzo"] {
+  --bg-deepest: #FFF3F7;
+  --bg-dark: #FFE9F0;
+  --bg-main: #FFFFFF;
+  --bg-elevated: #FFF5F9;
+  --bg-hover: #FFE9F1;
+  --accent-primary-start: #FF5C8A;
+  --accent-primary-end: #FFB199;
+  --accent-secondary: #FF8FB3;
+  --accent-violet-deep: #D6336C;
+  --accent-cyan: #FF9EC4;
+  --text-primary: #3A1220;
+  --text-secondary: #7A3348;
+  --text-muted: #A9748C;
+  --glow-violet: rgba(255,92,138,.18);
+  --glow-cyan: rgba(255,177,153,.16);
+  --glass-bg: rgba(255,255,255,.68);
+  --glass-border: rgba(214,51,108,.1);
+}
+[data-app-theme="mono"] {
+  --bg-deepest: #0A0A0C;
+  --bg-dark: #101012;
+  --bg-main: #16161A;
+  --bg-elevated: #1E1E23;
+  --bg-hover: #28282F;
+  --accent-primary-start: #9AA0AE;
+  --accent-primary-end: #D8DBE3;
+  --accent-secondary: #B6BBC7;
+  --accent-violet-deep: #6B7280;
+  --accent-cyan: #D8DBE3;
+  --text-primary: #F2F2F4;
+  --text-secondary: #B4B6BF;
+  --text-muted: #77787F;
+  --glow-violet: rgba(154,160,174,.22);
+  --glow-cyan: rgba(216,219,227,.16);
+  --glass-bg: rgba(20,20,23,.62);
+  --glass-border: rgba(255,255,255,.08);
+}
+
+/* Seletor visual de temas (Configurações > Aparência) */
+.theme-preset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:10px;margin:10px 0 16px;}
+.theme-preset-swatch{border:2px solid transparent;border-radius:var(--radius-md);padding:8px 4px 6px;background:var(--bg-elevated);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;transition:border-color .15s ease,transform .15s ease;}
+.theme-preset-swatch:hover{transform:translateY(-2px);}
+.theme-preset-swatch.active{border-color:var(--accent-primary-start);}
+.theme-preset-swatch i{display:block;width:32px;height:32px;border-radius:50%;box-shadow:0 2px 10px rgba(0,0,0,.35);}
+.theme-preset-swatch span{font-size:11px;color:var(--text-secondary);}

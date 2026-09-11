@@ -1,0 +1,59 @@
+name: Build e publicar app Desktop (Windows)
+
+# Roda quando algo muda dentro de desktop-app/ (a casca Electron) ou quando
+# você dispara manualmente pela aba "Actions" do GitHub. Mudanças só no site
+# (client/, server/) NÃO disparam isso — o app desktop carrega o site ao
+# vivo, então aquelas mudanças já aparecem sozinhas assim que o Render
+# terminar o deploy (ver client/js/desktop-update.js), sem precisar de um
+# instalador novo.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "desktop-app/**"
+      - ".github/workflows/desktop-release.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # precisa pra poder criar o Release com o instalador anexado
+
+jobs:
+  build-desktop:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop-app
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: desktop-app/package-lock.json
+
+      - name: Instalar dependências
+        run: npm install
+
+      - name: Calcular versão
+        id: version
+        shell: bash
+        run: |
+          NAME="1.0.${{ github.run_number }}"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Aplicar versão no package.json
+        shell: bash
+        run: npm pkg set version="${{ steps.version.outputs.name }}"
+
+      # --publish always: o electron-builder já monta o instalador (.exe),
+      # gera o latest.yml (é esse arquivo que o electron-updater usa pra
+      # saber se existe versão mais nova) e publica os dois direto numa
+      # Release nova no GitHub — tudo num passo só.
+      - name: Montar e publicar o instalador (.exe)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --publish always
