@@ -690,6 +690,19 @@
     const pc = new RTCPeerConnection(RTC_CONFIG);
     state.polite = polite;
     state.ignoreOffer = false;
+    state.negotiationPending = false;
+
+    // Destrava sozinho uma negociação que ficou pendente (ver comentário
+    // grande em negotiate()) assim que a ligação volta a ficar 'stable' —
+    // sem isso, compartilhar tela/câmera bem na hora errada podia nunca
+    // avisar o outro lado, e a pessoa não tinha como saber nem tentar de
+    // novo manualmente.
+    pc.onsignalingstatechange = () => {
+      if (pc.signalingState === 'stable' && state.negotiationPending && state.pc === pc && !state.groupMode) {
+        state.negotiationPending = false;
+        negotiate(false).catch(e => console.error('Renegociação pendente:', e));
+      }
+    };
 
     pc.onicecandidate = e => {
       if (e.candidate && state.targetUserId) {
@@ -940,8 +953,28 @@
   async function negotiate(iceRestart = false) {
     const pc = state.pc;
     if (!pc || !state.inCall || state.groupMode || !state.targetUserId) return;
-    if (state.makingOffer) return;
-    if (pc.signalingState !== 'stable' && !iceRestart) return;
+    // QUINTO motivo raiz possível pra "eu ligo a câmera/apresento e o outro
+    // nunca vê nada": até agora, se negotiate() era chamado enquanto já
+    // havia uma negociação em andamento (state.makingOffer) ou o
+    // signalingState não estava 'stable' — o que pode acontecer de verdade
+    // (ex.: o 'negotiationneeded' automático do navegador disparando por
+    // conta própria em cima dos 4 transceptores fixos, bem perto do
+    // momento em que a chamada conecta — ver negotiationReady) — a função
+    // simplesmente DESISTIA em silêncio, sem erro nenhum no console e sem
+    // avisar quem clicou em compartilhar tela/câmera. A troca de mídia
+    // continuava presa localmente (replaceTrack já tinha rodado, o sender
+    // já tinha a track certa), mas como NINGUÉM nunca mandou a oferta
+    // avisando o outro lado da mudança, o outro nunca respondia, e a
+    // transmissão nunca saía do lugar — apesar de toda a negociação em si
+    // (direção sendrecv, transceptores certos) estar 100% correta.
+    // Agora, em vez de desistir, guarda que uma negociação ficou pendente e
+    // tenta de novo sozinho assim que a ligação voltar a ficar 'stable'
+    // (ver pc.onsignalingstatechange em pcCreate) — sem exigir que a pessoa
+    // clique de novo em compartilhar tela pra "destravar".
+    if (state.makingOffer || (pc.signalingState !== 'stable' && !iceRestart)) {
+      state.negotiationPending = true;
+      return;
+    }
     state.makingOffer = true;
     try {
       const offer = sanitizeDescription(await pc.createOffer(iceRestart ? { iceRestart: true } : undefined));
@@ -953,6 +986,7 @@
         renegotiation: true,
         iceRestart: !!iceRestart
       });
+      state.negotiationPending = false;
     } finally {
       state.makingOffer = false;
     }
@@ -1242,7 +1276,21 @@
       track.enabled = state.camEnabled;
       ensureVideoPreview();
       ensureLocalCameraPip();
-      if (!state.groupMode && state.pc) await negotiate(false);
+      // SEXTO motivo raiz possível pra "ligo a câmera e o outro não vê":
+      // esse replaceTrack() acontece num transceptor que já existe desde o
+      // início da ligação com direction 'sendrecv' (ver addFixedTransceivers/
+      // bindFixedTransceivers) — trocar/anexar a track NÃO precisa de uma
+      // nova rodada de oferta/resposta pra sair pro outro lado, é só
+      // aplicar de verdade no transporte já estabelecido (é literalmente
+      // pra isso que replaceTrack existe, ao contrário de remover/adicionar
+      // um transceptor novo). O negotiate() manual que tinha aqui podia
+      // ficar preso em silêncio (ver comentário grande dentro de
+      // negotiate()) sem nenhum erro visível, e como nada mais reenviava a
+      // troca depois disso, o outro lado nunca ficava sabendo — mesmo com
+      // os bytes certos já saindo desse sender. Trocar dispositivo de
+      // câmera (switchDevice) nunca chamou negotiate() e sempre funcionou;
+      // tirando essa chamada daqui o "ligar câmera" passa a se comportar
+      // exatamente igual.
       updateButtons();
     } catch (e) {
       window.App?.toast(e.message || 'Não foi possível ligar a câmera.', 'error');
@@ -1375,7 +1423,16 @@
           await state.pc._wifiSystemAudioSender.replaceTrack(sys);
           state.systemAudioSender = state.pc._wifiSystemAudioSender;
         }
-        await negotiate(false);
+        // Mesmo motivo do toggleCam() (ver comentário lá): o transceptor de
+        // tela já existe como 'sendrecv' desde o início da ligação
+        // (addFixedTransceivers/bindFixedTransceivers), então replaceTrack()
+        // sozinho já é suficiente pra tela sair de verdade pro outro lado —
+        // não precisa de uma nova oferta/resposta. O negotiate() manual que
+        // tinha aqui podia ficar preso em silêncio numa corrida com o
+        // 'negotiationneeded' automático do navegador (ver comentário
+        // grande dentro de negotiate()), e como nada avisava o outro lado
+        // da apresentação começando, ele nunca chegava — apesar dos bytes
+        // já estarem saindo certos desse sender.
       }
 
       el.callBar?.classList.remove('audio-call', 'screen-minimized');
@@ -1423,7 +1480,12 @@
       if (state.systemAudioSender) await state.systemAudioSender.replaceTrack(null);
       state.screenSender = null;
       state.systemAudioSender = null;
-      await negotiate(false);
+      // Sem negotiate() aqui também (mesmo motivo de startScreenShareWithQuality
+      // /toggleCam — ver comentários lá): replaceTrack(null) já é suficiente
+      // pra track do outro lado voltar a ficar muda (dispara o 'mute' que
+      // ontrack usa agora pra saber que a apresentação parou — ver
+      // pc.ontrack), sem depender de uma renegociação que podia ficar presa
+      // em silêncio.
     }
 
     if (el.localVideo) {

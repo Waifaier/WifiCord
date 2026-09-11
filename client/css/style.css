@@ -3068,11 +3068,16 @@ html.has-custom-titlebar #members-panel {
    uma altura própria definida a caixa esticava do topo quase até o
    fim do palco — exatamente o "retângulo em pé" atrás do texto
    "Chamada" relatado. Fixando os 4 lados + o tamanho pelo próprio
-   conteúdo aqui garante uma leitura só, sem depender de nenhuma outra
-   regra deste arquivo. */
+   conteúdo aqui garante uma leitura só.
+   Posição: canto de baixo à esquerda era o MESMO canto onde os
+   avatares pequenos (ver bloco abaixo) agora ficam — o selo tampava a
+   bolinha da pessoa ali ("o nome... tá na frente de um dos
+   usuários"). Movido pra baixo do cabeçalho da chamada, no topo, onde
+   não tem mais nada — nem os avatares (embaixo) nem os controles
+   (também embaixo). */
 #call-live-label.call-screen-label {
-  top: auto !important;
-  bottom: 14px !important;
+  top: 50px !important;
+  bottom: auto !important;
   left: 14px !important;
   right: auto !important;
   height: auto !important;
