@@ -516,8 +516,18 @@
     el.remoteVideo.srcObject = stream;
     el.remoteVideo.autoplay = true;
     el.remoteVideo.playsInline = true;
+    // #remote-video nunca carrega áudio de verdade (o som vem sempre de um
+    // <audio> separado — attachRemoteAudio/attachRemoteScreenAudio), então
+    // marcar como "muted" aqui não tira som nenhum — só deixa o autoplay
+    // mais robusto contra a política do navegador em qualquer situação.
+    // Testei isoladamente e o autoplay sem "muted" já funcionava mesmo sem
+    // gesto do usuário (porque a stream não tem áudio mesmo sem isso), então
+    // isso sozinho NÃO era o bug — mas não custa nada manter.
+    el.remoteVideo.muted = true;
     el.remoteVideo.classList.remove('hidden');
-    el.remoteVideo.play?.().catch(() => {});
+    el.remoteVideo.play?.()
+      .then(() => console.log('[WifiCord/call] remote-video play() OK'))
+      .catch(err => console.log('[WifiCord/call] remote-video play() FALHOU:', err?.name, err?.message));
     requestAnimationFrame(() => el.remoteVideo?.play?.().catch(() => {}));
   }
 
@@ -530,6 +540,7 @@
     el.remoteCameraPip.srcObject = stream;
     el.remoteCameraPip.autoplay = true;
     el.remoteCameraPip.playsInline = true;
+    el.remoteCameraPip.muted = true; // mesmo motivo de attachRemoteStream acima
     el.remoteCameraPip.classList.remove('hidden');
     el.remoteCameraPip.play?.().catch(() => {});
   }
@@ -769,6 +780,14 @@
     pc.ontrack = e => {
       const track = e.track;
       const stream = e.streams?.[0] instanceof MediaStream ? e.streams[0] : new MediaStream([track]);
+      // Log de diagnóstico temporário — tudo que envolve a negociação em si
+      // já foi verificado e testado isoladamente e está correto (ver
+      // comentários grandes logo abaixo), então se o vídeo/câmera continuar
+      // não aparecendo depois de tudo isso, o próximo passo é olhar esse log
+      // no console (F12) do lado de quem NÃO tá vendo nada, bem na hora que
+      // o outro liga a câmera/tela, pra ver com que dados de verdade a gente
+      // está lidando em vez de continuar só no código.
+      console.log('[WifiCord/call] ontrack', { kind: track.kind, slot: fixedSlotIndex(pc, e.transceiver), muted: track.muted, readyState: track.readyState, trackId: track.id, hasTransceiver: !!e.transceiver });
       if (track.kind === 'video') {
         // Câmera e tela chegam em transceptores diferentes (ver comentário
         // em pcCreate), então dá pra saber com certeza qual é qual pela
@@ -803,6 +822,7 @@
           // nunca dispara mais durante a ligação; contar só com 'ended'
           // como antes deixava remoteScreenActive preso incorretamente).
           const activate = () => {
+            console.log('[WifiCord/call] tela remota ATIVA (unmute) — mostrando no palco');
             state.remoteScreenActive = true;
             el.callBar?.classList.remove('audio-call');
             el.callBar?.classList.add('has-remote-video', 'has-remote', 'remote-sharing');
@@ -815,6 +835,7 @@
             }
           };
           const deactivate = () => {
+            console.log('[WifiCord/call] tela remota INATIVA (mute/ended)');
             state.remoteScreenActive = false;
             el.callBar?.classList.remove('remote-sharing', 'screen-minimized');
             detachRemoteCameraPip();
@@ -832,6 +853,7 @@
           track.onended = deactivate;
           if (!track.muted) activate(); // já chega ligado numa renegociação, por ex.
         } else {
+          console.log('[WifiCord/call] câmera remota chegou, remoteScreenActive=' + state.remoteScreenActive);
           state.remoteCameraStream = stream;
           el.callBar?.classList.remove('audio-call');
           el.callBar?.classList.add('has-remote-video', 'has-remote');
@@ -1609,8 +1631,14 @@
       tile.className = 'server-call-tile';
       tile.dataset.userId = id;
       const vol = getUserVolume(id);
-      tile.innerHTML = `<div class="server-call-tile-head"><b>${esc(u.displayName || u.username || 'Usuário')}</b><span class="server-call-tile-state">Conectando</span></div><video autoplay playsinline></video><div class="server-call-tile-avatar">${avatarMarkup(u)}</div><div class="server-call-tile-volume-wrap" title="Volume de ${esc(u.displayName || u.username || 'Usuário')}"><span class="server-call-tile-volume-icon">🔊</span><input type="range" class="server-call-tile-volume" min="0" max="100" value="${vol}" aria-label="Volume de ${esc(u.displayName || u.username || 'Usuário')}"></div>`;
+      tile.innerHTML = `<div class="server-call-tile-head"><b>${esc(u.displayName || u.username || 'Usuário')}</b><span class="server-call-tile-state">Conectando</span></div><video autoplay muted playsinline></video><div class="server-call-tile-avatar">${avatarMarkup(u)}</div><div class="server-call-tile-volume-wrap" title="Volume de ${esc(u.displayName || u.username || 'Usuário')}"><span class="server-call-tile-volume-icon">🔊</span><input type="range" class="server-call-tile-volume" min="0" max="100" value="${vol}" aria-label="Volume de ${esc(u.displayName || u.username || 'Usuário')}"></div>`;
       const video = tile.querySelector('video');
+      // Mesmo motivo do attachRemoteStream() da chamada 1:1: esse <video> só
+      // carrega vídeo (o áudio do participante vem sempre de um <audio>
+      // separado — peer.audioStreams), então marcar como "muted" não tira
+      // som nenhum de verdade, mas é o que deixa o Chrome/Chromium começar o
+      // autoplay sozinho sem precisar de um clique antes.
+      video.muted = true;
       if (peer.video) { video.srcObject = peer.video; video.classList.remove('hidden'); video.play?.().catch(() => {}); }
       else video.classList.add('hidden');
       el.serverCallGrid.appendChild(tile);
@@ -1909,11 +1937,74 @@
 
   function init() { cache(); bind(); updateButtons(); iceConfigPromise = loadIceConfig(); }
 
+  // Helper de diagnóstico pra rodar no console (F12) quando uma chamada não
+  // está mostrando vídeo: mostra o estado da conexão, os transceivers e as
+  // estatísticas reais de bytes recebidos (getStats). Não muda nada, só lê.
+  async function debugDump() {
+    const out = { groupMode: state.groupMode };
+    async function dumpPc(label, pc) {
+      if (!pc) { console.log(`[WifiCord/debug] ${label}: sem RTCPeerConnection`); return; }
+      const info = {
+        signalingState: pc.signalingState,
+        iceConnectionState: pc.iceConnectionState,
+        connectionState: pc.connectionState,
+        iceGatheringState: pc.iceGatheringState,
+      };
+      console.log(`[WifiCord/debug] ${label} estado:`, info);
+      const transceivers = pc.getTransceivers().map((t, i) => ({
+        idx: i,
+        mid: t.mid,
+        direction: t.direction,
+        currentDirection: t.currentDirection,
+        kind: t.receiver?.track?.kind,
+        trackMuted: t.receiver?.track?.muted,
+        trackReadyState: t.receiver?.track?.readyState,
+      }));
+      console.log(`[WifiCord/debug] ${label} transceivers:`, transceivers);
+      try {
+        const stats = await pc.getStats();
+        stats.forEach(report => {
+          if (report.type === 'inbound-rtp' && !report.isRemote) {
+            console.log(`[WifiCord/debug] ${label} inbound-rtp (${report.kind}):`, {
+              bytesReceived: report.bytesReceived,
+              packetsReceived: report.packetsReceived,
+              framesReceived: report.framesReceived,
+              framesDecoded: report.framesDecoded,
+              framesDropped: report.framesDropped,
+              packetsLost: report.packetsLost,
+              jitter: report.jitter,
+            });
+          }
+          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+            console.log(`[WifiCord/debug] ${label} candidate-pair ativo:`, {
+              localCandidateId: report.localCandidateId,
+              remoteCandidateId: report.remoteCandidateId,
+              currentRoundTripTime: report.currentRoundTripTime,
+            });
+          }
+        });
+      } catch (e) {
+        console.log(`[WifiCord/debug] ${label} getStats falhou:`, e?.message);
+      }
+    }
+    if (state.groupMode) {
+      console.log('[WifiCord/debug] chamada em grupo, peers:', state.groupPeers.size);
+      for (const [uid, peer] of state.groupPeers.entries()) {
+        await dumpPc(`peer ${uid}`, peer.pc);
+      }
+    } else {
+      await dumpPc('1:1', state.pc);
+    }
+    console.log('[WifiCord/debug] remoteScreenActive:', state.remoteScreenActive, 'camOn:', state.camOn, 'screenStream:', !!state.screenStream);
+    return out;
+  }
+  window.wcCallDebug = debugDump;
+
   window.Call = {
     init, handleOffer, handleAnswer: answer, handleIceCandidate: ice, handleHangup,
     handleSpeaking: remoteSpeaking, updateCallButtonsState: updateButtons,
     getState: () => state, applyAdminVoiceMute, endFromAdmin, syncContext,
     startServerCall, handleServerOffer, handleServerAnswer, handleServerIce,
-    handleServerUserJoined, handleServerUserLeft
+    handleServerUserJoined, handleServerUserLeft, debugDump
   };
 })();
