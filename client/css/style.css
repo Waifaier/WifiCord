@@ -3184,3 +3184,9 @@ html.has-custom-titlebar #members-panel {
     transform: translateZ(0);
   }
 }
+
+.server-danger-zone{margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,77,109,.25);}
+.server-danger-zone h4{color:#ff4d6d;margin:0 0 6px;}
+.server-danger-zone p{color:var(--text-muted);font-size:13px;margin:0 0 14px;}
+.btn-danger{background:rgba(255,77,109,.12);border:1px solid rgba(255,77,109,.4);color:#ff4d6d;}
+.btn-danger:hover{background:rgba(255,77,109,.22);}

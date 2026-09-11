@@ -121,3 +121,9 @@ const ServerModel = {
   toPublic(server) { return {id:server.id,name:server.name,ownerId:server.owner_id,inviteCode:server.invite_code,createdAt:server.created_at,iconUrl:server.icon_url||null,bannerUrl:server.banner_url||null}; },
 };
 module.exports = ServerModel;
+
+// Apaga um servidor inteiro (cascata automatica no banco: canais,
+// mensagens, cargos e membros somem junto).
+module.exports.deleteServer = function (serverId) {
+  db.prepare('DELETE FROM servers WHERE id=?').run(serverId);
+};

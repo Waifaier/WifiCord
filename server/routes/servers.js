@@ -957,3 +957,20 @@ router.post('/:serverId/channels', requireAuth, async (req, res, next) => {
 });
 
 module.exports = router;
+router.delete('/:serverId', requireAuth, async (req, res, next) => {
+  try {
+    const serverId = parsePositiveInt(req.params.serverId);
+    if (!serverId || !(await ServerModel.isOwner(serverId, req.session.userId))) {
+      return res.status(403).json({ error: 'Somente o dono pode apagar o servidor.' });
+    }
+    const server = await ServerModel.findById(serverId);
+    if (!server) {
+      return res.status(404).json({ error: 'Servidor nao encontrado.' });
+    }
+    await ServerModel.deleteServer(serverId);
+    req.app.get('io')?.to('server:' + serverId).emit('server:deleted', { serverId });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
