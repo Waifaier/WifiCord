@@ -716,10 +716,28 @@
       if (ice === 'connected' || ice === 'completed') {
         state.reconnectAttempts = 0;
         setCallStatus('Conectado', 'connected');
+        clearTimeout(pc._wifiIceStuckTimer);
       }
       if (ice === 'disconnected') scheduleReconnect(pc);
       if (ice === 'failed') scheduleReconnect(pc, true);
     };
+    // Diagnóstico: testei a negociação (transceptores, direção sendrecv,
+    // replaceTrack sem renegociação) isoladamente — os dois lados dentro da
+    // MESMA aba, sem NAT/rede real nenhuma no meio — e os bytes chegam
+    // certinhos, então o código em si está correto. Se mesmo assim a
+    // chamada fica travada em "Conectando..." pro lado que atendeu, é bem
+    // provável que seja a REDE (NAT/firewall de um dos dois lados) que não
+    // deixa a conexão direta se formar — nesse caso só um servidor TURN
+    // (ver server/routes/webrtc.js e as variáveis TURN_URLS/TURN_USERNAME/
+    // TURN_CREDENTIAL, hoje sem nenhum valor configurado no Render — só STUN)
+    // resolve, não tem fix de código que resolva isso. Esse aviso aparece
+    // pra não ficar parecendo "quebrado sem explicação" de novo.
+    pc._wifiIceStuckTimer = setTimeout(() => {
+      const ice = pc.iceConnectionState;
+      if (state.pc === pc && ice !== 'connected' && ice !== 'completed' && ice !== 'closed') {
+        window.App?.toast('A conexão está demorando muito — provavelmente a rede de um dos dois lados está bloqueando a conexão direta. Isso geralmente precisa de um servidor TURN configurado no servidor (não é algo que dá pra resolver só no app).', 'error');
+      }
+    }, 9000);
 
     pc.onconnectionstatechange = () => {
       const connection = pc.connectionState;
@@ -1214,6 +1232,7 @@
     // os handlers de onended em getLocalStream() só se protegem checando
     // state.inCall. Ficar defensivo aqui custa nada.
     state.inCall = false;
+    clearTimeout(state.pc?._wifiIceStuckTimer);
     try { state.pc?.close(); } catch (_) {}
     state.localStream?.getTracks().forEach(t => t.stop());
     state.screenStream?.getTracks().forEach(t => t.stop());
