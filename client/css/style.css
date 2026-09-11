@@ -3143,3 +3143,31 @@ html.has-custom-titlebar #members-panel {
 @media (max-width: 680px) {
   .mobile-only { display: grid !important; }
 }
+
+/* ===== Ajustes mobile (rodada 2) ===== */
+@media (max-width: 900px) {
+  #server-rail, #sidebar, #members-panel {
+    background: var(--glass-bg) !important;
+    backdrop-filter: blur(18px) saturate(140%) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(140%) !important;
+  }
+}
+@media (max-width: 680px) {
+  #app-screen.with-members #members-panel { display: none !important; }
+  #members-panel { display: none !important; }
+  #members-panel.mobile-open { display: flex !important; }
+  #mobile-nav-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    z-index: 10030; opacity: 0; pointer-events: none; transition: opacity .2s ease;
+  }
+  #mobile-nav-backdrop.visible { opacity: 1; pointer-events: auto; }
+}
+.message-form textarea { scrollbar-width: none; }
+.message-form textarea::-webkit-scrollbar { display: none; }
+@media (max-width: 900px) {
+  #chat-header { padding-left: 58px !important; }
+}
+.mobile-only { display: none; }
+@media (max-width: 680px) {
+  .mobile-only { display: grid !important; }
+}
