@@ -302,6 +302,7 @@
       deleteDMBtn: $('delete-dm-btn'),
       chatWallpaperBtn: $('chat-wallpaper-btn'),
       chatWallpaperLayer: $('chat-wallpaper-layer'),
+      serverBackgroundLayer: $('server-background-layer'),
       typingIndicator: $('typing-indicator'),
       messageSearchBtn: $('message-search-btn'),
       messageSearchBar: $('message-search-bar'),
@@ -1112,6 +1113,17 @@
     renderDMQuickList();
     window.Call?.syncContext?.();
     applyChatWallpaper(null);
+    applyServerBackground((state.servers || []).find(function (s) { return String(s.id) === String(serverId); }));
+  }
+
+  // --- Fundo personalizado do servidor ------------------------------------
+  function applyServerBackground(server) {
+    const layer = el.serverBackgroundLayer;
+    if (!layer) return;
+    const url = server && server.backgroundUrl;
+    if (!url) { layer.classList.add('hidden'); layer.style.backgroundImage = ''; return; }
+    layer.style.backgroundImage = 'url("' + url + '")';
+    layer.classList.remove('hidden');
   }
 
   function setActiveChannel(channelId) {
@@ -1244,6 +1256,7 @@
     renderDMQuickList();
     window.Call?.syncContext?.();
     applyChatWallpaper(wallpaperKey());
+    applyServerBackground(null);
   }
 
   function friendById(userId) {
@@ -2472,7 +2485,7 @@
     }
   }
 
-  function handleServerProfileUpdate(server){if(!server)return;const x=state.servers.find(s=>String(s.id)===String(server.id));if(x)Object.assign(x,server);if(String(state.activeServerId)===String(server.id)){if(el.activeServerName)el.activeServerName.textContent=server.name||el.activeServerName.textContent;}renderServers();}
+  function handleServerProfileUpdate(server){if(!server)return;const x=state.servers.find(s=>String(s.id)===String(server.id));if(x)Object.assign(x,server);if(String(state.activeServerId)===String(server.id)){if(el.activeServerName)el.activeServerName.textContent=server.name||el.activeServerName.textContent;applyServerBackground(server);}renderServers();}
 
   window.App = {
     init: init,
@@ -2486,6 +2499,7 @@
     renderFriendRequests: renderFriendRequests,
     renderServerMembers: renderServerMembers,
     handleServerProfileUpdate: handleServerProfileUpdate,
+    applyServerBackground: applyServerBackground,
     setServerMembers: (data)=>{state.serverMembers=data.members||[];state.serverRoles=data.roles||[];state.serverOwnerId=data.ownerId||null;state.localNicknames=data.localNicknames||state.localNicknames;renderServerMembers();},
     setActiveServer: setActiveServer,
     setActiveChannel: setActiveChannel,

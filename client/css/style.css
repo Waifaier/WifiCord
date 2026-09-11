@@ -329,8 +329,12 @@ input:focus, textarea:focus {
 
 .channel-item { cursor: pointer; }
 .channel-hash { color: var(--text-muted); font-weight: 700; }
-.channel-name { font-size: 14px; }
+.channel-name { font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .channel-item.has-unread .channel-name { color: var(--text-primary, #fff); font-weight: 700; }
+.channel-slowmode-badge { font-size: 11px; opacity: .75; flex: 0 0 auto; }
+.channel-edit-btn { flex: 0 0 auto; background: none; border: 0; color: var(--text-muted); font-size: 13px; cursor: pointer; opacity: 0; padding: 2px 4px; border-radius: 6px; transition: opacity .15s ease, background .15s ease; }
+.channel-item:hover .channel-edit-btn, .channel-item.active .channel-edit-btn { opacity: .8; }
+.channel-edit-btn:hover { opacity: 1 !important; background: rgba(255,255,255,.08); }
 .channel-unread-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-left: auto; flex: 0 0 8px; }
 
 .mention-autocomplete { position: absolute; bottom: 70px; left: 15px; right: 15px; max-height: 220px; overflow-y: auto; background: #201d30; border: 1px solid #393451; border-radius: 12px; padding: 6px; box-shadow: 0 12px 35px #0008; z-index: 25; }
@@ -434,6 +438,10 @@ input:focus, textarea:focus {
   position: relative;
 }
 
+/* --- Fundo personalizado do servidor --- */
+.server-background-layer{position:absolute;inset:0;z-index:-3;background-size:cover;background-position:center;background-repeat:no-repeat;opacity:.5;filter:saturate(1.05) brightness(.7) blur(1px);transition:opacity .3s}
+.server-background-layer.hidden{display:none}
+
 /* --- Papel de parede por conversa --- */
 .chat-wallpaper-layer{position:absolute;inset:0;z-index:-1;background-size:cover;background-position:center;background-repeat:no-repeat;filter:saturate(var(--wc-wp-sat,1)) contrast(var(--wc-wp-con,1)) brightness(var(--wc-wp-bri,1));transition:opacity .25s}
 .chat-wallpaper-layer.hidden{display:none}
@@ -469,6 +477,15 @@ input:focus, textarea:focus {
 .camera-popover{display:flex;flex-direction:column;gap:4px;min-width:180px}
 .camera-popover-option{background:transparent;border:0;text-align:left;padding:10px 12px;border-radius:8px;font-size:14px;color:var(--text-primary);cursor:pointer}
 .camera-popover-option:hover{background:rgba(255,255,255,.06)}
+.invite-card{position:relative;display:flex;align-items:center;gap:8px;padding:10px 10px 10px 12px;border-radius:12px;background:linear-gradient(160deg,#241f3d,#171429);border:1px solid #ffffff14;overflow:hidden}
+.invite-card-glow{position:absolute;inset:-40%;background:conic-gradient(from 0deg,#7C5CFF33,transparent 30%,#5cd8ff33,transparent 60%,#7C5CFF33);animation:inviteGlowSpin 6s linear infinite;pointer-events:none;opacity:.7}
+@keyframes inviteGlowSpin{to{transform:rotate(360deg)}}
+.invite-card-icon{position:relative;font-size:16px;flex:0 0 auto}
+.invite-card-code{position:relative;min-width:0;flex:1;display:flex;flex-direction:column;line-height:1.25;font-size:12px;overflow:hidden}
+.invite-card-code small{color:var(--text-muted)}
+.invite-card-code strong{font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.invite-copy-btn{position:relative;flex:0 0 auto}
+.invite-copy-btn.copied{background:#2fbf71!important;color:#fff!important}
 
 #chat-header {
   padding: 16px 20px;
@@ -3278,6 +3295,13 @@ html.has-custom-titlebar #members-panel {
 .server-danger-zone p{color:var(--text-muted);font-size:13px;margin:0 0 14px;}
 .btn-danger{background:rgba(255,77,109,.12);border:1px solid rgba(255,77,109,.4);color:#ff4d6d;}
 .btn-danger:hover{background:rgba(255,77,109,.22);}
+.server-transfer-box{margin-top:18px;padding-top:18px;border-top:1px solid rgba(255,178,50,.25);}
+.server-transfer-box h4{color:#f0b232;margin:0 0 6px;}
+.server-transfer-box p{color:var(--text-muted);font-size:13px;margin:0 0 12px;}
+.server-transfer-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.server-transfer-row select{flex:1;min-width:180px;}
+.btn-warning{background:rgba(240,178,50,.12);border:1px solid rgba(240,178,50,.4);color:#f0b232;}
+.btn-warning:hover{background:rgba(240,178,50,.22);}
 
 /* ===== Temas do aplicativo (vários presets, incluindo claro e escuro) =====
    Cada preset redefine as mesmas variáveis do :root padrão — o tema

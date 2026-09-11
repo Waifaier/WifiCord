@@ -423,10 +423,17 @@
     const audio = settings.audioDeviceId
       ? { deviceId: { exact: settings.audioDeviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       : { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+    // Sem WFNA a câmera ficava sempre travada em "ideal" 720p/30fps mesmo
+    // pra quem tinha WFNA ativo — só o compartilhamento de tela olhava pro
+    // WFNA antes. "ideal" é o valor que o navegador realmente tenta entregar
+    // (o "max" era só um teto que quase nunca era alcançado); por isso
+    // aumentar o ideal é o que faz a diferença aparecer de verdade — dentro
+    // do que a câmera da pessoa/o navegador realmente suportar.
+    const wfna = !!appState()?.currentUser?.wfna;
+    const res = wfna ? { width: { ideal: 1920, max: 3840 }, height: { ideal: 1080, max: 2160 } } : { width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 } };
+    const frameRate = wfna ? { ideal: 60, max: 120 } : { ideal: 30, max: 60 };
     const videoConstraint = video
-      ? (settings.videoDeviceId
-        ? { deviceId: { exact: settings.videoDeviceId }, width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30, max: 60 } }
-        : { width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30, max: 60 } })
+      ? Object.assign({}, res, { frameRate }, settings.videoDeviceId ? { deviceId: { exact: settings.videoDeviceId } } : {})
       : false;
     return { audio, video: videoConstraint };
   }
@@ -1436,7 +1443,8 @@
       resolution = wfna ? Number(resolution) || 1080 : Math.min(720, Number(resolution) || 720);
       const height = resolution;
       const width = Math.round(height * 16 / 9);
-      const video = { frameRate: { ideal: 30, max: 60 }, cursor: 'motion', width: { ideal: width, max: width }, height: { ideal: height, max: height }, displaySurface: type };
+      const frameRate = wfna ? { ideal: 60, max: 120 } : { ideal: 30, max: 60 };
+      const video = { frameRate, cursor: 'motion', width: { ideal: width, max: width }, height: { ideal: height, max: height }, displaySurface: type };
       const stream = await navigator.mediaDevices.getDisplayMedia({ video, audio: systemAudio });
       const track = stream.getVideoTracks()[0];
       if (!track) throw new Error('Nenhuma faixa de tela foi fornecida.');

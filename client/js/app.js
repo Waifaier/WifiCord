@@ -302,6 +302,7 @@
       deleteDMBtn: $('delete-dm-btn'),
       chatWallpaperBtn: $('chat-wallpaper-btn'),
       chatWallpaperLayer: $('chat-wallpaper-layer'),
+      serverBackgroundLayer: $('server-background-layer'),
       typingIndicator: $('typing-indicator'),
       messageSearchBtn: $('message-search-btn'),
       messageSearchBar: $('message-search-bar'),
@@ -342,6 +343,7 @@
       createServerForm: $('create-server-form'),
       joinServerForm: $('join-server-form'),
       createChannelForm: $('create-channel-form'),
+      editChannelForm: $('edit-channel-form'),
       avatarInput: $('settings-avatar-input'),
       avatarPreview: $('settings-avatar-preview'),
       soundToggle: $('settings-sound-toggle'),
@@ -454,7 +456,9 @@
           '<li class="channel-item' + activeClass + (isUnread ? ' has-unread' : '') + '" data-channel-id="' + escapeHtml(channel.id) + '" data-channel-type="' + escapeHtml(channel.type || 'text') +
           '" role="button" tabindex="0">' +
           '<span class="channel-hash">' + (channel.type === 'voice' ? '🔊' : channel.type === 'announcement' ? '📢' : channel.type === 'media' ? '🖼️' : '#') + '</span><span class="channel-name">' + escapeHtml(channel.name) + '</span>' +
+          (channel.slowmodeSeconds > 0 ? '<span class="channel-slowmode-badge" title="Slowmode: ' + channel.slowmodeSeconds + 's">⏱️</span>' : '') +
           (isUnread ? '<span class="channel-unread-dot" title="Não lido"></span>' : '') +
+          '<button type="button" class="channel-edit-btn" data-channel-edit="' + escapeHtml(channel.id) + '" title="Editar canal (nome, tópico, slowmode)">⚙️</button>' +
           '</li>'
         );
       })
@@ -1109,6 +1113,17 @@
     renderDMQuickList();
     window.Call?.syncContext?.();
     applyChatWallpaper(null);
+    applyServerBackground((state.servers || []).find(function (s) { return String(s.id) === String(serverId); }));
+  }
+
+  // --- Fundo personalizado do servidor ------------------------------------
+  function applyServerBackground(server) {
+    const layer = el.serverBackgroundLayer;
+    if (!layer) return;
+    const url = server && server.backgroundUrl;
+    if (!url) { layer.classList.add('hidden'); layer.style.backgroundImage = ''; return; }
+    layer.style.backgroundImage = 'url("' + url + '")';
+    layer.classList.remove('hidden');
   }
 
   function setActiveChannel(channelId) {
@@ -1241,6 +1256,7 @@
     renderDMQuickList();
     window.Call?.syncContext?.();
     applyChatWallpaper(wallpaperKey());
+    applyServerBackground(null);
   }
 
   function friendById(userId) {
@@ -1445,9 +1461,21 @@
     }
   }
 
+  function normalizeInviteCode(raw) {
+    // Aceita colar o código puro, o formato novo "wificord/codigo" ou até a
+    // URL inteira do convite (ex.: copiada de outra pessoa) — sempre extrai
+    // só o código de verdade antes de mandar pro servidor.
+    let code = String(raw || '').trim();
+    code = code.replace(/^https?:\/\/[^/]+\//i, '');
+    code = code.replace(/^wificord\//i, '');
+    code = code.split(/[\s/?#]/)[0];
+    return code.trim();
+  }
+
   async function joinServerByCode(inviteCode) {
+    const normalized = normalizeInviteCode(inviteCode);
     try {
-      const data = await api('/api/servers/join', { method: 'POST', body: JSON.stringify({ inviteCode: inviteCode }) });
+      const data = await api('/api/servers/join', { method: 'POST', body: JSON.stringify({ inviteCode: normalized }) });
       if (!serverById(data.server.id)) state.servers.push(data.server);
       renderServers();
       closeModals();
@@ -2072,6 +2100,46 @@
       });
     }
 
+    // Editar canal (nome, tópico, slowmode) — o botão ⚙️ aparece em cada
+    // canal da lista; quem não tem permissão só recebe o erro do servidor
+    // ao tentar salvar (mesmo padrão já usado no botão "+ Canal").
+    if (el.channelList) {
+      el.channelList.addEventListener('click', function (e) {
+        const btn = e.target.closest('.channel-edit-btn');
+        if (!btn) return;
+        e.stopPropagation();
+        const channelId = btn.getAttribute('data-channel-edit');
+        const channel = state.channels.find(function (c) { return String(c.id) === String(channelId); });
+        if (!channel || !el.editChannelForm) return;
+        el.editChannelForm.channelId.value = channel.id;
+        el.editChannelForm.name.value = channel.name || '';
+        el.editChannelForm.topic.value = channel.topic || '';
+        el.editChannelForm.slowmodeSeconds.value = channel.slowmodeSeconds || 0;
+        openModal('modal-edit-channel');
+      });
+    }
+    if (el.editChannelForm) {
+      el.editChannelForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const channelId = e.target.channelId.value;
+        const name = e.target.name.value.trim();
+        if (!channelId || !name) return;
+        try {
+          const data = await api('/api/servers/' + encodeURIComponent(state.activeServerId) + '/channels/' + encodeURIComponent(channelId), {
+            method: 'PUT',
+            body: JSON.stringify({ name: name, topic: e.target.topic.value, slowmodeSeconds: Number(e.target.slowmodeSeconds.value) || 0 }),
+          });
+          const idx = state.channels.findIndex(function (c) { return String(c.id) === String(channelId); });
+          if (idx > -1) state.channels[idx] = data.channel;
+          renderChannels();
+          closeModals();
+          toast('Canal atualizado.', 'success');
+        } catch (err) {
+          toast(err.message || 'Erro ao editar canal.', 'error');
+        }
+      });
+    }
+
     if (el.logoutBtn) {
       el.logoutBtn.addEventListener('click', function () {
         window.Auth && window.Auth.logout();
@@ -2136,6 +2204,23 @@
 
     if (el.pinnedMessagesBtn) el.pinnedMessagesBtn.addEventListener('click', openPinnedMessagesModal);
     if (el.deleteDMBtn) el.deleteDMBtn.addEventListener('click', clearActiveDM);
+
+    const inviteCopyBtn = $('invite-copy-btn');
+    if (inviteCopyBtn) inviteCopyBtn.addEventListener('click', async function () {
+      const code = el.activeServerInvite ? el.activeServerInvite.textContent : '';
+      if (!code || code === '—') return;
+      const text = 'wificord/' + code;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (_) {
+        try { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); } catch (__) { toast('Não foi possível copiar.', 'error'); return; }
+      }
+      const original = inviteCopyBtn.textContent;
+      inviteCopyBtn.textContent = 'Copiado!';
+      inviteCopyBtn.classList.add('copied');
+      setTimeout(function () { inviteCopyBtn.textContent = original; inviteCopyBtn.classList.remove('copied'); }, 1600);
+      toast('Convite copiado.', 'success');
+    });
 
     // Papel de parede por conversa/canal — presets, sliders e imagem própria.
     if (el.chatWallpaperBtn) el.chatWallpaperBtn.addEventListener('click', openWallpaperModal);
@@ -2400,7 +2485,7 @@
     }
   }
 
-  function handleServerProfileUpdate(server){if(!server)return;const x=state.servers.find(s=>String(s.id)===String(server.id));if(x)Object.assign(x,server);if(String(state.activeServerId)===String(server.id)){if(el.activeServerName)el.activeServerName.textContent=server.name||el.activeServerName.textContent;}renderServers();}
+  function handleServerProfileUpdate(server){if(!server)return;const x=state.servers.find(s=>String(s.id)===String(server.id));if(x)Object.assign(x,server);if(String(state.activeServerId)===String(server.id)){if(el.activeServerName)el.activeServerName.textContent=server.name||el.activeServerName.textContent;applyServerBackground(server);}renderServers();}
 
   window.App = {
     init: init,
@@ -2414,6 +2499,7 @@
     renderFriendRequests: renderFriendRequests,
     renderServerMembers: renderServerMembers,
     handleServerProfileUpdate: handleServerProfileUpdate,
+    applyServerBackground: applyServerBackground,
     setServerMembers: (data)=>{state.serverMembers=data.members||[];state.serverRoles=data.roles||[];state.serverOwnerId=data.ownerId||null;state.localNicknames=data.localNicknames||state.localNicknames;renderServerMembers();},
     setActiveServer: setActiveServer,
     setActiveChannel: setActiveChannel,
