@@ -139,10 +139,23 @@
     return Math.max(0, Math.min(1, (globalPct / 100) * (userPct / 100)));
   }
 
+  // Volume da APRESENTAÇÃO DE TELA (o som do que a pessoa está
+  // compartilhando), separado do volume da voz dela — reaproveita a mesma
+  // chave de armazenamento só que com um sufixo, pra não precisar duplicar
+  // toda a lógica de leitura/gravação/limite 0-100.
+  function getScreenVolume(id) { return getUserVolume(String(id) + ':screen'); }
+  function setScreenVolume(id, value) { return setUserVolume(String(id) + ':screen', value); }
+  function combinedScreenVolume(id) {
+    const globalPct = Number(appState()?.currentUser?.settings?.outputVolume ?? 100);
+    const screenPct = getScreenVolume(id);
+    return Math.max(0, Math.min(1, (globalPct / 100) * (screenPct / 100)));
+  }
+
   function cache() {
     Object.assign(el, {
       callBar: $('call-bar'), callStatus: $('call-connection-status'), remoteLabelTop: $('call-remote-label-top'),
       localVideo: $('local-video'), remoteVideo: $('remote-video'), remoteAudio: $('remote-audio'),
+      remoteScreenAudio: $('remote-screen-audio'),
       localCameraPip: $('local-camera-pip'), remoteCameraPip: $('remote-camera-pip'),
       remoteLabel: $('call-remote-label'), toggleMicBtn: $('call-toggle-mic'), toggleCamBtn: $('call-toggle-cam'),
       toggleScreenBtn: $('call-toggle-screen'), hangupBtn: $('call-hangup'),
@@ -164,7 +177,10 @@
       remoteVolumeRange: $('call-remote-volume-range'), remoteVolumeValue: $('call-remote-volume-value'),
       callContextMenu: $('call-context-menu'), callContextMenuTitle: $('call-context-menu-title'),
       callContextVolumeRange: $('call-context-volume-range'), callContextVolumeValue: $('call-context-volume-value'),
-      callContextMuteBtn: $('call-context-mute-toggle')
+      callContextMuteBtn: $('call-context-mute-toggle'),
+      callContextScreenVolumeRow: $('call-context-screen-volume-row'),
+      callContextScreenVolumeRange: $('call-context-screen-volume-range'), callContextScreenVolumeValue: $('call-context-screen-volume-value'),
+      callContextScreenMuteBtn: $('call-context-screen-mute-toggle')
     });
   }
 
@@ -247,7 +263,19 @@
     const pct = getUserVolume(targetUserId);
     if (el.callContextVolumeRange) el.callContextVolumeRange.value = String(pct);
     if (el.callContextVolumeValue) el.callContextVolumeValue.textContent = pct + '%';
-    if (el.callContextMuteBtn) el.callContextMuteBtn.textContent = pct === 0 ? 'Reativar som' : 'Silenciar';
+    if (el.callContextMuteBtn) el.callContextMuteBtn.textContent = pct === 0 ? 'Reativar som' : 'Silenciar pessoa';
+    // O controle de volume da TRANSMISSÃO só faz sentido (e só aparece) se
+    // essa pessoa estiver mesmo apresentando a tela agora — não tem o que
+    // silenciar/ajustar se não existe áudio de transmissão nenhum chegando.
+    const screenLive = state.remoteScreenActive && String(targetUserId) === String(state.targetUserId);
+    el.callContextScreenVolumeRow?.classList.toggle('hidden', !screenLive);
+    el.callContextScreenMuteBtn?.classList.toggle('hidden', !screenLive);
+    if (screenLive) {
+      const screenPct = getScreenVolume(targetUserId);
+      if (el.callContextScreenVolumeRange) el.callContextScreenVolumeRange.value = String(screenPct);
+      if (el.callContextScreenVolumeValue) el.callContextScreenVolumeValue.textContent = screenPct + '%';
+      if (el.callContextScreenMuteBtn) el.callContextScreenMuteBtn.textContent = screenPct === 0 ? 'Reativar transmissão' : 'Silenciar transmissão';
+    }
     menu.dataset.targetUserId = String(targetUserId);
     menu.classList.remove('hidden');
     // Só depois de mostrar (offsetWidth força o layout) dá pra medir o
@@ -263,9 +291,18 @@
     const applied = setUserVolume(id, pct);
     if (el.callContextVolumeRange) el.callContextVolumeRange.value = String(applied);
     if (el.callContextVolumeValue) el.callContextVolumeValue.textContent = applied + '%';
-    if (el.callContextMuteBtn) el.callContextMuteBtn.textContent = applied === 0 ? 'Reativar som' : 'Silenciar';
+    if (el.callContextMuteBtn) el.callContextMuteBtn.textContent = applied === 0 ? 'Reativar som' : 'Silenciar pessoa';
     if (String(id) === String(state.targetUserId) && el.remoteAudio) el.remoteAudio.volume = combinedVolume(id);
     syncVolumeUI();
+  }
+  function applyContextScreenVolume(pct) {
+    const id = el.callContextMenu?.dataset.targetUserId;
+    if (!id) return;
+    const applied = setScreenVolume(id, pct);
+    if (el.callContextScreenVolumeRange) el.callContextScreenVolumeRange.value = String(applied);
+    if (el.callContextScreenVolumeValue) el.callContextScreenVolumeValue.textContent = applied + '%';
+    if (el.callContextScreenMuteBtn) el.callContextScreenMuteBtn.textContent = applied === 0 ? 'Reativar transmissão' : 'Silenciar transmissão';
+    if (String(id) === String(state.targetUserId) && el.remoteScreenAudio) el.remoteScreenAudio.volume = combinedScreenVolume(id);
   }
   // Segurar o dedo por meio segundo abre o mesmo menu que o botão direito
   // do mouse abre no desktop — em celular/tablet não existe botão direito,
@@ -317,6 +354,11 @@
     el.callContextMuteBtn?.addEventListener('click', () => {
       const id = el.callContextMenu?.dataset.targetUserId;
       applyContextVolume(getUserVolume(id) === 0 ? 100 : 0);
+    });
+    el.callContextScreenVolumeRange?.addEventListener('input', () => applyContextScreenVolume(el.callContextScreenVolumeRange.value));
+    el.callContextScreenMuteBtn?.addEventListener('click', () => {
+      const id = el.callContextMenu?.dataset.targetUserId;
+      applyContextScreenVolume(getScreenVolume(id) === 0 ? 100 : 0);
     });
     document.addEventListener('click', e => {
       if (!el.callContextMenu || el.callContextMenu.classList.contains('hidden')) return;
@@ -433,11 +475,19 @@
 
   function ensureVideoPreview() {
     if (!el.localVideo) return;
+    // Enquanto está apresentando a tela, #local-video mostra a PRÓPRIA
+    // apresentação (ver startScreenShareWithQuality), não a câmera — sair
+    // cedo ANTES de trocar o srcObject é essencial: chamar essa função
+    // durante uma apresentação ativa (ex.: ligar a câmera no meio dela,
+    // trocar de dispositivo) sobrescrevia o preview da tela pela câmera na
+    // hora, mesmo sem a apresentação ter parado de verdade — a pessoa via
+    // a PRÓPRIA prévia da transmissão "desligar" (trocar pra câmera) só de
+    // ligar a câmera, parecendo que uma cortava a outra.
+    if (state.screenStream) return;
     el.localVideo.srcObject = state.localStream || null;
     el.localVideo.muted = true;
     el.localVideo.autoplay = true;
     el.localVideo.playsInline = true;
-    if (state.screenStream) return;
     el.localVideo.classList.toggle('hidden', !state.camEnabled);
     el.localVideo.play?.().catch(() => {});
   }
@@ -503,6 +553,24 @@
     setTimeout(play, 500);
   }
 
+  // Som da apresentação de tela (áudio-do-sistema) da outra pessoa — sempre
+  // num elemento <audio> PRÓPRIO, separado do mic dela, pra ter um volume
+  // independente (ver getScreenVolume/combinedScreenVolume e o segundo
+  // slider no menu de botão direito).
+  function attachRemoteScreenAudio(stream) {
+    if (!el.remoteScreenAudio) return;
+    el.remoteScreenAudio.srcObject = stream;
+    el.remoteScreenAudio.autoplay = true;
+    el.remoteScreenAudio.playsInline = true;
+    el.remoteScreenAudio.muted = state.headphonesOff;
+    el.remoteScreenAudio.volume = combinedScreenVolume(state.targetUserId);
+    window.Settings?.applyOutput?.(el.remoteScreenAudio);
+    const play = () => el.remoteScreenAudio?.play?.().catch(() => {});
+    play();
+    setTimeout(play, 100);
+    setTimeout(play, 500);
+  }
+
   function addRemoteTrack(track, remoteStream, isRemoteVideo) {
     if (!remoteStream.getTracks().some(t => t.id === track.id)) remoteStream.addTrack(track);
     if (isRemoteVideo) attachRemoteStream(remoteStream);
@@ -560,18 +628,39 @@
     pc._wifiVideoSender = videoT?.sender || null;
     pc._wifiSystemAudioSender = systemAudioT?.sender || null;
     pc._wifiScreenVideoSender = screenVideoT?.sender || null;
+    pc._wifiAudioReceiver = audioT?.receiver || null;
     pc._wifiVideoReceiver = videoT?.receiver || null;
+    pc._wifiSystemAudioReceiver = systemAudioT?.receiver || null;
     pc._wifiScreenVideoReceiver = screenVideoT?.receiver || null;
   }
 
   function bindFixedTransceivers(pc) {
     const list = pc.getTransceivers();
     const audioT = list[0] || null, videoT = list[1] || null, systemAudioT = list[2] || null, screenVideoT = list[3] || null;
+    // SEGUNDO motivo raiz da transmissão não chegar pro outro lado (achado
+    // depois do primeiro, com a mesma técnica de teste isolado): um
+    // transceptor criado automaticamente pelo Chrome ao processar uma
+    // oferta recebida nasce com direction 'recvonly' por padrão — "só vou
+    // RECEBER" — mesmo quando a oferta pedia 'sendrecv', e mesmo depois de
+    // anexar uma track de verdade com replaceTrack(). Sem mudar isso ANTES
+    // de gerar a resposta (createAnswer), a resposta SDP fica dizendo "eu
+    // só recebo" pros 4 slots, e o Chrome simplesmente NUNCA transmite nada
+    // nesse m-line, não importa o que replaceTrack() anexou — a track fica
+    // presa localmente sem sair. Confirmado com o mesmo teste isolado:
+    // sem essa linha, os 4 slots de quem atende ficavam 'recvonly' mesmo
+    // com track anexada; com ela, viram 'sendrecv' e a track passa a sair
+    // de verdade. Por isso quem ATENDIA a ligação nunca conseguia mandar
+    // nem câmera, nem mic, nem tela pra quem ligou.
+    for (const t of [audioT, videoT, systemAudioT, screenVideoT]) {
+      if (t && t.direction !== 'sendrecv') t.direction = 'sendrecv';
+    }
     pc._wifiAudioSender = audioT?.sender || pc._wifiAudioSender || null;
     pc._wifiVideoSender = videoT?.sender || pc._wifiVideoSender || null;
     pc._wifiSystemAudioSender = systemAudioT?.sender || pc._wifiSystemAudioSender || null;
     pc._wifiScreenVideoSender = screenVideoT?.sender || pc._wifiScreenVideoSender || null;
+    pc._wifiAudioReceiver = audioT?.receiver || pc._wifiAudioReceiver || null;
     pc._wifiVideoReceiver = videoT?.receiver || pc._wifiVideoReceiver || null;
+    pc._wifiSystemAudioReceiver = systemAudioT?.receiver || pc._wifiSystemAudioReceiver || null;
     pc._wifiScreenVideoReceiver = screenVideoT?.receiver || pc._wifiScreenVideoReceiver || null;
   }
 
@@ -669,8 +758,20 @@
         }
       } else {
         el.callBar?.classList.add('has-remote');
-        addRemoteTrack(track, stream, false);
-        startRemoteSpeaking(stream);
+        // Mic e áudio-do-sistema (som da apresentação de tela) chegam em
+        // transceptores separados (mesma ideia da câmera vs. tela — ver
+        // comentário em bindFixedTransceivers/addFixedTransceivers), então
+        // dá pra ter um volume PRÓPRIO pra cada um: "volume da pessoa"
+        // controla só o mic dela, "volume da transmissão" controla só o
+        // som que ela está compartilhando — dois controles separados no
+        // menu de botão direito, do jeito que a pessoa pediu.
+        const isSystemAudio = e.receiver === pc._wifiSystemAudioReceiver;
+        if (isSystemAudio) {
+          attachRemoteScreenAudio(stream);
+        } else {
+          addRemoteTrack(track, stream, false);
+          startRemoteSpeaking(stream);
+        }
       }
       refreshParticipants();
     };
@@ -1038,6 +1139,7 @@
     detachRemoteCameraPip();
     if (el.localCameraPip) { el.localCameraPip.classList.add('hidden'); el.localCameraPip.srcObject = null; }
     if (el.remoteAudio) { el.remoteAudio.pause?.(); el.remoteAudio.srcObject = null; }
+    if (el.remoteScreenAudio) { el.remoteScreenAudio.pause?.(); el.remoteScreenAudio.srcObject = null; }
     el.callBar?.classList.remove('audio-call', 'sharing', 'remote-sharing', 'screen-minimized', 'has-remote', 'has-remote-video', 'call-reconnecting');
     el.callBar?.classList.add('hidden');
     closeCallContextMenu();
@@ -1614,6 +1716,7 @@
     el.miniHeadphones?.addEventListener('click', () => {
       state.headphonesOff = !state.headphonesOff;
       if (el.remoteAudio) el.remoteAudio.muted = state.headphonesOff;
+      if (el.remoteScreenAudio) el.remoteScreenAudio.muted = state.headphonesOff;
       for (const peer of state.groupPeers.values()) {
         peer.audioStreams?.forEach(a => { a.muted = state.headphonesOff; });
       }

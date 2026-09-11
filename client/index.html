@@ -231,7 +231,7 @@
           </div>
         </div>
         <div id="server-call-grid" class="server-call-grid hidden"></div>
-        <video id="remote-video" autoplay playsinline aria-label="Vídeo do participante"></video><audio id="remote-audio" autoplay playsinline></audio>
+        <video id="remote-video" autoplay playsinline aria-label="Vídeo do participante"></video><audio id="remote-audio" autoplay playsinline></audio><audio id="remote-screen-audio" autoplay playsinline></audio>
         <div id="call-remote-avatar" class="call-participant-avatar call-remote-avatar" title="Participante" aria-label="Participante"></div>
         <div id="call-local-avatar" class="call-participant-avatar call-local-avatar" title="Você" aria-label="Você"></div>
         <div id="call-live-label" class="call-screen-label hidden">🔴 APRESENTANDO <span id="call-remote-label">Conectando...</span></div>
@@ -251,8 +251,10 @@
 
     <div id="call-context-menu" class="call-context-menu hidden" role="menu">
       <div id="call-context-menu-title" class="call-context-menu-title"></div>
-      <label class="call-volume-row">Volume <span id="call-context-volume-value">100%</span><input type="range" id="call-context-volume-range" min="0" max="100" value="100"></label>
-      <button type="button" id="call-context-mute-toggle" class="btn btn-ghost call-context-menu-btn">Silenciar</button>
+      <label class="call-volume-row">Volume da pessoa <span id="call-context-volume-value">100%</span><input type="range" id="call-context-volume-range" min="0" max="100" value="100"></label>
+      <label class="call-volume-row hidden" id="call-context-screen-volume-row">Volume da transmissão <span id="call-context-screen-volume-value">100%</span><input type="range" id="call-context-screen-volume-range" min="0" max="100" value="100"></label>
+      <button type="button" id="call-context-mute-toggle" class="btn btn-ghost call-context-menu-btn">Silenciar pessoa</button>
+      <button type="button" id="call-context-screen-mute-toggle" class="btn btn-ghost call-context-menu-btn hidden">Silenciar transmissão</button>
     </div>
 
     <ul id="messages-list" class="messages-list"></ul>
@@ -694,6 +696,7 @@
      e só executa depois do HTML pronto, mantendo a MESMA ordem de execução
      de antes. Isso reduz bastante o tempo até o app ficar interativo,
      principalmente em conexões móveis/wifi mais lentas. -->
+<script src="/js/titlebar.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
 <script src="/js/auth-3d.js" defer></script>

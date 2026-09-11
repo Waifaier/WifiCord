@@ -2953,3 +2953,77 @@ input:-webkit-autofill:focus {
 .device-touch #call-remote-avatar,
 .device-touch #remote-video,
 .device-touch #remote-camera-pip { -webkit-touch-callout: none; user-select: none; }
+
+/* =======================================================================
+   Barra de título própria do app desktop (ver frame:false em main.js e
+   client/js/titlebar.js — só existe dentro do Electron, nunca numa aba de
+   navegador normal). Escura e discreta em vez da barra vermelha padrão do
+   Windows/Linux com o nome do app. Bloco no fim do arquivo pelo mesmo
+   motivo dos de cima: algumas regras antigas de altura de #app-screen/
+   #auth-screen (100vh/100dvh, repetidas em vários pontos do arquivo) já
+   usam !important — só vencendo por ordem (empate de especificidade) dá
+   pra encolher essas telas na altura certa sem caçar e editar cada regra
+   antiga uma por uma. */
+html.has-custom-titlebar #wc-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  min-height: 32px;
+  background: var(--bg-deepest, #05060C);
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  -webkit-app-region: drag;
+  user-select: none;
+  /* position+z-index bem alto pra ficar sempre visível/clicável mesmo com
+     um modal aberto por cima (.modal-overlay cobre a tela inteira, mas só
+     com z-index:50) — sem isso não dava pra minimizar/fechar a janela
+     enquanto qualquer modal (configurações, chamada recebida, etc.)
+     estivesse aberto. */
+  position: relative;
+  z-index: 999999;
+}
+html.has-custom-titlebar #wc-titlebar .wc-titlebar-drag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 0 12px;
+  flex: 1;
+  min-width: 0;
+}
+html.has-custom-titlebar .wc-titlebar-logo { width: 15px; height: 15px; flex: none; opacity: .9; }
+html.has-custom-titlebar .wc-titlebar-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b8698;
+  letter-spacing: .2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html.has-custom-titlebar .wc-titlebar-controls { display: flex; height: 100%; -webkit-app-region: no-drag; }
+html.has-custom-titlebar .wc-titlebar-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: #b7b2c6;
+  cursor: pointer;
+}
+html.has-custom-titlebar .wc-titlebar-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
+html.has-custom-titlebar .wc-titlebar-btn:active { background: rgba(255,255,255,.14); }
+html.has-custom-titlebar .wc-titlebar-btn-close:hover { background: var(--danger, #FF4D6D); color: #fff; }
+html.has-custom-titlebar .wc-ico-restore-back { display: none; }
+html.has-custom-titlebar .wc-titlebar-btn.is-maximized .wc-ico-restore-back { display: block; }
+html.has-custom-titlebar .wc-titlebar-btn.is-maximized .wc-ico-sq { transform: translate(-1.5px,-1.5px); }
+
+/* Encolhe as duas telas principais pela altura da barra — sem isso, como
+   elas usam height:100vh/100dvh fixo, ficariam 32px maiores que o espaço
+   que sobra abaixo da barra e a parte de baixo saía cortada da tela. */
+html.has-custom-titlebar #auth-screen,
+html.has-custom-titlebar #app-screen {
+  height: calc(100dvh - 32px) !important;
+  min-height: 0 !important;
+}
