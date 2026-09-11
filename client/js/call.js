@@ -1259,6 +1259,10 @@
     if (el.incomingAvatar) el.incomingAvatar.innerHTML = avatarMarkup(user(data.fromUserId));
     $('modal-overlay')?.classList.remove('hidden');
     el.incomingModal?.classList.remove('hidden');
+    // No app desktop, traz a janela pra frente mesmo se estiver
+    // minimizada/atrás de outra janela — sem isso essa telinha ficaria
+    // escondida sem ninguém ver.
+    window.wificordDesktop?.notifyIncomingCall?.();
   }
 
   async function handleRenegotiate(data) {

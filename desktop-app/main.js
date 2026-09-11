@@ -229,6 +229,24 @@ ipcMain.on('wificord-window-maximize-toggle', () => {
 ipcMain.on('wificord-window-close', () => { mainWindow?.close(); });
 ipcMain.handle('wificord-window-is-maximized', () => !!mainWindow?.isMaximized());
 
+// Ligação chegando: o site (call.js) avisa por aqui assim que mostra a
+// telinha de "fulano está te ligando". Se a janela estiver minimizada ou
+// atrás de outros apps, ninguém veria essa telinha sem isso — então
+// trazemos a janela pra frente e chamamos atenção (pisca a barra de
+// tarefas no Windows/Linux, quica o ícone no dock do Mac).
+ipcMain.on('wificord-incoming-call', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  if (process.platform === 'darwin') {
+    app.dock?.bounce?.('critical');
+  } else {
+    mainWindow.flashFrame(true);
+    mainWindow.once('focus', () => mainWindow?.flashFrame(false));
+  }
+});
+
 // Chamadas de voz/vídeo precisam de permissão de câmera e microfone.
 // Sem isso o Electron bloqueia getUserMedia por padrão. 'fullscreen' também
 // passa por aqui: o botão de tela cheia da chamada usa a API padrão da web
