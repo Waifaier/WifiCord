@@ -3697,3 +3697,43 @@ html.has-custom-titlebar #members-panel {
   .device-actions { flex-direction: column !important; align-items: stretch !important; }
 }
 
+/* ================================================================
+   Painel "Editar cargos" do menu de contexto (clique direito num
+   membro do servidor) — reaproveita a base visual do .wc-context.
+   ================================================================ */
+.wc-role-editor {
+  width: 230px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+.wc-role-editor-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-secondary, #9a9aa6);
+  padding: 8px 10px 6px;
+}
+.wc-role-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.wc-role-editor-row:hover { background: rgba(255,255,255,.06); }
+.wc-role-editor-row input[type="checkbox"] {
+  width: 16px; height: 16px;
+  accent-color: var(--accent, #7c5cff);
+  flex-shrink: 0;
+}
+.wc-role-editor-row .role-color { flex-shrink: 0; }
+.wc-role-editor-empty {
+  padding: 10px;
+  font-size: 13px;
+  color: var(--text-secondary, #9a9aa6);
+}
+
