@@ -3448,3 +3448,149 @@ html.has-custom-titlebar #members-panel {
 .theme-preset-swatch i{display:block;width:32px;height:32px;border-radius:50%;box-shadow:0 2px 10px rgba(0,0,0,.35);}
 .theme-preset-swatch span{font-size:11px;color:var(--text-secondary);}
 
+/* ================================================================
+   Palco da chamada 1:1 — pedido explícito do usuário, em cima de tudo
+   que veio antes (várias regras anteriores do arquivo mexiam nesses
+   mesmos elementos com !important; como CSS resolve empate de
+   especificidade pela ORDEM NO ARQUIVO, ficar no final garante que
+   este bloco vence sem precisar caçar/apagar cada regra antiga).
+
+   1) Ninguém com câmera ligada (.stage-circles): os dois avatares
+      ficam GRANDES e CENTRALIZADOS lado a lado — nunca uma tela preta
+      vazia com bolinhas pequenas de canto.
+   2) Qualquer um dos dois liga a câmera (.stage-grid): os dois viram
+      RETÂNGULOS do MESMO TAMANHO lado a lado; o lado sem câmera mostra
+      o avatar dentro do próprio retângulo, no lugar de vídeo preto.
+   3) Apresentação de tela em modo imersivo (.stage-immersive): some
+      com bolinhas de câmera, avatares, barra de topo e controles,
+      deixando só a transmissão — a setinha (#call-stage-immersive-
+      toggle) e um toque na própria transmissão alternam de volta.
+   Nada disso mexe na chamada de servidor/grupo (#server-call-grid tem
+   sua própria grade — ver renderGroupTiles em call.js).
+   ================================================================ */
+
+.call-bar.stage-circles:not(.sharing):not(.remote-sharing) #remote-video,
+.call-bar.stage-circles:not(.sharing):not(.remote-sharing) #local-video.call-local-preview {
+  display: none !important;
+}
+.call-bar.stage-circles:not(.sharing):not(.remote-sharing) .call-stage {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: clamp(28px, 7vw, 84px) !important;
+}
+.call-bar.stage-circles:not(.sharing):not(.remote-sharing) .call-stage .call-participant-avatar {
+  position: relative !important;
+  top: auto !important; left: auto !important; right: auto !important; bottom: auto !important;
+  transform: none !important;
+  width: clamp(88px, 14vw, 136px) !important;
+  height: clamp(88px, 14vw, 136px) !important;
+}
+
+.call-bar.stage-grid:not(.sharing):not(.remote-sharing) .call-stage {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  grid-template-rows: 1fr !important;
+  gap: 8px !important;
+  padding: 8px !important;
+  place-items: stretch !important;
+}
+.call-bar.stage-grid:not(.sharing):not(.remote-sharing) #remote-video,
+.call-bar.stage-grid:not(.sharing):not(.remote-sharing) #local-video.call-local-preview,
+.call-bar.stage-grid:not(.sharing):not(.remote-sharing) .call-stage .call-participant-avatar {
+  position: relative !important;
+  inset: auto !important;
+  top: auto !important; left: auto !important; right: auto !important; bottom: auto !important;
+  transform: none !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  border-radius: 12px !important;
+  grid-row: 1 !important;
+}
+.call-bar.stage-grid:not(.sharing):not(.remote-sharing) #remote-video,
+.call-bar.stage-grid:not(.sharing):not(.remote-sharing) .call-remote-avatar {
+  grid-column: 1 !important;
+}
+.call-bar.stage-grid:not(.sharing):not(.remote-sharing) #local-video.call-local-preview,
+.call-bar.stage-grid:not(.sharing):not(.remote-sharing) .call-local-avatar {
+  grid-column: 2 !important;
+}
+.call-bar.stage-grid:not(.sharing):not(.remote-sharing) #remote-video,
+.call-bar.stage-grid:not(.sharing):not(.remote-sharing) #local-video.call-local-preview {
+  object-fit: cover !important;
+  display: block !important;
+}
+.call-bar.stage-grid:not(.sharing):not(.remote-sharing) .call-stage .call-participant-avatar {
+  display: grid !important;
+  place-items: center !important;
+  background: radial-gradient(circle, #28213f, #09090e) !important;
+}
+.call-bar.stage-grid:not(.sharing):not(.remote-sharing) .call-participant-avatar img {
+  width: clamp(64px, 15vw, 112px) !important;
+  height: clamp(64px, 15vw, 112px) !important;
+  border-radius: 50% !important;
+}
+/* Câmera daquele lado ativa: o vídeo já cobre a célula toda, então some
+   com o avatar embaixo dele pra nunca ter os dois brigando por espaço. */
+.call-bar.stage-grid.stage-grid-remote-on:not(.sharing):not(.remote-sharing) .call-remote-avatar,
+.call-bar.stage-grid.stage-grid-local-on:not(.sharing):not(.remote-sharing) .call-local-avatar {
+  display: none !important;
+}
+@media (max-width: 680px) {
+  .call-bar.stage-grid:not(.sharing):not(.remote-sharing) .call-stage {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr 1fr !important;
+  }
+  .call-bar.stage-grid:not(.sharing):not(.remote-sharing) #remote-video,
+  .call-bar.stage-grid:not(.sharing):not(.remote-sharing) .call-remote-avatar { grid-column: 1 !important; grid-row: 1 !important; }
+  .call-bar.stage-grid:not(.sharing):not(.remote-sharing) #local-video.call-local-preview,
+  .call-bar.stage-grid:not(.sharing):not(.remote-sharing) .call-local-avatar { grid-column: 1 !important; grid-row: 2 !important; }
+}
+
+/* --- Modo imersivo da apresentação de tela --- */
+.call-stage-immersive-toggle {
+  display: none;
+  position: absolute;
+  left: 50%; bottom: 10px;
+  transform: translateX(-50%);
+  z-index: 50;
+  width: 38px; height: 24px;
+  align-items: center; justify-content: center;
+  border-radius: 12px;
+  background: rgba(10,9,15,.65);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,.14);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: opacity .2s ease, transform .2s ease, background .15s ease;
+}
+.call-stage-immersive-toggle:hover { background: rgba(20,18,30,.85); }
+.call-bar.sharing .call-stage-immersive-toggle,
+.call-bar.remote-sharing .call-stage-immersive-toggle {
+  display: flex !important;
+}
+.call-bar.stage-immersive .call-stage-immersive-toggle {
+  transform: translateX(-50%) rotate(180deg);
+}
+.call-bar.stage-immersive .call-controls,
+.call-bar.stage-immersive .call-stage-topbar,
+.call-bar.stage-immersive #local-camera-pip,
+.call-bar.stage-immersive #remote-camera-pip,
+.call-bar.stage-immersive .call-local-avatar,
+.call-bar.stage-immersive .call-remote-avatar,
+.call-bar.stage-immersive .call-screen-label {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.call-bar.stage-immersive .call-stage { border-radius: 18px !important; }
+.call-bar.stage-immersive #remote-video,
+.call-bar.stage-immersive #local-video.is-screen-preview {
+  cursor: pointer;
+}
+

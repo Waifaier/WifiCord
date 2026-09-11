@@ -31,6 +31,64 @@
   }
 
   // ---------------------------------------------------------------------
+  // Áudio de chamada de servidor no celular: a chamada 1:1 usa um único
+  // <audio> FIXO que já existe no HTML desde o carregamento da página
+  // (#remote-audio) e tenta play() de novo em 100ms/500ms — funciona no
+  // celular. A chamada de servidor/grupo cria um <audio> NOVO por
+  // participante dentro de pc.ontrack (bem depois do toque que iniciou a
+  // chamada, já fora da pilha de execução do gesto do usuário), e só
+  // tentava play() UMA vez, engolindo o erro — em navegador móvel
+  // (Chrome Android, WebView do app, Safari iOS) isso quase sempre é
+  // bloqueado pela política de autoplay com som, e a chamada conecta mas
+  // fica muda/sem vídeo em silêncio, sem nenhum aviso. Duas camadas de
+  // correção: (1) "destrava" o autoplay da página sincronamente dentro do
+  // toque que inicia a chamada (startServerCall), tocando um WAV
+  // silencioso e retomando um AudioContext compartilhado — isso conta
+  // como resposta a gesto do usuário na maioria dos navegadores e libera
+  // play() programático depois; (2) toda vez que um <audio>/<video> de
+  // participante for criado, tenta de novo em 100ms/500ms E registra um
+  // retry na PRÓXIMA interação da pessoa com a página (toque/clique em
+  // qualquer lugar), caso a primeira tentativa ainda assim seja recusada.
+  const SILENT_WAV = 'data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQIAAAAAAA==';
+  let sharedAudioCtx = null;
+  function primeAudioPlayback() {
+    try {
+      const a = new Audio(SILENT_WAV);
+      a.volume = 0.01;
+      a.play?.().catch(() => {});
+    } catch (_) {}
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) {
+        if (!sharedAudioCtx) sharedAudioCtx = new Ctx();
+        if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume().catch(() => {});
+      }
+    } catch (_) {}
+  }
+  const pendingGestureRetries = new Set();
+  function unlockOnNextGesture(fn) {
+    if (typeof fn !== 'function') return;
+    pendingGestureRetries.add(fn);
+  }
+  function flushGestureRetries() {
+    if (!pendingGestureRetries.size) return;
+    const fns = [...pendingGestureRetries];
+    pendingGestureRetries.clear();
+    for (const fn of fns) { try { fn(); } catch (_) {} }
+  }
+  ['pointerdown', 'touchend', 'click', 'keydown'].forEach(evt => {
+    document.addEventListener(evt, flushGestureRetries, { passive: true });
+  });
+  function retryMediaPlay(mediaEl) {
+    if (!mediaEl) return;
+    const play = () => mediaEl.play?.().catch(() => {});
+    play();
+    setTimeout(play, 100);
+    setTimeout(play, 500);
+    unlockOnNextGesture(play);
+  }
+
+  // ---------------------------------------------------------------------
   // Sanitização de SDP: remove o codec de correção de erro flexfec-03 antes
   // de qualquer setLocalDescription/setRemoteDescription. Em algumas
   // combinações de transceptores (câmera + tela como faixas de vídeo
@@ -180,7 +238,8 @@
       callContextMuteBtn: $('call-context-mute-toggle'),
       callContextScreenVolumeRow: $('call-context-screen-volume-row'),
       callContextScreenVolumeRange: $('call-context-screen-volume-range'), callContextScreenVolumeValue: $('call-context-screen-volume-value'),
-      callContextScreenMuteBtn: $('call-context-screen-mute-toggle')
+      callContextScreenMuteBtn: $('call-context-screen-mute-toggle'),
+      callStage: document.querySelector('.call-stage'), stageImmersiveToggle: $('call-stage-immersive-toggle')
     });
   }
 
@@ -243,13 +302,61 @@
   }
 
   // ---------------------------------------------------------------------
-  // Clicar na transmissão pra encolher/expandir (mostra os avatares dos
-  // dois participantes ao lado quando encolhido — ver CSS .screen-minimized
-  // no final do style.css).
+  // Modo imersivo da apresentação de tela: clicar na transmissão (ou no
+  // botão de seta pra baixo) esconde as bolinhas de câmera, os avatares e
+  // a barra de controles, deixando só a tela compartilhada — clicar de
+  // novo (em qualquer lugar da transmissão, ou na seta) traz tudo de
+  // volta. Também some sozinho depois de alguns segundos parado, do jeito
+  // que o YouTube/Google Meet fazem. Ver CSS .stage-immersive no final do
+  // style.css.
   // ---------------------------------------------------------------------
-  function toggleScreenMinimized() {
-    if (!el.callBar?.classList.contains('sharing') && !el.callBar?.classList.contains('remote-sharing')) return;
-    el.callBar?.classList.toggle('screen-minimized');
+  let stageIdleTimer = null;
+  function isSharingActive() {
+    return !!(el.callBar?.classList.contains('sharing') || el.callBar?.classList.contains('remote-sharing'));
+  }
+  function scheduleStageAutoHide() {
+    clearTimeout(stageIdleTimer);
+    if (!isSharingActive()) return;
+    stageIdleTimer = setTimeout(() => setStageImmersive(true), 3500);
+  }
+  function setStageImmersive(on) {
+    if (!isSharingActive()) on = false;
+    el.callBar?.classList.toggle('stage-immersive', on);
+    if (el.stageImmersiveToggle) el.stageImmersiveToggle.setAttribute('aria-label', on ? 'Mostrar câmeras e controles' : 'Ocultar câmeras e perfis');
+    clearTimeout(stageIdleTimer);
+    if (!on) scheduleStageAutoHide();
+  }
+  function toggleStageImmersive() {
+    if (!isSharingActive()) return;
+    setStageImmersive(!el.callBar?.classList.contains('stage-immersive'));
+  }
+  function resetStageImmersive() {
+    el.callBar?.classList.remove('stage-immersive');
+    clearTimeout(stageIdleTimer);
+    stageIdleTimer = null;
+  }
+
+  // ---------------------------------------------------------------------
+  // Palco da chamada 1:1 fora do modo de apresentação: enquanto NINGUÉM
+  // dos dois lados tem câmera ligada, mostra os dois avatares grandes e
+  // centralizados lado a lado (nunca uma tela preta vazia com bolinhas
+  // pequenas de canto); assim que qualquer um dos dois liga a câmera, os
+  // dois viram retângulos do MESMO tamanho lado a lado (o lado sem câmera
+  // mostra o avatar dentro do próprio retângulo, no lugar de vídeo preto).
+  // Não mexe na chamada de servidor/grupo (tem sua própria grade — ver
+  // renderGroupTiles) nem no modo de apresentação de tela (tem seu próprio
+  // layout — ver .sharing/.remote-sharing no CSS).
+  // ---------------------------------------------------------------------
+  function updateCallStageMode() {
+    if (state.groupMode) return;
+    const bar = el.callBar;
+    if (!bar) return;
+    const localOn = !!(state.camEnabled && state.localStream?.getVideoTracks()?.[0]);
+    const remoteOn = !!state.remoteCameraStream;
+    bar.classList.toggle('stage-circles', !localOn && !remoteOn);
+    bar.classList.toggle('stage-grid', localOn || remoteOn);
+    bar.classList.toggle('stage-grid-local-on', localOn);
+    bar.classList.toggle('stage-grid-remote-on', remoteOn);
   }
 
   // ---------------------------------------------------------------------
@@ -405,6 +512,7 @@
     el.screenStage?.classList.add('hidden');
     refreshParticipants();
     updateButtons();
+    updateCallStageMode();
   }
 
   function syncContext() {
@@ -835,6 +943,7 @@
             el.callBar?.classList.add('has-remote-video', 'has-remote', 'remote-sharing');
             attachRemoteStream(stream);
             if (state.remoteCameraStream) attachRemoteCameraPip(state.remoteCameraStream);
+            scheduleStageAutoHide();
             const label = $('call-live-label');
             if (label) {
               label.classList.remove('hidden');
@@ -845,6 +954,7 @@
             console.log('[WifiCord/call] tela remota INATIVA (mute/ended)');
             state.remoteScreenActive = false;
             el.callBar?.classList.remove('remote-sharing', 'screen-minimized');
+            resetStageImmersive();
             detachRemoteCameraPip();
             $('call-live-label')?.classList.add('hidden');
             if (state.remoteCameraStream) {
@@ -860,20 +970,44 @@
           track.onended = deactivate;
           if (!track.muted) activate(); // já chega ligado numa renegociação, por ex.
         } else {
-          console.log('[WifiCord/call] câmera remota chegou, remoteScreenActive=' + state.remoteScreenActive);
-          state.remoteCameraStream = stream;
-          el.callBar?.classList.remove('audio-call');
-          el.callBar?.classList.add('has-remote-video', 'has-remote');
-          if (state.remoteScreenActive) attachRemoteCameraPip(stream);
-          else attachRemoteStream(stream);
-          track.onended = () => {
+          // Mesmo motivo do slot de tela acima (ver comentário grande):
+          // esse slot de vídeo da câmera também é fixo e existe desde o
+          // início da ligação, então esse ontrack dispara SEMPRE, mesmo
+          // quando a outra pessoa nunca ligou a câmera — a track existe,
+          // só está muda. O código antigo tratava "o ontrack disparou"
+          // como "a câmera dela está ligada" e já marcava
+          // has-remote-video/mostrava o <video> na hora, então o palco
+          // ficava preso numa tela preta vazia (a track sem frame nenhum)
+          // toda vez que a câmera remota estava desligada, em vez de
+          // mostrar os avatares. Só conta como câmera "ligada" de verdade
+          // a partir do 'unmute' (frames de verdade chegando), igual a
+          // tela — updateCallStageMode() é o que decide se o palco mostra
+          // círculos (ninguém com câmera) ou os dois retângulos lado a
+          // lado (ver CSS .stage-circles/.stage-grid).
+          console.log('[WifiCord/call] câmera remota chegou (transceptor), remoteScreenActive=' + state.remoteScreenActive);
+          const activateCam = () => {
+            console.log('[WifiCord/call] câmera remota ATIVA (unmute)');
+            state.remoteCameraStream = stream;
+            el.callBar?.classList.remove('audio-call');
+            el.callBar?.classList.add('has-remote-video', 'has-remote');
+            if (state.remoteScreenActive) attachRemoteCameraPip(stream);
+            else attachRemoteStream(stream);
+            updateCallStageMode();
+          };
+          const deactivateCam = () => {
+            console.log('[WifiCord/call] câmera remota INATIVA (mute/ended)');
             state.remoteCameraStream = null;
             detachRemoteCameraPip();
             if (!state.remoteScreenActive) {
               el.callBar?.classList.remove('has-remote-video');
               if (state.callType === 'audio') el.callBar?.classList.add('audio-call');
             }
+            updateCallStageMode();
           };
+          track.onunmute = activateCam;
+          track.onmute = deactivateCam;
+          track.onended = deactivateCam;
+          if (!track.muted) activateCam(); // já chega ligada numa renegociação, por ex.
         }
       } else {
         el.callBar?.classList.add('has-remote');
@@ -1282,8 +1416,9 @@
     if (el.localCameraPip) { el.localCameraPip.classList.add('hidden'); el.localCameraPip.srcObject = null; }
     if (el.remoteAudio) { el.remoteAudio.pause?.(); el.remoteAudio.srcObject = null; }
     if (el.remoteScreenAudio) { el.remoteScreenAudio.pause?.(); el.remoteScreenAudio.srcObject = null; }
-    el.callBar?.classList.remove('audio-call', 'sharing', 'remote-sharing', 'screen-minimized', 'has-remote', 'has-remote-video', 'call-reconnecting');
+    el.callBar?.classList.remove('audio-call', 'sharing', 'remote-sharing', 'screen-minimized', 'has-remote', 'has-remote-video', 'call-reconnecting', 'stage-circles', 'stage-grid', 'stage-grid-local-on', 'stage-grid-remote-on');
     el.callBar?.classList.add('hidden');
+    resetStageImmersive();
     closeCallContextMenu();
     closeModals(); updateButtons();
     window.Sounds?.play('call-leave');
@@ -1324,6 +1459,7 @@
       track.enabled = state.camEnabled;
       ensureVideoPreview();
       ensureLocalCameraPip();
+      updateCallStageMode();
       // SEXTO motivo raiz possível pra "ligo a câmera e o outro não vê":
       // esse replaceTrack() acontece num transceptor que já existe desde o
       // início da ligação com direction 'sendrecv' (ver addFixedTransceivers/
@@ -1486,6 +1622,7 @@
 
       el.callBar?.classList.remove('audio-call', 'screen-minimized');
       el.callBar?.classList.add('sharing');
+      scheduleStageAutoHide();
       $('call-live-label')?.classList.remove('hidden');
       // Esse selo aparece na tela de QUEM ESTÁ apresentando (a função só é
       // chamada depois que EU cliquei em compartilhar) — antes ele mostrava
@@ -1543,6 +1680,7 @@
     }
     ensureLocalCameraPip();
     el.callBar?.classList.remove('sharing', 'screen-minimized');
+    if (isSharingActive()) scheduleStageAutoHide(); else resetStageImmersive();
     $('call-live-label')?.classList.add('hidden');
     if (state.callType === 'audio' && !el.callBar?.classList.contains('has-remote-video')) el.callBar?.classList.add('audio-call');
     updateButtons();
@@ -1647,7 +1785,7 @@
       // som nenhum de verdade, mas é o que deixa o Chrome/Chromium começar o
       // autoplay sozinho sem precisar de um clique antes.
       video.muted = true;
-      if (peer.video) { video.srcObject = peer.video; video.classList.remove('hidden'); video.play?.().catch(() => {}); }
+      if (peer.video) { video.srcObject = peer.video; video.classList.remove('hidden'); retryMediaPlay(video); }
       else video.classList.add('hidden');
       el.serverCallGrid.appendChild(tile);
     }
@@ -1749,7 +1887,7 @@
         audioEl.volume = combinedVolume(id);
         audioEl.muted = state.headphonesOff;
         audioEl.dataset.callPeer = id;
-        document.body.appendChild(audioEl); peer.audioStreams.push(audioEl); audioEl.play?.().catch(() => {});
+        document.body.appendChild(audioEl); peer.audioStreams.push(audioEl); retryMediaPlay(audioEl);
       }
     };
     pc.onconnectionstatechange = () => {
@@ -1811,6 +1949,11 @@
 
   async function startServerCall(serverId, channelId, type) {
     if (state.inCall) return;
+    // Sincrono, ainda dentro da pilha do toque que chamou esta função —
+    // ver comentário grande perto de primeAudioPlayback(). Precisa vir
+    // ANTES do primeiro await, senão já não conta mais como gesto do
+    // usuário pro navegador.
+    primeAudioPlayback();
     try {
       await (iceConfigPromise || loadIceConfig());
       state.groupMode = true;
@@ -1935,10 +2078,12 @@
     });
     bindGroupVolumeControl();
     bindCallContextMenu();
-    // Clicar na transmissão (não na câmera normal) encolhe/expande — ver
-    // toggleScreenMinimized e o CSS .screen-minimized no final do style.css.
-    el.remoteVideo?.addEventListener('click', () => { if (state.remoteScreenActive) toggleScreenMinimized(); });
-    el.localVideo?.addEventListener('click', () => { if (state.screenStream) toggleScreenMinimized(); });
+    // Clicar na transmissão (não na câmera normal) entra/sai do modo
+    // imersivo — ver setStageImmersive/toggleStageImmersive acima e o CSS
+    // .stage-immersive no final do style.css.
+    el.remoteVideo?.addEventListener('click', () => { if (state.remoteScreenActive) toggleStageImmersive(); });
+    el.localVideo?.addEventListener('click', () => { if (state.screenStream) toggleStageImmersive(); });
+    el.stageImmersiveToggle?.addEventListener('click', e => { e.stopPropagation(); toggleStageImmersive(); });
     document.addEventListener('fullscreenchange', () => { state.fullscreen = !!document.fullscreenElement; });
     navigator.mediaDevices?.addEventListener?.('devicechange', () => window.Settings?.refreshDevices?.());
   }
