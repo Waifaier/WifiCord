@@ -1,0 +1,55 @@
+{
+  "name": "wificord-desktop",
+  "productName": "WifiCord",
+  "version": "1.0.0",
+  "description": "App de desktop do WifiCord (conecta ao servidor hospedado).",
+  "main": "main.js",
+  "author": "WifiCord",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "dist": "electron-builder --win --mac --linux"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.wificord.desktop",
+    "productName": "WifiCord",
+    "files": [
+      "main.js",
+      "preload.js",
+      "screen-picker.html",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Waifaier",
+      "repo": "WifiCord",
+      "releaseType": "release"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

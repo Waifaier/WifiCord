@@ -91,9 +91,23 @@
     });
   }
 
+  // O SQLite grava created_at em UTC mas sem indicar isso na string
+  // ("2026-09-11 20:35:00", sem T nem Z) — sem essa marca o navegador
+  // interpreta como se já fosse horário local, mostrando a hora UTC crua
+  // em vez de converter pro fuso da pessoa. Normalizamos pra ISO 8601 com
+  // "Z" antes de criar o Date, aí toLocaleTimeString/toLocaleDateString
+  // convertem certo pro horário local de quem está vendo.
+  function parseServerDate(value) {
+    if (!value) return null;
+    const normalized = (typeof value === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(value))
+      ? value.replace(' ', 'T') + 'Z'
+      : value;
+    return new Date(normalized);
+  }
+
   function formatTime(isoString) {
     try {
-      return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return parseServerDate(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } catch (e) {
       return '';
     }
@@ -980,7 +994,7 @@
     const iconHtml = iconUrl
       ? '<img src="' + escapeHtml(iconUrl) + '" alt="' + name + '" loading="lazy" decoding="async">'
       : '<span>' + escapeHtml((server.name || '?').trim().charAt(0).toUpperCase()) + '</span>';
-    const createdLabel = (function(){ try { return new Date(server.createdAt).toLocaleDateString([], { month: 'short', year: 'numeric' }); } catch(_) { return ''; } })();
+    const createdLabel = (function(){ try { return parseServerDate(server.createdAt).toLocaleDateString([], { month: 'short', year: 'numeric' }); } catch(_) { return ''; } })();
     return (
       '<div class="invite-embed-icon">' + iconHtml + '</div>' +
       '<div class="invite-embed-body">' +
@@ -2518,6 +2532,7 @@
   window.App = {
     init: init,
     toast: toast,
+    parseServerDate: parseServerDate,
     openChannel: openChannel,
     openDM: openDM,
     renderMessages: renderMessages,
