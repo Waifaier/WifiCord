@@ -3171,3 +3171,16 @@ html.has-custom-titlebar #members-panel {
 @media (max-width: 680px) {
   .mobile-only { display: grid !important; }
 }
+
+/* Performance mobile: o borrão do vidro fosco é pesado pra GPU de
+   celular, principalmente enquanto os paineis deslizam. Reduz o raio do
+   blur só no celular e ajuda o navegador a usar aceleração de GPU no
+   deslizar, sem tirar o efeito translúcido. */
+@media (max-width: 900px) {
+  #server-rail, #sidebar, #members-panel {
+    backdrop-filter: blur(10px) saturate(140%) !important;
+    -webkit-backdrop-filter: blur(10px) saturate(140%) !important;
+    will-change: transform;
+    transform: translateZ(0);
+  }
+}
