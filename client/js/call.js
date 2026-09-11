@@ -161,7 +161,10 @@
       shareConfirm: $('share-screen-confirm'), shareSystemAudio: $('share-system-audio'),
       qualityDot: $('call-quality-dot'),
       remoteVolumeBtn: $('call-remote-volume-btn'), remoteVolumeMenu: $('call-remote-volume-menu'),
-      remoteVolumeRange: $('call-remote-volume-range'), remoteVolumeValue: $('call-remote-volume-value')
+      remoteVolumeRange: $('call-remote-volume-range'), remoteVolumeValue: $('call-remote-volume-value'),
+      callContextMenu: $('call-context-menu'), callContextMenuTitle: $('call-context-menu-title'),
+      callContextVolumeRange: $('call-context-volume-range'), callContextVolumeValue: $('call-context-volume-value'),
+      callContextMuteBtn: $('call-context-mute-toggle')
     });
   }
 
@@ -221,6 +224,71 @@
     const pct = getUserVolume(state.targetUserId);
     if (el.remoteVolumeRange) el.remoteVolumeRange.value = String(pct);
     if (el.remoteVolumeValue) el.remoteVolumeValue.textContent = pct + '%';
+  }
+
+  // ---------------------------------------------------------------------
+  // Clicar na transmissão pra encolher/expandir (mostra os avatares dos
+  // dois participantes ao lado quando encolhido — ver CSS .screen-minimized
+  // no final do style.css).
+  // ---------------------------------------------------------------------
+  function toggleScreenMinimized() {
+    if (!el.callBar?.classList.contains('sharing') && !el.callBar?.classList.contains('remote-sharing')) return;
+    el.callBar?.classList.toggle('screen-minimized');
+  }
+
+  // ---------------------------------------------------------------------
+  // Menu de botão direito (participante/transmissão): volume rápido e
+  // silenciar, no ponto onde a pessoa clicou — mesma ideia do Discord.
+  // ---------------------------------------------------------------------
+  function openCallContextMenu(x, y, targetUserId) {
+    const menu = el.callContextMenu;
+    if (!menu || !targetUserId) return;
+    if (el.callContextMenuTitle) el.callContextMenuTitle.textContent = friendName(targetUserId);
+    const pct = getUserVolume(targetUserId);
+    if (el.callContextVolumeRange) el.callContextVolumeRange.value = String(pct);
+    if (el.callContextVolumeValue) el.callContextVolumeValue.textContent = pct + '%';
+    if (el.callContextMuteBtn) el.callContextMuteBtn.textContent = pct === 0 ? 'Reativar som' : 'Silenciar';
+    menu.dataset.targetUserId = String(targetUserId);
+    menu.classList.remove('hidden');
+    // Só depois de mostrar (offsetWidth força o layout) dá pra medir o
+    // tamanho real do menu e evitar que ele nasça cortado pra fora da tela.
+    const w = menu.offsetWidth || 200, h = menu.offsetHeight || 120;
+    menu.style.left = Math.max(8, Math.min(x, window.innerWidth - w - 8)) + 'px';
+    menu.style.top = Math.max(8, Math.min(y, window.innerHeight - h - 8)) + 'px';
+  }
+  function closeCallContextMenu() { el.callContextMenu?.classList.add('hidden'); }
+  function applyContextVolume(pct) {
+    const id = el.callContextMenu?.dataset.targetUserId;
+    if (!id) return;
+    const applied = setUserVolume(id, pct);
+    if (el.callContextVolumeRange) el.callContextVolumeRange.value = String(applied);
+    if (el.callContextVolumeValue) el.callContextVolumeValue.textContent = applied + '%';
+    if (el.callContextMuteBtn) el.callContextMuteBtn.textContent = applied === 0 ? 'Reativar som' : 'Silenciar';
+    if (String(id) === String(state.targetUserId) && el.remoteAudio) el.remoteAudio.volume = combinedVolume(id);
+    syncVolumeUI();
+  }
+  function bindCallContextMenu() {
+    const targets = () => [el.remoteAvatar, el.remoteVideo, el.remoteCameraPip].filter(Boolean);
+    targets().forEach(t => t.addEventListener('contextmenu', e => {
+      if (!state.inCall || state.groupMode || !state.targetUserId) return;
+      e.preventDefault();
+      openCallContextMenu(e.clientX, e.clientY, state.targetUserId);
+    }));
+    el.callContextVolumeRange?.addEventListener('input', () => applyContextVolume(el.callContextVolumeRange.value));
+    el.callContextMuteBtn?.addEventListener('click', () => {
+      const id = el.callContextMenu?.dataset.targetUserId;
+      applyContextVolume(getUserVolume(id) === 0 ? 100 : 0);
+    });
+    document.addEventListener('click', e => {
+      if (!el.callContextMenu || el.callContextMenu.classList.contains('hidden')) return;
+      if (!el.callContextMenu.contains(e.target)) closeCallContextMenu();
+    });
+    document.addEventListener('contextmenu', e => {
+      if (!el.callContextMenu || el.callContextMenu.classList.contains('hidden')) return;
+      if (!targets().some(t => t?.contains(e.target))) closeCallContextMenu();
+    });
+    window.addEventListener('blur', closeCallContextMenu);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCallContextMenu(); });
   }
 
   function updateButtons() {
@@ -497,7 +565,7 @@
           if (state.remoteCameraStream) attachRemoteCameraPip(state.remoteCameraStream);
           track.onended = () => {
             state.remoteScreenActive = false;
-            el.callBar?.classList.remove('remote-sharing');
+            el.callBar?.classList.remove('remote-sharing', 'screen-minimized');
             detachRemoteCameraPip();
             if (state.remoteCameraStream) {
               attachRemoteStream(state.remoteCameraStream);
@@ -865,8 +933,9 @@
     detachRemoteCameraPip();
     if (el.localCameraPip) { el.localCameraPip.classList.add('hidden'); el.localCameraPip.srcObject = null; }
     if (el.remoteAudio) { el.remoteAudio.pause?.(); el.remoteAudio.srcObject = null; }
-    el.callBar?.classList.remove('audio-call', 'sharing', 'remote-sharing', 'has-remote', 'has-remote-video', 'call-reconnecting');
+    el.callBar?.classList.remove('audio-call', 'sharing', 'remote-sharing', 'screen-minimized', 'has-remote', 'has-remote-video', 'call-reconnecting');
     el.callBar?.classList.add('hidden');
+    closeCallContextMenu();
     closeModals(); updateButtons();
     window.Sounds?.play('call-leave');
   }
@@ -1042,7 +1111,7 @@
         await negotiate(false);
       }
 
-      el.callBar?.classList.remove('audio-call');
+      el.callBar?.classList.remove('audio-call', 'screen-minimized');
       el.callBar?.classList.add('sharing');
       $('call-live-label')?.classList.remove('hidden');
       if ($('call-live-label')) $('call-live-label').innerHTML = '🔴 APRESENTANDO <span id="call-remote-label">' + esc(friendName(state.targetUserId)) + '</span>';
@@ -1089,7 +1158,7 @@
       ensureVideoPreview();
     }
     ensureLocalCameraPip();
-    el.callBar?.classList.remove('sharing');
+    el.callBar?.classList.remove('sharing', 'screen-minimized');
     $('call-live-label')?.classList.add('hidden');
     if (state.callType === 'audio' && !el.callBar?.classList.contains('has-remote-video')) el.callBar?.classList.add('audio-call');
     updateButtons();
@@ -1450,6 +1519,11 @@
       el.remoteVolumeMenu.classList.add('hidden');
     });
     bindGroupVolumeControl();
+    bindCallContextMenu();
+    // Clicar na transmissão (não na câmera normal) encolhe/expande — ver
+    // toggleScreenMinimized e o CSS .screen-minimized no final do style.css.
+    el.remoteVideo?.addEventListener('click', () => { if (state.remoteScreenActive) toggleScreenMinimized(); });
+    el.localVideo?.addEventListener('click', () => { if (state.screenStream) toggleScreenMinimized(); });
     document.addEventListener('fullscreenchange', () => { state.fullscreen = !!document.fullscreenElement; });
     navigator.mediaDevices?.addEventListener?.('devicechange', () => window.Settings?.refreshDevices?.());
   }

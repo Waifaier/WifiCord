@@ -2828,3 +2828,74 @@ input:-webkit-autofill:focus {
 .status-options button[data-status="online"] .status-dot-icon { background: var(--status-online); box-shadow: 0 0 6px var(--status-online); }
 .status-options button[data-status="away"] .status-dot-icon { background: var(--status-away); box-shadow: 0 0 6px var(--status-away); }
 .status-options button[data-status="offline"] .status-dot-icon { background: var(--status-offline); }
+
+/* =======================================================================
+   Modo compacto da apresentação de tela + menu de botão direito na chamada
+   ========================================================================
+   Bloco colocado de propósito no FINAL do arquivo: o CSS de chamada tem
+   várias regras antigas duplicadas de ":not(.sharing)" espalhadas (mesma
+   especificidade, todas !important) — a única forma confiável de garantir
+   que as regras novas abaixo vençam sem precisar caçar e editar cada uma
+   delas é vir depois de todas no arquivo (em empate de especificidade +
+   importância, quem vem depois vence). */
+
+/* Clicar na transmissão (a própria tela compartilhada, não a câmera normal)
+   encolhe o vídeo pro centro do palco e volta a mostrar os avatares dos
+   dois participantes nas laterais — clicar de novo volta ao modo cheio. */
+#remote-video, .call-bar.sharing #local-video.is-screen-preview { cursor: zoom-in; }
+.call-bar.screen-minimized #remote-video,
+.call-bar.screen-minimized #local-video.is-screen-preview { cursor: zoom-out; }
+
+.call-bar.screen-minimized .call-stage #remote-video,
+.call-bar.screen-minimized .call-stage #local-video.is-screen-preview {
+  position: absolute !important;
+  inset: auto !important;
+  width: min(56%, 640px) !important;
+  height: min(60%, 420px) !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  border-radius: 16px !important;
+  object-fit: contain !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5) !important;
+  z-index: 2 !important;
+  background: #050609 !important;
+}
+.call-bar.screen-minimized .call-local-avatar,
+.call-bar.screen-minimized .call-remote-avatar {
+  display: grid !important;
+  position: absolute !important;
+  top: 50% !important;
+  bottom: auto !important;
+  transform: translateY(-50%) !important;
+}
+.call-bar.screen-minimized .call-remote-avatar { left: 32px !important; right: auto !important; }
+.call-bar.screen-minimized .call-local-avatar { right: 32px !important; left: auto !important; }
+
+/* Menu de botão direito (participante ou transmissão) — volume rápido e
+   silenciar, iguais ao popover de volume que já existe no topo da chamada,
+   só que abre no ponto onde a pessoa clicou, como no Discord. */
+.call-context-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 200px;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 12px;
+  background: #171522;
+  box-shadow: 0 20px 50px rgba(0,0,0,.55);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.call-context-menu.hidden { display: none; }
+.call-context-menu-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #cfc9e0;
+  padding: 0 2px 2px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  margin-bottom: 2px;
+}
+.call-context-menu .call-volume-row { padding: 0 2px; }
+.call-context-menu-btn { width: 100%; text-align: left; justify-content: flex-start; }
