@@ -1,0 +1,14 @@
+﻿{
+  "appId": "com.wificord.app",
+  "appName": "WifiCord",
+  "webDir": "www",
+  "server": {
+    "url": "https://wificord.onrender.com",
+    "cleartext": false,
+    "allowNavigation": ["wificord.onrender.com", "*.onrender.com"]
+  },
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
+  }
+}
