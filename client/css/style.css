@@ -1264,7 +1264,15 @@ body { min-height:100vh; }
 /* Screen share: both presenter and viewer get a visible video surface. */
 .call-bar.sharing .call-stage #local-video.is-screen-preview { display:block!important; width:100%!important; height:100%!important; max-width:none!important; max-height:none!important; right:0!important; bottom:0!important; object-fit:contain!important; z-index:2!important; background:#050609!important; }
 .call-bar.sharing .call-stage #remote-video { display:block!important; position:absolute!important; inset:0!important; width:100%!important; height:100%!important; object-fit:contain!important; z-index:1!important; }
-.call-bar.sharing .call-local-avatar, .call-bar.sharing .call-remote-avatar { z-index:7!important; }
+/* Durante uma apresentação de tela (minha ou da outra pessoa) a tela ocupa
+   o palco inteiro — os avatares circulares por cima dela é exatamente o bug
+   "nossas fotos estão em cima da transmissão". Em vez de forçar os avatares
+   pra cima do vídeo (como a regra antiga fazia com z-index:7), escondem-se
+   os avatares nesse estado; a câmera de quem está apresentando (se também
+   estiver ligada) aparece como uma bolinha própria (#local-camera-pip /
+   #remote-camera-pip — ver call.js), não como o avatar estático. */
+.call-bar.sharing .call-local-avatar, .call-bar.sharing .call-remote-avatar,
+.call-bar.remote-sharing .call-local-avatar, .call-bar.remote-sharing .call-remote-avatar { display:none!important; }
 .call-stage video { background:#050609; }
 @media(max-width:760px){#modal-profile .profile-card{width:calc(100vw - 24px)!important}#modal-profile .profile-card-body{padding:14px 18px 24px!important}#modal-profile .profile-avatar{margin-left:18px!important}}
 
@@ -1672,7 +1680,23 @@ body { min-width: 0; min-height: 100dvh; overflow: hidden; }
 .call-stage > #local-video.hidden { display: none !important; }
 .call-bar.audio-call #local-video, .call-bar.audio-call #remote-video { display: none !important; }
 .call-bar.sharing #local-video.is-screen-preview { inset: 0 !important; width: 100% !important; height: 100% !important; object-fit: contain !important; border: 0; border-radius: 0; z-index: 2 !important; }
-.call-bar.sharing #remote-video { z-index: 1 !important; }
+.call-bar.sharing #remote-video, .call-bar.remote-sharing #remote-video { z-index: 1 !important; }
+
+/* Bolinhas de câmera (Discord-like) que aparecem SÓ enquanto uma
+   apresentação de tela está rolando E a câmera de quem apresenta também
+   está ligada — câmera e tela agora chegam em faixas separadas (ver
+   call.js), então as duas podem estar ativas ao mesmo tempo sem uma cortar
+   a outra. Cantos opostos aos da pré-visualização de tela pra nunca
+   sobrepor: a minha (#local-camera-pip) no canto onde a câmera normal já
+   fica; a da outra pessoa (#remote-camera-pip) no canto oposto. */
+#local-camera-pip, #remote-camera-pip {
+  position: absolute; z-index: 6; width: clamp(100px, 14vw, 168px); height: clamp(66px, 9vw, 108px);
+  border: 2px solid rgba(255,255,255,.16); border-radius: 12px; object-fit: cover;
+  background: #050609; box-shadow: 0 10px 26px rgba(0,0,0,.4);
+}
+#local-camera-pip { right: 16px; bottom: 16px; }
+#remote-camera-pip { left: 16px; bottom: 16px; }
+#local-camera-pip.hidden, #remote-camera-pip.hidden { display: none !important; }
 
 .call-stage .call-participant-avatar {
   position: absolute !important; left: 50% !important; top: 50% !important;

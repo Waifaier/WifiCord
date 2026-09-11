@@ -30,6 +30,54 @@
     } catch (_) { /* mantém o fallback de STUN público */ }
   }
 
+  // ---------------------------------------------------------------------
+  // Sanitização de SDP: remove o codec de correção de erro flexfec-03 antes
+  // de qualquer setLocalDescription/setRemoteDescription. Em algumas
+  // combinações de transceptores (câmera + tela como faixas de vídeo
+  // separadas — ver pcCreate) o Chrome tem um bug conhecido ao renumerar os
+  // payload types dinâmicos durante uma renegociação: ele gera um SDP onde
+  // o MESMO número de payload type aparece duas vezes apontando pra codecs
+  // diferentes ("a=rtpmap:49 flexfec-03/90000 Duplicate payload type with
+  // conflicting codec name or clock rate"), e o próprio navegador rejeita a
+  // descrição que ele mesmo gerou. Como flexfec é só uma otimização de
+  // correção de erro (não essencial — o vídeo funciona normalmente sem
+  // ele), a saída mais segura é nunca oferecer/aceitar esse codec: assim
+  // esse conflito nunca chega a existir, em vez de tentar prever todo caso
+  // em que o Chrome erra a numeração.
+  function stripFlexFec(sdp) {
+    if (!sdp || typeof sdp !== 'string' || !/flexfec/i.test(sdp)) return sdp;
+    const lines = sdp.split('\r\n');
+    const removePts = new Set();
+    for (const line of lines) {
+      const m = /^a=rtpmap:(\d+)\s+flexfec/i.exec(line);
+      if (m) removePts.add(m[1]);
+    }
+    if (!removePts.size) return sdp;
+    const out = [];
+    for (let line of lines) {
+      let pt = null;
+      let mm;
+      if ((mm = /^a=(?:rtpmap|fmtp|rtcp-fb):(\d+)\b/.exec(line))) pt = mm[1];
+      if (pt && removePts.has(pt)) continue;
+      if (line.startsWith('m=video')) {
+        const parts = line.split(' ');
+        const header = parts.slice(0, 3);
+        const pts = parts.slice(3).filter(p => !removePts.has(p));
+        line = header.concat(pts).join(' ');
+      }
+      out.push(line);
+    }
+    return out.join('\r\n');
+  }
+  // Aplica a sanitização acima em cima de uma RTCSessionDescription recém
+  // criada (createOffer/createAnswer), devolvendo um objeto plano pronto
+  // pra setLocalDescription — sem isso a descrição continuaria com o
+  // flexfec problemático.
+  function sanitizeDescription(desc) {
+    if (!desc) return desc;
+    return { type: desc.type, sdp: stripFlexFec(desc.sdp) };
+  }
+
   const state = {
     pc: null, localStream: null, screenStream: null,
     screenSender: null, systemAudioSender: null,
@@ -46,6 +94,13 @@
     groupMode: false, groupServerId: null, groupChannelId: null,
     groupType: 'audio', groupPeers: new Map(),
     qualityTimer: null,
+    // Câmera e apresentação de tela remotas chegam em transceptores
+    // separados (ver pcCreate/ontrack) e podem estar ativas ao mesmo tempo
+    // — precisa lembrar o stream da câmera remota separadamente pra saber
+    // se tem algo pra mostrar na bolinha (PIP) quando a tela também estiver
+    // ativa, e pra devolver a câmera pro palco principal quando a
+    // apresentação terminar.
+    remoteCameraStream: null, remoteScreenActive: false,
     // Fica false enquanto a troca inicial de oferta/resposta (startCall ou
     // accept) ainda não terminou. Evita que o próprio navegador dispare
     // 'negotiationneeded' (por causa dos addTransceiver no pcCreate) e
@@ -88,6 +143,7 @@
     Object.assign(el, {
       callBar: $('call-bar'), callStatus: $('call-connection-status'), remoteLabelTop: $('call-remote-label-top'),
       localVideo: $('local-video'), remoteVideo: $('remote-video'), remoteAudio: $('remote-audio'),
+      localCameraPip: $('local-camera-pip'), remoteCameraPip: $('remote-camera-pip'),
       remoteLabel: $('call-remote-label'), toggleMicBtn: $('call-toggle-mic'), toggleCamBtn: $('call-toggle-cam'),
       toggleScreenBtn: $('call-toggle-screen'), hangupBtn: $('call-hangup'),
       micMenuBtn: $('call-mic-menu'), camMenuBtn: $('call-cam-menu'),
@@ -279,6 +335,25 @@
     el.localVideo.play?.().catch(() => {});
   }
 
+  // Espelha ensureVideoPreview() pra bolinha de câmera local: só aparece
+  // quando EU estou apresentando a tela (que ocupa o #local-video inteiro)
+  // e a câmera também está ligada — senão a câmera já aparece normalmente
+  // no #local-video de sempre.
+  function ensureLocalCameraPip() {
+    if (!el.localCameraPip) return;
+    if (state.screenStream && state.camEnabled && state.localStream?.getVideoTracks()[0]) {
+      el.localCameraPip.srcObject = state.localStream;
+      el.localCameraPip.muted = true;
+      el.localCameraPip.autoplay = true;
+      el.localCameraPip.playsInline = true;
+      el.localCameraPip.classList.remove('hidden');
+      el.localCameraPip.play?.().catch(() => {});
+    } else {
+      el.localCameraPip.classList.add('hidden');
+      el.localCameraPip.srcObject = null;
+    }
+  }
+
   function attachRemoteStream(stream) {
     if (!el.remoteVideo) return;
     el.remoteVideo.srcObject = stream;
@@ -287,6 +362,24 @@
     el.remoteVideo.classList.remove('hidden');
     el.remoteVideo.play?.().catch(() => {});
     requestAnimationFrame(() => el.remoteVideo?.play?.().catch(() => {}));
+  }
+
+  // Bolinha de câmera por cima da apresentação de tela (a mesma ideia do
+  // Discord): só existe enquanto a outra pessoa está apresentando a tela E
+  // com a câmera ligada ao mesmo tempo — nos outros casos a câmera ocupa o
+  // palco principal normalmente (attachRemoteStream).
+  function attachRemoteCameraPip(stream) {
+    if (!el.remoteCameraPip) return;
+    el.remoteCameraPip.srcObject = stream;
+    el.remoteCameraPip.autoplay = true;
+    el.remoteCameraPip.playsInline = true;
+    el.remoteCameraPip.classList.remove('hidden');
+    el.remoteCameraPip.play?.().catch(() => {});
+  }
+  function detachRemoteCameraPip() {
+    if (!el.remoteCameraPip) return;
+    el.remoteCameraPip.classList.add('hidden');
+    el.remoteCameraPip.srcObject = null;
   }
 
   function attachRemoteAudio(stream) {
@@ -314,15 +407,30 @@
     state.polite = polite;
     state.ignoreOffer = false;
 
-    let audioSender = null;
-    let videoSender = null;
-    let systemAudioSender = null;
-    try { audioSender = pc.addTransceiver('audio', { direction: 'sendrecv' }).sender; } catch (_) {}
-    try { videoSender = pc.addTransceiver('video', { direction: 'sendrecv' }).sender; } catch (_) {}
-    try { systemAudioSender = pc.addTransceiver('audio', { direction: 'sendrecv' }).sender; } catch (_) {}
-    pc._wifiAudioSender = audioSender;
-    pc._wifiVideoSender = videoSender;
-    pc._wifiSystemAudioSender = systemAudioSender;
+    // 4 transceptores fixos, sempre criados nesta ordem pelos dois lados
+    // (quem liga e quem atende passam pela mesma pcCreate): mic, câmera,
+    // áudio-do-sistema (só usado durante apresentação de tela) e vídeo-da-
+    // tela. Câmera e tela usam sender/receiver PRÓPRIOS — antes os dois
+    // dividiam o mesmo slot de vídeo (screenShare fazia replaceTrack no
+    // MESMO sender da câmera), então ligar a câmera durante uma
+    // apresentação de tela substituía a track que estava sendo
+    // transmitida, cortando a apresentação na hora ("se liga a câmera, tá
+    // interrompendo a transmissão"). Com slots separados os dois fluem ao
+    // mesmo tempo, e o lado que recebe consegue saber COM CERTEZA (pela
+    // identidade do receiver, não por adivinhação) se um vídeo recebido é a
+    // câmera ou a tela da outra pessoa — usado em ontrack() pra parar de
+    // empilhar o avatar em cima da transmissão (ver comentário lá).
+    let audioT = null, videoT = null, systemAudioT = null, screenVideoT = null;
+    try { audioT = pc.addTransceiver('audio', { direction: 'sendrecv' }); } catch (_) {}
+    try { videoT = pc.addTransceiver('video', { direction: 'sendrecv' }); } catch (_) {}
+    try { systemAudioT = pc.addTransceiver('audio', { direction: 'sendrecv' }); } catch (_) {}
+    try { screenVideoT = pc.addTransceiver('video', { direction: 'sendrecv' }); } catch (_) {}
+    pc._wifiAudioSender = audioT?.sender || null;
+    pc._wifiVideoSender = videoT?.sender || null;
+    pc._wifiSystemAudioSender = systemAudioT?.sender || null;
+    pc._wifiScreenVideoSender = screenVideoT?.sender || null;
+    pc._wifiVideoReceiver = videoT?.receiver || null;
+    pc._wifiScreenVideoReceiver = screenVideoT?.receiver || null;
 
     pc.onicecandidate = e => {
       if (e.candidate && state.targetUserId) {
@@ -352,8 +460,9 @@
         startQualityMonitor(pc);
         // Só libera renegociação automática (onnegotiationneeded — usada pra
         // compartilhar tela depois) quando a ligação REALMENTE conectou, não
-        // logo após mandar a oferta/resposta inicial. O pcCreate() já cria 3
-        // transceivers de cara (áudio, vídeo, áudio-do-sistema), o que deixa
+        // logo após mandar a oferta/resposta inicial. O pcCreate() já cria 4
+        // transceivers de cara (áudio, vídeo, áudio-do-sistema, vídeo-da-tela),
+        // o que deixa
         // um 'negotiationneeded' "pendente" no navegador; ele só dispara
         // quando o signalingState volta a ficar 'stable' — o que acontece
         // bem na hora em que a resposta chega. Se negotiationReady já
@@ -371,15 +480,45 @@
       const track = e.track;
       const stream = e.streams?.[0] instanceof MediaStream ? e.streams[0] : new MediaStream([track]);
       if (track.kind === 'video') {
+        // Câmera e tela chegam em transceptores diferentes (ver comentário
+        // em pcCreate), então dá pra saber com certeza qual é qual pela
+        // identidade do receiver — em vez de só "um vídeo chegou" e chutar.
+        // Isso é o que permite mostrar a tela em tela cheia e a câmera como
+        // uma bolinha por cima (como o Discord faz), sem os dois brigando
+        // pelo mesmo espaço nem ficando um avatar gigante em cima da
+        // transmissão.
+        const isScreen = e.receiver === pc._wifiScreenVideoReceiver;
         el.callBar?.classList.remove('audio-call');
         el.callBar?.classList.add('has-remote-video', 'has-remote');
-        addRemoteTrack(track, stream, true);
-        track.onended = () => {
-          if (!state.screenStream) {
-            el.callBar?.classList.remove('has-remote-video');
-            if (state.callType === 'audio') el.callBar?.classList.add('audio-call');
-          }
-        };
+        if (isScreen) {
+          state.remoteScreenActive = true;
+          el.callBar?.classList.add('remote-sharing');
+          attachRemoteStream(stream);
+          if (state.remoteCameraStream) attachRemoteCameraPip(state.remoteCameraStream);
+          track.onended = () => {
+            state.remoteScreenActive = false;
+            el.callBar?.classList.remove('remote-sharing');
+            detachRemoteCameraPip();
+            if (state.remoteCameraStream) {
+              attachRemoteStream(state.remoteCameraStream);
+            } else {
+              el.callBar?.classList.remove('has-remote-video');
+              if (state.callType === 'audio') el.callBar?.classList.add('audio-call');
+            }
+          };
+        } else {
+          state.remoteCameraStream = stream;
+          if (state.remoteScreenActive) attachRemoteCameraPip(stream);
+          else attachRemoteStream(stream);
+          track.onended = () => {
+            state.remoteCameraStream = null;
+            detachRemoteCameraPip();
+            if (!state.remoteScreenActive) {
+              el.callBar?.classList.remove('has-remote-video');
+              if (state.callType === 'audio') el.callBar?.classList.add('audio-call');
+            }
+          };
+        }
       } else {
         el.callBar?.classList.add('has-remote');
         addRemoteTrack(track, stream, false);
@@ -496,7 +635,7 @@
     if (pc.signalingState !== 'stable' && !iceRestart) return;
     state.makingOffer = true;
     try {
-      const offer = await pc.createOffer(iceRestart ? { iceRestart: true } : undefined);
+      const offer = sanitizeDescription(await pc.createOffer(iceRestart ? { iceRestart: true } : undefined));
       await pc.setLocalDescription(offer);
       window.ChatSocket?.sendCallOffer?.({
         toUserId: state.targetUserId,
@@ -539,7 +678,7 @@
     if (state.inCall || state.pendingOffer) return;
     try {
       await prepare(target, type, false);
-      const offer = await state.pc.createOffer();
+      const offer = sanitizeDescription(await state.pc.createOffer());
       await state.pc.setLocalDescription(offer);
       window.ChatSocket?.sendCallOffer?.({ toUserId: target, sdp: state.pc.localDescription, callType: type, renegotiation: false });
       // negotiationReady só vira true quando a chamada conecta de verdade
@@ -600,7 +739,7 @@
       if (offerCollision && state.polite) await pc.setLocalDescription({ type: 'rollback' });
       await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
       await flushCandidates(pc);
-      const answer = await pc.createAnswer();
+      const answer = sanitizeDescription(await pc.createAnswer());
       await pc.setLocalDescription(answer);
       window.ChatSocket?.sendCallAnswer?.({ toUserId: data.fromUserId, sdp: pc.localDescription, renegotiation: true });
     } catch (e) {
@@ -627,7 +766,7 @@
       await prepare(d.fromUserId, d.callType || 'video', true);
       await state.pc.setRemoteDescription(new RTCSessionDescription(d.sdp));
       await flushCandidates(state.pc);
-      const answer = await state.pc.createAnswer();
+      const answer = sanitizeDescription(await state.pc.createAnswer());
       await state.pc.setLocalDescription(answer);
       window.ChatSocket?.sendCallAnswer?.({ toUserId: d.fromUserId, sdp: state.pc.localDescription, renegotiation: false });
       state.pendingOffer = null;
@@ -645,6 +784,12 @@
     state.pendingOffer = null;
     window.Sounds?.stopLoop();
     closeModals();
+    // Rede de segurança: se por qualquer motivo a barra de chamada já
+    // estivesse visível (ex.: estado de uma chamada anterior que não foi
+    // limpo direito), recusar um convite também garante que ela suma da
+    // tela — sem isso a pessoa via a "tela de chamando" continuar aberta
+    // mesmo depois de clicar em recusar.
+    if (!state.inCall) el.callBar?.classList.add('hidden');
     window.Sounds?.play('call-leave');
   }
 
@@ -715,9 +860,12 @@
     state.adminVoiceMutedUntil = 0; state._localSpeaking = false; state._remoteSpeaking = false;
     state.reconnectAttempts = 0; state.makingOffer = false; state.ignoreOffer = false;
     state.negotiationReady = false;
+    state.remoteCameraStream = null; state.remoteScreenActive = false;
     cleanupMediaElement(el.localVideo); cleanupMediaElement(el.remoteVideo);
+    detachRemoteCameraPip();
+    if (el.localCameraPip) { el.localCameraPip.classList.add('hidden'); el.localCameraPip.srcObject = null; }
     if (el.remoteAudio) { el.remoteAudio.pause?.(); el.remoteAudio.srcObject = null; }
-    el.callBar?.classList.remove('audio-call', 'sharing', 'has-remote', 'has-remote-video', 'call-reconnecting');
+    el.callBar?.classList.remove('audio-call', 'sharing', 'remote-sharing', 'has-remote', 'has-remote-video', 'call-reconnecting');
     el.callBar?.classList.add('hidden');
     closeModals(); updateButtons();
     window.Sounds?.play('call-leave');
@@ -743,17 +891,21 @@
         state.localStream.addTrack(track);
         if (state.groupMode) {
           for (const p of state.groupPeers.values()) {
-            const sender = p.pc._wifiVideoSender || p.pc.getSenders().find(s => s.track?.kind === 'video');
+            // Nunca cai pro primeiro sender de vídeo "qualquer" como
+            // fallback: agora existem DOIS (câmera e tela — ver pcCreate),
+            // e pegar o errado botaria a câmera no lugar da apresentação.
+            const sender = p.pc._wifiVideoSender;
             if (sender) await sender.replaceTrack(track);
           }
         } else if (state.pc) {
-          const sender = state.pc._wifiVideoSender || state.pc.getSenders().find(s => s.track?.kind === 'video');
+          const sender = state.pc._wifiVideoSender;
           if (sender) await sender.replaceTrack(track);
         }
       }
       state.camEnabled = !state.camEnabled;
       track.enabled = state.camEnabled;
       ensureVideoPreview();
+      ensureLocalCameraPip();
       if (!state.groupMode && state.pc) await negotiate(false);
       updateButtons();
     } catch (e) {
@@ -869,14 +1021,17 @@
 
       if (state.groupMode) {
         for (const p of state.groupPeers.values()) {
-          const sender = p.pc._wifiVideoSender || p.pc.getSenders().find(s => s.track?.kind === 'video');
+          // Usa o transceptor DEDICADO de tela (nunca o da câmera — ver
+          // pcCreate/createGroupPeer): assim ligar a câmera durante a
+          // apresentação não derruba/substitui a transmissão.
+          const sender = p.pc._wifiScreenVideoSender;
           if (sender) await sender.replaceTrack(track);
           const sys = stream.getAudioTracks()[0];
           if (sys && p.pc._wifiSystemAudioSender) await p.pc._wifiSystemAudioSender.replaceTrack(sys);
         }
       } else {
-        const sender = state.pc?._wifiVideoSender || state.pc?.getSenders().find(s => s.track?.kind === 'video');
-        if (!sender) throw new Error('A conexão não possui transceptor de vídeo.');
+        const sender = state.pc?._wifiScreenVideoSender;
+        if (!sender) throw new Error('A conexão não possui transceptor de vídeo para a tela.');
         await sender.replaceTrack(track);
         state.screenSender = sender;
         const sys = stream.getAudioTracks()[0];
@@ -898,6 +1053,7 @@
         el.localVideo.muted = true;
         el.localVideo.play?.().catch(() => {});
       }
+      ensureLocalCameraPip();
       updateButtons();
       window.Sounds?.play('screen-start');
       track.onended = () => { stopScreen().catch(console.error); };
@@ -911,16 +1067,17 @@
     if (!stream) return;
     stream.getTracks().forEach(t => t.stop());
     state.screenStream = null;
-    const camera = state.localStream?.getVideoTracks()?.[0] || null;
 
+    // A câmera nunca saiu do próprio sender (ver startScreenShareWithQuality
+    // — agora usa o transceptor dedicado de tela), então não precisa
+    // "devolver" nada pra ela aqui: só limpa o sender de tela mesmo.
     if (state.groupMode) {
       for (const p of state.groupPeers.values()) {
-        const sender = p.pc._wifiVideoSender || p.pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) await sender.replaceTrack(camera || null);
+        if (p.pc._wifiScreenVideoSender) await p.pc._wifiScreenVideoSender.replaceTrack(null);
         if (p.pc._wifiSystemAudioSender) await p.pc._wifiSystemAudioSender.replaceTrack(null);
       }
     } else if (state.pc) {
-      if (state.screenSender) await state.screenSender.replaceTrack(camera || null);
+      if (state.screenSender) await state.screenSender.replaceTrack(null);
       if (state.systemAudioSender) await state.systemAudioSender.replaceTrack(null);
       state.screenSender = null;
       state.systemAudioSender = null;
@@ -931,6 +1088,7 @@
       el.localVideo.classList.remove('is-screen-preview');
       ensureVideoPreview();
     }
+    ensureLocalCameraPip();
     el.callBar?.classList.remove('sharing');
     $('call-live-label')?.classList.add('hidden');
     if (state.callType === 'audio' && !el.callBar?.classList.contains('has-remote-video')) el.callBar?.classList.add('audio-call');
@@ -1060,12 +1218,21 @@
     if (groupPeerPc(id)) return groupPeerPc(id);
     const pc = new RTCPeerConnection(RTC_CONFIG);
     const peer = { pc, video: null, audioStreams: [], pending: [], makingOffer: false, reconnectTimer: null, reconnectAttempts: 0 };
-    try { pc.addTransceiver('audio', { direction: 'sendrecv' }); } catch (_) {}
-    try { pc.addTransceiver('video', { direction: 'sendrecv' }); } catch (_) {}
-    try { pc.addTransceiver('audio', { direction: 'sendrecv' }); } catch (_) {}
-    pc._wifiAudioSender = pc.getTransceivers().find(t => t.receiver?.track?.kind === 'audio')?.sender;
-    pc._wifiVideoSender = pc.getTransceivers().find(t => t.receiver?.track?.kind === 'video')?.sender;
-    pc._wifiSystemAudioSender = pc.getTransceivers().filter(t => t.receiver?.track?.kind === 'audio')[1]?.sender;
+    // Mesma ordem fixa de 4 transceptores do pcCreate() da chamada 1:1 (ver
+    // comentário lá): mic, câmera, áudio-do-sistema, vídeo-da-tela — câmera
+    // e tela com sender próprio pra não brigar pelo mesmo slot durante uma
+    // apresentação de tela em chamada de servidor/grupo.
+    let audioT = null, videoT = null, systemAudioT = null, screenVideoT = null;
+    try { audioT = pc.addTransceiver('audio', { direction: 'sendrecv' }); } catch (_) {}
+    try { videoT = pc.addTransceiver('video', { direction: 'sendrecv' }); } catch (_) {}
+    try { systemAudioT = pc.addTransceiver('audio', { direction: 'sendrecv' }); } catch (_) {}
+    try { screenVideoT = pc.addTransceiver('video', { direction: 'sendrecv' }); } catch (_) {}
+    pc._wifiAudioSender = audioT?.sender || null;
+    pc._wifiVideoSender = videoT?.sender || null;
+    pc._wifiSystemAudioSender = systemAudioT?.sender || null;
+    pc._wifiScreenVideoSender = screenVideoT?.sender || null;
+    pc._wifiVideoReceiver = videoT?.receiver || null;
+    pc._wifiScreenVideoReceiver = screenVideoT?.receiver || null;
     state.groupPeers.set(id, peer);
 
     const audio = state.localStream?.getAudioTracks()[0];
@@ -1078,8 +1245,29 @@
     };
     pc.ontrack = e => {
       if (e.track.kind === 'video') {
+        // Câmera e apresentação de tela agora chegam em transceptores
+        // separados (ver comentário acima), então nunca mais uma sobrescreve
+        // a outra no sender de quem envia — mas a grade de chamada de
+        // servidor ainda mostra só UM vídeo por participante (peer.video),
+        // priorizando a tela quando as duas estiverem ativas ao mesmo
+        // tempo, igual o palco principal da chamada 1:1.
+        const isScreen = e.receiver === pc._wifiScreenVideoReceiver;
         if (!(peer.video instanceof MediaStream)) peer.video = new MediaStream();
-        if (!peer.video.getTracks().some(t => t.id === e.track.id)) peer.video.addTrack(e.track);
+        if (isScreen) peer.screenTrack = e.track; else peer.cameraTrack = e.track;
+        // Mostra a tela quando ela existir, senão a câmera — nunca as duas
+        // juntas na mesma tile (a grade de servidor só tem um <video> por
+        // participante). Reavalia isso a cada track que chega/termina, pra
+        // a câmera reaparecer sozinha assim que a apresentação acabar.
+        const showTrack = peer.screenTrack || peer.cameraTrack || null;
+        peer.video.getVideoTracks().forEach(t => { if (t !== showTrack) peer.video.removeTrack(t); });
+        if (showTrack && !peer.video.getTracks().some(t => t.id === showTrack.id)) peer.video.addTrack(showTrack);
+        e.track.onended = () => {
+          if (isScreen) peer.screenTrack = null; else peer.cameraTrack = null;
+          if (peer.video?.getTracks().some(t => t.id === e.track.id)) peer.video.removeTrack(e.track);
+          const next = peer.screenTrack || peer.cameraTrack || null;
+          if (next && !peer.video.getTracks().some(t => t.id === next.id)) peer.video.addTrack(next);
+          renderGroupTiles();
+        };
         renderGroupTiles();
       } else {
         const stream = e.streams?.[0] instanceof MediaStream ? e.streams[0] : new MediaStream([e.track]);
@@ -1105,7 +1293,7 @@
     };
 
     if (initiator) {
-      pc.createOffer().then(o => pc.setLocalDescription(o)).then(() => window.ChatSocket?.sendServerCallOffer?.({ toUserId: Number(id), serverId: state.groupServerId, channelId: state.groupChannelId, callType: state.groupType, sdp: pc.localDescription })).catch(console.error);
+      pc.createOffer().then(o => pc.setLocalDescription(sanitizeDescription(o))).then(() => window.ChatSocket?.sendServerCallOffer?.({ toUserId: Number(id), serverId: state.groupServerId, channelId: state.groupChannelId, callType: state.groupType, sdp: pc.localDescription })).catch(console.error);
     }
     return peer;
   }
@@ -1127,7 +1315,7 @@
       peer.reconnectAttempts += 1;
       try {
         if (forceIceRestart || peer.pc.connectionState === 'failed' || peer.pc.connectionState === 'disconnected') {
-          const offer = await peer.pc.createOffer({ iceRestart: true });
+          const offer = sanitizeDescription(await peer.pc.createOffer({ iceRestart: true }));
           await peer.pc.setLocalDescription(offer);
           window.ChatSocket?.sendServerCallOffer?.({ toUserId: Number(id), serverId: state.groupServerId, channelId: state.groupChannelId, callType: state.groupType, sdp: peer.pc.localDescription });
         }
@@ -1179,7 +1367,7 @@
       await peer.pc.setRemoteDescription(new RTCSessionDescription(d.sdp));
       for (const c of peer.pending || []) { try { await peer.pc.addIceCandidate(c); } catch (_) {} }
       peer.pending = [];
-      const answer = await peer.pc.createAnswer();
+      const answer = sanitizeDescription(await peer.pc.createAnswer());
       await peer.pc.setLocalDescription(answer);
       window.ChatSocket?.sendServerCallAnswer?.({ toUserId: Number(d.fromUserId), serverId: state.groupServerId, channelId: state.groupChannelId, sdp: peer.pc.localDescription });
     } catch (e) { console.error('Oferta de chamada de servidor:', e); }
@@ -1217,6 +1405,10 @@
       window.Sounds?.stopLoop();
     }
     if (state.inCall && (!data || String(data.fromUserId) === String(state.targetUserId))) endCall(false);
+    // Rede de segurança (ver reject()): garante que a barra de chamada não
+    // fique presa na tela se, por qualquer motivo, nenhuma das condições
+    // acima bateu mas já não há chamada nem convite pendente em andamento.
+    if (!state.inCall && !state.pendingOffer) el.callBar?.classList.add('hidden');
   }
 
   function bind() {
