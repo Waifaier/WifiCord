@@ -350,6 +350,17 @@
         setCallStatus('Conectado', 'connected');
         window.Sounds?.play('call-join');
         startQualityMonitor(pc);
+        // Só libera renegociação automática (onnegotiationneeded — usada pra
+        // compartilhar tela depois) quando a ligação REALMENTE conectou, não
+        // logo após mandar a oferta/resposta inicial. O pcCreate() já cria 3
+        // transceivers de cara (áudio, vídeo, áudio-do-sistema), o que deixa
+        // um 'negotiationneeded' "pendente" no navegador; ele só dispara
+        // quando o signalingState volta a ficar 'stable' — o que acontece
+        // bem na hora em que a resposta chega. Se negotiationReady já
+        // estivesse true nesse momento, esse evento reaproveitado mandava
+        // uma oferta de renegociação por cima da ligação que acabou de
+        // conectar, e o outro lado tomava "Erro na renegociação".
+        state.negotiationReady = true;
       }
       if (connection === 'disconnected') { scheduleReconnect(pc); setQuality('unknown'); }
       if (connection === 'failed') { scheduleReconnect(pc, true); stopQualityMonitor(); }
@@ -531,7 +542,8 @@
       const offer = await state.pc.createOffer();
       await state.pc.setLocalDescription(offer);
       window.ChatSocket?.sendCallOffer?.({ toUserId: target, sdp: state.pc.localDescription, callType: type, renegotiation: false });
-      state.negotiationReady = true;
+      // negotiationReady só vira true quando a chamada conecta de verdade
+      // (ver onconnectionstatechange em pcCreate) — não aqui.
       window.Sounds?.startLoop('ringback'); // toc-toc de "chamando..." pra quem ligou
     } catch (e) {
       window.App?.toast(e.message || 'Não foi possível iniciar a chamada.', 'error');
@@ -594,6 +606,15 @@
     } catch (e) {
       console.error('Falha na renegociação:', e);
       setCallStatus('Erro na renegociação', 'failed');
+      // Uma renegociação (ex.: tentativa de compartilhar tela) pode falhar
+      // sem que a ligação em si tenha caído — o áudio/vídeo já conectado
+      // continua funcionando. Sem isso, o status ficava travado em
+      // "Erro na renegociação" pro resto da chamada mesmo com tudo OK.
+      setTimeout(() => {
+        if (state.inCall && state.pc === pc && pc.connectionState === 'connected') {
+          setCallStatus('Conectado', 'connected');
+        }
+      }, 2500);
     }
   }
 
@@ -610,7 +631,8 @@
       await state.pc.setLocalDescription(answer);
       window.ChatSocket?.sendCallAnswer?.({ toUserId: d.fromUserId, sdp: state.pc.localDescription, renegotiation: false });
       state.pendingOffer = null;
-      state.negotiationReady = true;
+      // negotiationReady só vira true quando a chamada conecta de verdade
+      // (ver onconnectionstatechange em pcCreate) — não aqui.
     } catch (e) {
       window.App?.toast(e.message || 'Não foi possível atender.', 'error');
       state.pendingOffer = null;
