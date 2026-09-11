@@ -213,6 +213,7 @@
       <div id="chat-header-actions" class="chat-header-actions">
         <button type="button" id="start-voice-call-btn" class="btn-icon" title="Chamada de voz">📞</button>
         <button type="button" id="start-video-call-btn" class="btn-icon" title="Chamada de vídeo">🎥</button>
+        <button type="button" id="delete-dm-btn" class="btn-icon hidden" title="Apagar conversa">🗑️</button>
       </div>
     </header>
 
@@ -518,7 +519,19 @@
         </div>
         <div class="settings-pane" data-settings-pane="appearance">
           <h4>Aparência</h4>
-          <p class="text-muted">Personalize a interface.</p><label>Cor de destaque <input type="color" id="settings-accent" value="#5865F2"></label><label class="settings-toggle"><input type="checkbox" id="settings-compact"> Modo compacto</label><label class="settings-toggle"><input type="checkbox" id="settings-reduce-motion"> Reduzir animações</label><button type="button" id="settings-save-appearance" class="btn btn-primary">Salvar aparência</button>
+          <p class="text-muted">Personalize a interface.</p>
+          <label>Tema do aplicativo</label>
+          <div class="theme-preset-grid" id="theme-preset-grid">
+            <button type="button" class="theme-preset-swatch" data-theme="escuro"><i style="background:linear-gradient(135deg,#7C5CFF,#22D3EE)"></i><span>Escuro</span></button>
+            <button type="button" class="theme-preset-swatch" data-theme="claro"><i style="background:linear-gradient(135deg,#6C4CFF,#0EA5C4)"></i><span>Claro</span></button>
+            <button type="button" class="theme-preset-swatch" data-theme="cyber"><i style="background:linear-gradient(135deg,#FF2E88,#00F0FF)"></i><span>Cyber</span></button>
+            <button type="button" class="theme-preset-swatch" data-theme="sunset"><i style="background:linear-gradient(135deg,#FF7A45,#FFC24B)"></i><span>Sunset</span></button>
+            <button type="button" class="theme-preset-swatch" data-theme="floresta"><i style="background:linear-gradient(135deg,#34D399,#A3E635)"></i><span>Floresta</span></button>
+            <button type="button" class="theme-preset-swatch" data-theme="meianoite"><i style="background:linear-gradient(135deg,#4F6BFF,#38BDF8)"></i><span>Meia-noite</span></button>
+            <button type="button" class="theme-preset-swatch" data-theme="quartzo"><i style="background:linear-gradient(135deg,#FF5C8A,#FFB199)"></i><span>Quartzo</span></button>
+            <button type="button" class="theme-preset-swatch" data-theme="mono"><i style="background:linear-gradient(135deg,#9AA0AE,#D8DBE3)"></i><span>Mono</span></button>
+          </div>
+          <label>Cor de destaque <input type="color" id="settings-accent" value="#5865F2"></label><label class="settings-toggle"><input type="checkbox" id="settings-compact"> Modo compacto</label><label class="settings-toggle"><input type="checkbox" id="settings-reduce-motion"> Reduzir animações</label><button type="button" id="settings-save-appearance" class="btn btn-primary">Salvar aparência</button>
         </div>
         <div class="settings-pane" data-settings-pane="notifications">
           <h4>Notificações</h4>
@@ -591,7 +604,7 @@
     <div class="server-settings-pane" data-server-pane="media"><label>Limite de arquivo (MB)<input id="server-max-file-size" type="number" min="1" max="4096"></label><label class="settings-toggle"><input type="checkbox" id="server-allow-media"> Permitir fotos, vídeos e arquivos</label><label class="settings-toggle"><input type="checkbox" id="server-allow-stickers"> Permitir stickers</label><label class="settings-toggle"><input type="checkbox" id="server-allow-super"> Permitir super emojis</label><label class="settings-toggle"><input type="checkbox" id="server-show-media-channel"> Exibir aba de mídia</label></div>
     <div class="server-settings-pane" data-server-pane="community"><label class="settings-toggle"><input type="checkbox" id="server-community"> Ativar recursos de comunidade</label><label class="settings-toggle"><input type="checkbox" id="server-discoverable"> Servidor descobrível</label><label class="settings-toggle"><input type="checkbox" id="server-animated-icon"> Ícone animado</label><label class="settings-toggle"><input type="checkbox" id="server-invite-splash"> Tela personalizada de convite</label></div>
     <div class="server-settings-pane" data-server-pane="engagement"><label class="settings-toggle"><input type="checkbox" id="server-threads"> Permitir threads</label><label class="settings-toggle"><input type="checkbox" id="server-reactions"> Permitir reações</label><label class="settings-toggle"><input type="checkbox" id="server-super-effects"> Permitir efeitos de Super Emoji</label><label>Retenção de mensagens<select id="server-retention"><option value="forever">Nunca excluir</option><option value="30">30 dias</option><option value="90">90 dias</option><option value="365">1 ano</option></select></label><label class="settings-toggle"><input type="checkbox" id="server-mentions"> Permitir menções a @everyone</label></div>
-    <div class="server-settings-pane" data-server-pane="security"><label class="settings-toggle"><input type="checkbox" id="server-2fa"> Exigir 2FA para moderadores</label><label class="settings-toggle"><input type="checkbox" id="server-verification-level"> Exigir conta verificada</label><label class="settings-toggle"><input type="checkbox" id="server-link-filter"> Bloquear links suspeitos</label><label class="settings-toggle"><input type="checkbox" id="server-raid-protection"> Proteção contra raid</label><label>Tempo de timeout (segundos)<input id="server-timeout" type="number" min="0" max="2419200" value="300"></label></div>
+    <div class="server-settings-pane" data-server-pane="security"><label class="settings-toggle"><input type="checkbox" id="server-2fa"> Exigir 2FA para moderadores</label><label class="settings-toggle"><input type="checkbox" id="server-verification-level"> Exigir conta verificada</label><label class="settings-toggle"><input type="checkbox" id="server-link-filter"> Bloquear links suspeitos</label><label class="settings-toggle"><input type="checkbox" id="server-raid-protection"> Proteção contra raid</label><label>Tempo de timeout (segundos)<input id="server-timeout" type="number" min="0" max="2419200" value="300"></label><div class="server-danger-zone"><h4>Zona de perigo</h4><p>Apagar o servidor remove todos os canais, mensagens, cargos e membros permanentemente. Essa ação não pode ser desfeita.</p><button type="button" id="server-delete-btn" class="btn btn-danger">🗑️ Apagar servidor</button></div></div>
     <div class="server-settings-pane" data-server-pane="onboarding"><label>Mensagem de entrada<textarea id="server-onboarding-message" maxlength="1000"></textarea></label><label>Canal inicial<select id="server-onboarding-channel"></select></label><label class="settings-toggle"><input type="checkbox" id="server-onboarding-rules"> Exigir leitura das regras</label><label class="settings-toggle"><input type="checkbox" id="server-onboarding-screening"> Perguntar regras antes de entrar</label><label>URL de regras<input id="server-rules-url" maxlength="500"></label></div>
     <div class="server-settings-pane" data-server-pane="roles"><div id="server-role-manager"></div><button id="server-create-role" class="btn btn-small">+ Criar cargo</button></div>
     <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Cancelar</button><button id="server-settings-save" class="btn btn-primary">Salvar servidor</button></div>

@@ -1470,6 +1470,7 @@
     if (state.currentUser && String(user.id) === String(state.currentUser.id)) {
       state.currentUser = user;
       updateUserBar();
+      applyAppTheme(user?.settings?.theme);
     }
     const friend = friendById(user.id);
     if (friend) Object.assign(friend, user);
@@ -2018,6 +2019,64 @@
     if (el.pinnedMessagesBtn) el.pinnedMessagesBtn.addEventListener('click', openPinnedMessagesModal);
     if (el.deleteDMBtn) el.deleteDMBtn.addEventListener('click', clearActiveDM);
 
+    // Presets de tema do aplicativo — clicar já aplica na hora e salva
+    // (sincroniza com outros aparelhos via /api/auth/settings).
+    const themePresetGrid = document.getElementById('theme-preset-grid');
+    if (themePresetGrid) {
+      themePresetGrid.addEventListener('click', async function (e) {
+        const btn = e.target.closest('[data-theme]');
+        if (!btn) return;
+        const theme = btn.dataset.theme;
+        applyAppTheme(theme);
+        try {
+          const res = await fetch('/api/auth/settings', {
+            method: 'PUT', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ theme: theme })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.user) handleProfileUpdate({ user: data.user });
+        } catch (_) {}
+      });
+    }
+
+    // Abrir o perfil da pessoa ao tocar/clicar no nome ou na foto dela no
+    // cabeçalho da conversa (antes só dava pra ver o perfil com botão
+    // direito, que não existe no celular).
+    function openActiveDMProfile() {
+      if (state.activeDMUserId && window.WCFeatures?.profile) {
+        window.WCFeatures.profile(state.activeDMUserId);
+      }
+    }
+    if (el.chatPeerAvatar) el.chatPeerAvatar.addEventListener('click', openActiveDMProfile);
+    if (el.chatTitle) el.chatTitle.addEventListener('click', function () {
+      if (state.activeDMUserId) openActiveDMProfile();
+    });
+
+    // Apagar servidor (zona de perigo, dentro de Configurações > Segurança).
+    const serverDeleteBtn = document.getElementById('server-delete-btn');
+    if (serverDeleteBtn) {
+      serverDeleteBtn.addEventListener('click', async function () {
+        const serverId = state.activeServerId;
+        if (!serverId) return;
+        const server = (state.servers || []).find(s => String(s.id) === String(serverId));
+        const name = server?.name || 'este servidor';
+        if (!window.confirm('Tem certeza que quer apagar "' + name + '"? Todos os canais, mensagens, cargos e membros serão perdidos para sempre. Essa ação não pode ser desfeita.')) return;
+        if (!window.confirm('Confirma de novo: apagar "' + name + '" permanentemente?')) return;
+        try {
+          const res = await fetch('/api/servers/' + serverId, { method: 'DELETE', credentials: 'same-origin' });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || 'Não foi possível apagar o servidor.');
+          toast('Servidor apagado.', 'success');
+          document.getElementById('modal-overlay')?.classList.add('hidden');
+          document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
+          el.homeBtn?.click();
+        } catch (e) {
+          toast(e.message, 'error');
+        }
+      });
+    }
+
     if (el.mobileMembersBtn) {
       el.mobileMembersBtn.addEventListener('click', function () {
         el.membersPanel?.classList.add('mobile-open');
@@ -2118,8 +2177,18 @@
   // Init
   // ---------------------------------------------------------------------
 
+  function applyAppTheme(name) {
+    const theme = name || localStorage.getItem('wc-app-theme') || 'escuro';
+    document.documentElement.setAttribute('data-app-theme', theme);
+    localStorage.setItem('wc-app-theme', theme);
+    document.querySelectorAll('.theme-preset-swatch').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.theme === theme);
+    });
+  }
+
   async function init(user) {
     state.currentUser = user;
+    applyAppTheme(user?.settings?.theme);
     if(user?.settings){ if(user.settings.accent){document.documentElement.style.setProperty('--accent',user.settings.accent);localStorage.setItem('wc-accent',user.settings.accent);} document.body.classList.toggle('compact',!!user.settings.compact); document.body.classList.toggle('reduce-motion',!!user.settings.reduceMotion); }
     cacheElements();
     updateUserBar();
