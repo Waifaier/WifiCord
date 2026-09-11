@@ -664,6 +664,28 @@
     pc._wifiScreenVideoReceiver = screenVideoT?.receiver || pc._wifiScreenVideoReceiver || null;
   }
 
+  // TERCEIRO motivo raiz da transmissão não chegar pro outro lado (achado
+  // depois dos outros dois, olhando com calma pra ordem de eventos em vez
+  // de só testar a negociação isolada): pc.ontrack pode disparar ANTES do
+  // código que roda depois de "await pc.setRemoteDescription(oferta)" —
+  // ou seja, antes de bindFixedTransceivers() ter preenchido
+  // pc._wifiScreenVideoReceiver/pc._wifiSystemAudioReceiver. Quando isso
+  // acontece, "e.receiver === pc._wifiScreenVideoReceiver" compara com
+  // undefined e dá falso pra TODO mundo — a tela chega sendo tratada como
+  // se fosse câmera (ou nem aparece onde devia), então mesmo com a
+  // direção 'sendrecv' certa e bytes chegando de verdade, o app mostrava
+  // a coisa errada no lugar errado (ou nada). Em vez de depender de
+  // pc._wifi*Receiver já estar preenchido, dá pra descobrir qual dos 4
+  // slots fixos (mic=0, câmera=1, áudio-do-sistema=2, tela=3) cada evento
+  // é OLHANDO A POSIÇÃO do transceptor em pc.getTransceivers() na hora —
+  // essa lista já existe e já está na ordem certa assim que o evento
+  // dispara, não depende de mais nada ter rodado antes.
+  function fixedSlotIndex(pc, transceiver) {
+    if (!transceiver) return -1;
+    const list = pc.getTransceivers();
+    return list.indexOf(transceiver);
+  }
+
   function pcCreate(polite = false) {
     const pc = new RTCPeerConnection(RTC_CONFIG);
     state.polite = polite;
@@ -724,27 +746,64 @@
         // uma bolinha por cima (como o Discord faz), sem os dois brigando
         // pelo mesmo espaço nem ficando um avatar gigante em cima da
         // transmissão.
-        const isScreen = e.receiver === pc._wifiScreenVideoReceiver;
-        el.callBar?.classList.remove('audio-call');
-        el.callBar?.classList.add('has-remote-video', 'has-remote');
+        const slot = fixedSlotIndex(pc, e.transceiver);
+        const isScreen = slot === 3 || (slot === -1 && e.receiver === pc._wifiScreenVideoReceiver);
         if (isScreen) {
-          state.remoteScreenActive = true;
-          el.callBar?.classList.add('remote-sharing');
-          attachRemoteStream(stream);
-          if (state.remoteCameraStream) attachRemoteCameraPip(state.remoteCameraStream);
-          track.onended = () => {
+          // QUARTO motivo raiz da transmissão "não chegar" (achado revendo
+          // a lógica com calma, não a negociação): os 4 slots são fixos e
+          // criados JÁ NO INÍCIO da ligação (ver addFixedTransceivers), então
+          // esse ontrack do slot de tela dispara SEMPRE, pra TODA ligação,
+          // mesmo quando ninguém nunca compartilhou nada — a track existe,
+          // só está muda (sem frame nenhum ainda). O código antigo tratava
+          // "o ontrack disparou" como "a pessoa está apresentando": marcava
+          // remoteScreenActive=true e jogava esse stream (vazio, preto) pro
+          // palco principal na hora, então a câmera de quem ligou (que
+          // chegava boa, de verdade) ia parar minimizada na bolinha de
+          // canto — o vídeo principal ficava preso numa tela preta que
+          // nunca ia mudar, porque ninguém tinha realmente começado a
+          // compartilhar tela ainda. Isso explica a apresentação/câmera
+          // "não chegando" mesmo com a negociação 100% correta.
+          //
+          // A forma certa de saber se tem apresentação de verdade rolando é
+          // o evento 'unmute' da própria track (dispara quando frames de
+          // verdade começam a chegar) e 'mute' quando param (é o que
+          // acontece quando quem apresenta faz replaceTrack(null) ao parar
+          // — o transceptor fixo nunca é removido, então 'ended' quase
+          // nunca dispara mais durante a ligação; contar só com 'ended'
+          // como antes deixava remoteScreenActive preso incorretamente).
+          const activate = () => {
+            state.remoteScreenActive = true;
+            el.callBar?.classList.remove('audio-call');
+            el.callBar?.classList.add('has-remote-video', 'has-remote', 'remote-sharing');
+            attachRemoteStream(stream);
+            if (state.remoteCameraStream) attachRemoteCameraPip(state.remoteCameraStream);
+            const label = $('call-live-label');
+            if (label) {
+              label.classList.remove('hidden');
+              label.innerHTML = '🔴 <span id="call-remote-label">' + esc(friendName(state.targetUserId)) + '</span> está apresentando';
+            }
+          };
+          const deactivate = () => {
             state.remoteScreenActive = false;
             el.callBar?.classList.remove('remote-sharing', 'screen-minimized');
             detachRemoteCameraPip();
+            $('call-live-label')?.classList.add('hidden');
             if (state.remoteCameraStream) {
+              el.callBar?.classList.add('has-remote-video', 'has-remote');
               attachRemoteStream(state.remoteCameraStream);
             } else {
               el.callBar?.classList.remove('has-remote-video');
               if (state.callType === 'audio') el.callBar?.classList.add('audio-call');
             }
           };
+          track.onunmute = activate;
+          track.onmute = deactivate;
+          track.onended = deactivate;
+          if (!track.muted) activate(); // já chega ligado numa renegociação, por ex.
         } else {
           state.remoteCameraStream = stream;
+          el.callBar?.classList.remove('audio-call');
+          el.callBar?.classList.add('has-remote-video', 'has-remote');
           if (state.remoteScreenActive) attachRemoteCameraPip(stream);
           else attachRemoteStream(stream);
           track.onended = () => {
@@ -765,7 +824,8 @@
         // controla só o mic dela, "volume da transmissão" controla só o
         // som que ela está compartilhando — dois controles separados no
         // menu de botão direito, do jeito que a pessoa pediu.
-        const isSystemAudio = e.receiver === pc._wifiSystemAudioReceiver;
+        const slot = fixedSlotIndex(pc, e.transceiver);
+        const isSystemAudio = slot === 2 || (slot === -1 && e.receiver === pc._wifiSystemAudioReceiver);
         if (isSystemAudio) {
           attachRemoteScreenAudio(stream);
         } else {
@@ -1321,7 +1381,13 @@
       el.callBar?.classList.remove('audio-call', 'screen-minimized');
       el.callBar?.classList.add('sharing');
       $('call-live-label')?.classList.remove('hidden');
-      if ($('call-live-label')) $('call-live-label').innerHTML = '🔴 APRESENTANDO <span id="call-remote-label">' + esc(friendName(state.targetUserId)) + '</span>';
+      // Esse selo aparece na tela de QUEM ESTÁ apresentando (a função só é
+      // chamada depois que EU cliquei em compartilhar) — antes ele mostrava
+      // o nome do amigo aqui, como se fosse o amigo apresentando na minha
+      // própria tela, o que não fazia sentido nenhum ("tem um retangulo em
+      // pé escrito apresentando usuário" — o texto errado só piorava a
+      // confusão junto com o bug de posição).
+      if ($('call-live-label')) $('call-live-label').innerHTML = '🔴 Você está apresentando';
       if (el.localVideo) {
         el.localVideo.srcObject = stream;
         el.localVideo.classList.add('is-screen-preview');
@@ -1527,24 +1593,38 @@
         // servidor ainda mostra só UM vídeo por participante (peer.video),
         // priorizando a tela quando as duas estiverem ativas ao mesmo
         // tempo, igual o palco principal da chamada 1:1.
-        const isScreen = e.receiver === pc._wifiScreenVideoReceiver;
+        const slot = fixedSlotIndex(pc, e.transceiver);
+        const isScreen = slot === 3 || (slot === -1 && e.receiver === pc._wifiScreenVideoReceiver);
         if (!(peer.video instanceof MediaStream)) peer.video = new MediaStream();
-        if (isScreen) peer.screenTrack = e.track; else peer.cameraTrack = e.track;
-        // Mostra a tela quando ela existir, senão a câmera — nunca as duas
-        // juntas na mesma tile (a grade de servidor só tem um <video> por
-        // participante). Reavalia isso a cada track que chega/termina, pra
-        // a câmera reaparecer sozinha assim que a apresentação acabar.
-        const showTrack = peer.screenTrack || peer.cameraTrack || null;
-        peer.video.getVideoTracks().forEach(t => { if (t !== showTrack) peer.video.removeTrack(t); });
-        if (showTrack && !peer.video.getTracks().some(t => t.id === showTrack.id)) peer.video.addTrack(showTrack);
-        e.track.onended = () => {
-          if (isScreen) peer.screenTrack = null; else peer.cameraTrack = null;
-          if (peer.video?.getTracks().some(t => t.id === e.track.id)) peer.video.removeTrack(e.track);
-          const next = peer.screenTrack || peer.cameraTrack || null;
-          if (next && !peer.video.getTracks().some(t => t.id === next.id)) peer.video.addTrack(next);
+        const track = e.track;
+        // Mesmo bug de raiz da chamada 1:1 (ver comentário grande em
+        // pc.ontrack lá em cima): os 4 slots são fixos e existem desde o
+        // início da ligação, então esse ontrack do slot de tela dispara pra
+        // TODO participante, mesmo quando ninguém nunca compartilhou nada —
+        // só que aqui, como "peer.screenTrack" sempre ganhava de
+        // "peer.cameraTrack" na hora de escolher o que mostrar, a câmera do
+        // participante nunca aparecia na grade da chamada de servidor,
+        // travada atrás de um slot de tela vazio pra sempre (transceptor
+        // fixo não é removido quando ninguém compartilha, então 'ended'
+        // quase nunca disparava pra "liberar" a câmera de novo). Só conta
+        // como tela/câmera "ativa" de verdade a partir do 'unmute' (frames
+        // de verdade chegando), e volta a null no 'mute' (é o que acontece
+        // quando quem compartilhava faz replaceTrack(null) ao parar).
+        const setActive = active => {
+          if (isScreen) peer.screenTrack = active ? track : null;
+          else peer.cameraTrack = active ? track : null;
+          // Mostra a tela quando ela existir, senão a câmera — nunca as duas
+          // juntas na mesma tile (a grade de servidor só tem um <video> por
+          // participante).
+          const showTrack = peer.screenTrack || peer.cameraTrack || null;
+          peer.video.getVideoTracks().forEach(t => { if (t !== showTrack) peer.video.removeTrack(t); });
+          if (showTrack && !peer.video.getTracks().some(t => t.id === showTrack.id)) peer.video.addTrack(showTrack);
           renderGroupTiles();
         };
-        renderGroupTiles();
+        track.onunmute = () => setActive(true);
+        track.onmute = () => setActive(false);
+        track.onended = () => setActive(false);
+        if (!track.muted) setActive(true);
       } else {
         const stream = e.streams?.[0] instanceof MediaStream ? e.streams[0] : new MediaStream([e.track]);
         const audioEl = document.createElement('audio');

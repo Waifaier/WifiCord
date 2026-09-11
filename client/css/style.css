@@ -3032,3 +3032,70 @@ html.has-custom-titlebar .wc-titlebar-btn-close:hover { background: var(--danger
 html.has-custom-titlebar .wc-ico-restore-back { display: none; }
 html.has-custom-titlebar .wc-titlebar-btn.is-maximized .wc-ico-restore-back { display: block; }
 html.has-custom-titlebar .wc-titlebar-btn.is-maximized .wc-ico-sq { transform: translate(-2px,-2px); }
+
+/* ================================================================
+   Correções de 2026-09-11 (prints do usuário): barra de título por
+   cima de botões, selo "APRESENTANDO" virando um retângulo em pé, e
+   avatar gigante fora do lugar durante chamada de vídeo/apresentação.
+   Bloco final — depois de TODO o resto do arquivo — de propósito,
+   pra ganhar de qualquer regra antiga sem precisar caçar e editar
+   uma por uma num arquivo com anos de blocos sobrepostos.
+   ================================================================ */
+
+/* --- Item 1: a barra de título cobria botões de verdade (o ícone de
+   início da barra lateral, o cabeçalho da conversa com os botões de
+   chamada, etc.) porque ela é position:fixed por cima de tudo e nada
+   media espaço pra ela.
+   NÃO repete o erro de antes (encolher #app-screen/#auth-screen
+   inteiros com height:calc(100dvh - 32px) — isso quebrou o layout da
+   call porque .call-stage e outras partes calculam o próprio tamanho
+   com 100dvh "cru", sem saber que o pai ficou 32px mais baixo).
+   Em vez disso só empurra pra baixo o CONTEÚDO das colunas que ficam
+   coladas no topo (border-box: o tamanho de fora de cada uma continua
+   sendo o mesmo de sempre, só o conteúdo desce 32px) — nada usa
+   100dvh dentro dessas três colunas pra esse cálculo dar errado. */
+html.has-custom-titlebar #server-rail,
+html.has-custom-titlebar #sidebar,
+html.has-custom-titlebar #main-panel,
+html.has-custom-titlebar #members-panel {
+  padding-top: 32px !important;
+}
+
+/* --- Item 4: o selo "🔴 APRESENTANDO" tinha DUAS regras valendo ao
+   mesmo tempo neste arquivo — uma antiga com "top:18px" e uma mais
+   nova com "bottom:14px". Como são propriedades diferentes, o CSS não
+   escolhe uma e descarta a outra: as duas ficam valendo juntas, e sem
+   uma altura própria definida a caixa esticava do topo quase até o
+   fim do palco — exatamente o "retângulo em pé" atrás do texto
+   "Chamada" relatado. Fixando os 4 lados + o tamanho pelo próprio
+   conteúdo aqui garante uma leitura só, sem depender de nenhuma outra
+   regra deste arquivo. */
+#call-live-label.call-screen-label {
+  top: auto !important;
+  bottom: 14px !important;
+  left: 14px !important;
+  right: auto !important;
+  height: auto !important;
+  width: max-content !important;
+  max-width: calc(100% - 28px) !important;
+  white-space: nowrap !important;
+}
+
+/* --- Item 2: nada de avatar gigante disputando o centro do palco com
+   o vídeo. Fora do modo só-áudio (onde o avatar grande centralizado
+   continua fazendo sentido, é o único conteúdo da tela), os dois
+   participantes agora são só uma bolinha pequena e fixa em cada canto
+   de baixo — a outra pessoa à esquerda, você à direita — nunca no
+   meio, nunca um por cima do outro, do jeito do desenho enviado (o
+   retângulo em paisagem é o palco/transmissão, as pessoinhas são só
+   indicadores pequenos e separados). */
+#call-bar:not(.audio-call) .call-stage .call-participant-avatar {
+  top: auto !important;
+  bottom: 16px !important;
+  transform: none !important;
+  width: 56px !important;
+  height: 56px !important;
+}
+#call-bar:not(.audio-call) .call-stage .call-remote-avatar { left: 16px !important; right: auto !important; }
+#call-bar:not(.audio-call) .call-stage .call-local-avatar { right: 16px !important; left: auto !important; }
+
