@@ -1841,6 +1841,55 @@
       });
     }
 
+    // --- Gestos de arrastar no celular: abre/fecha a barra de servidores+
+    // canais (arrastando da borda esquerda) e a lista de membros (arrastando
+    // da borda direita), sem precisar de um botão dedicado no cabeçalho. ---
+    (function initMobileSwipeGestures() {
+      const EDGE = 24;
+      const THRESHOLD = 60;
+      let startX = null, startY = null, startEdge = null, openPanel = null;
+
+      document.addEventListener('touchstart', function (e) {
+        if (window.innerWidth > 680 || e.touches.length !== 1) { startX = null; return; }
+        const t = e.touches[0];
+        startX = t.clientX;
+        startY = t.clientY;
+        startEdge = null;
+        openPanel = null;
+
+        if (el.appScreen?.classList.contains('nav-open')) { openPanel = 'nav'; return; }
+        if (el.membersPanel?.classList.contains('mobile-open')) { openPanel = 'members'; return; }
+
+        if (startX <= EDGE) startEdge = 'left';
+        else if (startX >= window.innerWidth - EDGE) startEdge = 'right';
+      }, { passive: true });
+
+      document.addEventListener('touchend', function (e) {
+        if (startX === null) return;
+        const t = e.changedTouches[0];
+        const dx = t.clientX - startX;
+        const dy = t.clientY - startY;
+        startX = null;
+        if (Math.abs(dy) > Math.abs(dx)) return;
+
+        if (openPanel === 'nav' && dx < -THRESHOLD) {
+          closeMobileNav();
+        } else if (openPanel === 'members' && dx > THRESHOLD) {
+          closeMobileMembersDrawer();
+        } else if (startEdge === 'left' && dx > THRESHOLD) {
+          if (el.appScreen) {
+            el.appScreen.classList.add('nav-open');
+            el.mobileNavBackdrop?.classList.add('visible');
+          }
+        } else if (startEdge === 'right' && dx < -THRESHOLD) {
+          if (el.membersPanel && !el.membersPanel.classList.contains('hidden')) {
+            el.membersPanel.classList.add('mobile-open');
+            el.mobileNavBackdrop?.classList.add('visible');
+          }
+        }
+      }, { passive: true });
+    })();
+
     if (el.addFriendBtn) el.addFriendBtn.addEventListener('click', function () { openModal('modal-add-friend'); });
     if (el.addServerBtn) el.addServerBtn.addEventListener('click', function () { openModal('modal-create-server'); });
     if (el.joinServerBtn) el.joinServerBtn.addEventListener('click', function () { openModal('modal-join-server'); });
