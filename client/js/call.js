@@ -267,13 +267,52 @@
     if (String(id) === String(state.targetUserId) && el.remoteAudio) el.remoteAudio.volume = combinedVolume(id);
     syncVolumeUI();
   }
+  // Segurar o dedo por meio segundo abre o mesmo menu que o botão direito
+  // do mouse abre no desktop — em celular/tablet não existe botão direito,
+  // então sem isso não tinha NENHUMA forma de ver essas opções (volume,
+  // silenciar) fora do PC. Só reage a toque de verdade (pointerType
+  // 'touch'), nunca a mouse/caneta, pra não brigar com clique normal e
+  // arrastar no desktop. Cancela se o dedo se mover (é um arrastar/scroll,
+  // não uma pressão parada) ou soltar antes do tempo.
+  function bindLongPress(target, onLongPress) {
+    if (!target) return;
+    let timer = null, startX = 0, startY = 0, fired = false;
+    const MOVE_TOLERANCE = 12;
+    const HOLD_MS = 500;
+    const cancel = () => { clearTimeout(timer); timer = null; };
+    target.addEventListener('pointerdown', e => {
+      if (e.pointerType !== 'touch') return;
+      fired = false;
+      startX = e.clientX; startY = e.clientY;
+      cancel();
+      timer = setTimeout(() => { fired = true; onLongPress(e); }, HOLD_MS);
+    });
+    target.addEventListener('pointermove', e => {
+      if (e.pointerType !== 'touch' || !timer) return;
+      if (Math.hypot(e.clientX - startX, e.clientY - startY) > MOVE_TOLERANCE) cancel();
+    });
+    target.addEventListener('pointerup', cancel);
+    target.addEventListener('pointercancel', cancel);
+    // Depois de um toque longo bem-sucedido, o navegador ainda dispara o
+    // 'contextmenu' nativo dele mesmo (seleção de texto, menu de
+    // salvar-imagem) — bloqueia só nesse caso específico.
+    target.addEventListener('contextmenu', e => { if (fired) e.preventDefault(); });
+  }
+
   function bindCallContextMenu() {
     const targets = () => [el.remoteAvatar, el.remoteVideo, el.remoteCameraPip].filter(Boolean);
-    targets().forEach(t => t.addEventListener('contextmenu', e => {
-      if (!state.inCall || state.groupMode || !state.targetUserId) return;
-      e.preventDefault();
-      openCallContextMenu(e.clientX, e.clientY, state.targetUserId);
-    }));
+    targets().forEach(t => {
+      t.addEventListener('contextmenu', e => {
+        if (!state.inCall || state.groupMode || !state.targetUserId) return;
+        e.preventDefault();
+        openCallContextMenu(e.clientX, e.clientY, state.targetUserId);
+      });
+      bindLongPress(t, e => {
+        if (!state.inCall || state.groupMode || !state.targetUserId) return;
+        navigator.vibrate?.(15);
+        openCallContextMenu(e.clientX, e.clientY, state.targetUserId);
+      });
+    });
     el.callContextVolumeRange?.addEventListener('input', () => applyContextVolume(el.callContextVolumeRange.value));
     el.callContextMuteBtn?.addEventListener('click', () => {
       const id = el.callContextMenu?.dataset.targetUserId;
@@ -470,24 +509,48 @@
     else attachRemoteAudio(remoteStream);
   }
 
-  function pcCreate(polite = false) {
-    const pc = new RTCPeerConnection(RTC_CONFIG);
-    state.polite = polite;
-    state.ignoreOffer = false;
-
-    // 4 transceptores fixos, sempre criados nesta ordem pelos dois lados
-    // (quem liga e quem atende passam pela mesma pcCreate): mic, câmera,
-    // áudio-do-sistema (só usado durante apresentação de tela) e vídeo-da-
-    // tela. Câmera e tela usam sender/receiver PRÓPRIOS — antes os dois
-    // dividiam o mesmo slot de vídeo (screenShare fazia replaceTrack no
-    // MESMO sender da câmera), então ligar a câmera durante uma
-    // apresentação de tela substituía a track que estava sendo
-    // transmitida, cortando a apresentação na hora ("se liga a câmera, tá
-    // interrompendo a transmissão"). Com slots separados os dois fluem ao
-    // mesmo tempo, e o lado que recebe consegue saber COM CERTEZA (pela
-    // identidade do receiver, não por adivinhação) se um vídeo recebido é a
-    // câmera ou a tela da outra pessoa — usado em ontrack() pra parar de
-    // empilhar o avatar em cima da transmissão (ver comentário lá).
+  // ---------------------------------------------------------------------
+  // 4 "slots" fixos de mídia, sempre na mesma ordem pros dois lados: mic,
+  // câmera, áudio-do-sistema (só usado durante apresentação de tela) e
+  // vídeo-da-tela. Câmera e tela usam sender/receiver PRÓPRIOS — antes os
+  // dois dividiam o mesmo slot de vídeo (screenShare fazia replaceTrack no
+  // MESMO sender da câmera), então ligar a câmera durante uma apresentação
+  // de tela substituía a track que estava sendo transmitida, cortando a
+  // apresentação na hora ("se liga a câmera, tá interrompendo a
+  // transmissão"). Com slots separados os dois fluem ao mesmo tempo, e o
+  // lado que recebe consegue saber COM CERTEZA (pela identidade do
+  // receiver, não por adivinhação) se um vídeo recebido é a câmera ou a
+  // tela da outra pessoa — usado em ontrack() pra parar de empilhar o
+  // avatar em cima da transmissão (ver comentário lá).
+  //
+  // IMPORTANTE — por que existem DUAS formas de preencher esses slots
+  // (addFixedTransceivers/bindFixedTransceivers) em vez de só criar os 4
+  // com addTransceiver() sempre em pcCreate() como antes:
+  //
+  // Testado isoladamente (RTCPeerConnection puro, sem nada do WifiCord
+  // envolvido): quando quem vai ATENDER uma ligação chama addTransceiver()
+  // ANTES de aplicar a oferta recebida (setRemoteDescription), o Chrome NÃO
+  // reaproveita esses transceptores pra oferta — ele cria outros novos do
+  // zero pros m-lines da oferta, e os pré-criados ficam órfãos PRA SEMPRE
+  // (mid nunca é atribuído, nunca fazem parte da ligação de verdade). Era
+  // esse o motivo real de "a transmissão não aparece pro outro usuário":
+  // quem ATENDIA anexava a câmera/tela nesses transceptores órfãos, então a
+  // pessoa que ligou nunca recebia nada de quem atendeu (nem câmera, nem
+  // tela, nem varia com renegociação — cada renegociação só piorava,
+  // acumulando transceptores órfãos novos).
+  //
+  // A solução (confirmada com o mesmo teste isolado): quem vai LIGAR ainda
+  // pode criar os 4 transceptores antes da oferta (não tem oferta remota
+  // nenhuma ainda pra derivar deles) — addFixedTransceivers() cobre esse
+  // caso. Já quem vai ATENDER precisa chamar setRemoteDescription() da
+  // oferta PRIMEIRO, e só DEPOIS ler os transceptores que o Chrome criou
+  // sozinho via pc.getTransceivers() — bindFixedTransceivers() cobre esse
+  // caso. O Chrome sempre devolve esses transceptores na MESMA ordem dos
+  // m-lines da oferta, e quem liga sempre cria a oferta nessa mesma ordem
+  // fixa (mic, câmera, áudio-do-sistema, vídeo-da-tela), então dá pra
+  // mapear por posição com segurança.
+  // ---------------------------------------------------------------------
+  function addFixedTransceivers(pc) {
     let audioT = null, videoT = null, systemAudioT = null, screenVideoT = null;
     try { audioT = pc.addTransceiver('audio', { direction: 'sendrecv' }); } catch (_) {}
     try { videoT = pc.addTransceiver('video', { direction: 'sendrecv' }); } catch (_) {}
@@ -499,6 +562,23 @@
     pc._wifiScreenVideoSender = screenVideoT?.sender || null;
     pc._wifiVideoReceiver = videoT?.receiver || null;
     pc._wifiScreenVideoReceiver = screenVideoT?.receiver || null;
+  }
+
+  function bindFixedTransceivers(pc) {
+    const list = pc.getTransceivers();
+    const audioT = list[0] || null, videoT = list[1] || null, systemAudioT = list[2] || null, screenVideoT = list[3] || null;
+    pc._wifiAudioSender = audioT?.sender || pc._wifiAudioSender || null;
+    pc._wifiVideoSender = videoT?.sender || pc._wifiVideoSender || null;
+    pc._wifiSystemAudioSender = systemAudioT?.sender || pc._wifiSystemAudioSender || null;
+    pc._wifiScreenVideoSender = screenVideoT?.sender || pc._wifiScreenVideoSender || null;
+    pc._wifiVideoReceiver = videoT?.receiver || pc._wifiVideoReceiver || null;
+    pc._wifiScreenVideoReceiver = screenVideoT?.receiver || pc._wifiScreenVideoReceiver || null;
+  }
+
+  function pcCreate(polite = false) {
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    state.polite = polite;
+    state.ignoreOffer = false;
 
     pc.onicecandidate = e => {
       if (e.candidate && state.targetUserId) {
@@ -728,10 +808,18 @@
     state.camEnabled = state.callType === 'video';
     state.pc = pcCreate(polite);
 
-    const audioTrack = state.localStream.getAudioTracks()[0];
-    const videoTrack = state.localStream.getVideoTracks()[0];
-    if (state.pc._wifiAudioSender) await state.pc._wifiAudioSender.replaceTrack(audioTrack || null);
-    if (state.pc._wifiVideoSender) await state.pc._wifiVideoSender.replaceTrack(videoTrack || null);
+    // Quem LIGA (não-polite) já cria os 4 transceptores fixos agora — ainda
+    // não existe nenhuma oferta remota pra derivar deles — e anexa mic/
+    // câmera na hora. Quem VAI ATENDER (polite) espera: os transceptores de
+    // verdade só existem depois do setRemoteDescription da oferta recebida,
+    // feito em accept() (ver o comentário grande em bindFixedTransceivers).
+    if (!polite) {
+      addFixedTransceivers(state.pc);
+      const audioTrack = state.localStream.getAudioTracks()[0];
+      const videoTrack = state.localStream.getVideoTracks()[0];
+      if (state.pc._wifiAudioSender) await state.pc._wifiAudioSender.replaceTrack(audioTrack || null);
+      if (state.pc._wifiVideoSender) await state.pc._wifiVideoSender.replaceTrack(videoTrack || null);
+    }
 
     el.callBar?.classList.toggle('audio-call', state.callType === 'audio');
     openBar();
@@ -806,6 +894,12 @@
     try {
       if (offerCollision && state.polite) await pc.setLocalDescription({ type: 'rollback' });
       await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+      // Rede de segurança: mantém as referências _wifi*Sender/_wifi*Receiver
+      // sincronizadas com os transceptores de verdade mesmo numa
+      // renegociação (ver bindFixedTransceivers) — não deveria mudar nada
+      // aqui já que os 4 slots são fixos, mas é barato e evita reabrir o bug
+      // de referência órfã caso algo escape do caminho normal.
+      bindFixedTransceivers(pc);
       await flushCandidates(pc);
       const answer = sanitizeDescription(await pc.createAnswer());
       await pc.setLocalDescription(answer);
@@ -833,6 +927,17 @@
     try {
       await prepare(d.fromUserId, d.callType || 'video', true);
       await state.pc.setRemoteDescription(new RTCSessionDescription(d.sdp));
+      // Só agora (depois do setRemoteDescription) os transceptores de
+      // verdade existem — pega eles e SÓ ENTÃO anexa mic/câmera (ver o
+      // comentário grande em bindFixedTransceivers pra entender por que
+      // fazer isso antes, como era feito em prepare(), deixava quem atende
+      // a ligação transmitindo pra transceptores órfãos que nunca chegavam
+      // na outra pessoa).
+      bindFixedTransceivers(state.pc);
+      const audioTrack = state.localStream.getAudioTracks()[0];
+      const videoTrack = state.localStream.getVideoTracks()[0];
+      if (state.pc._wifiAudioSender) await state.pc._wifiAudioSender.replaceTrack(audioTrack || null);
+      if (state.pc._wifiVideoSender) await state.pc._wifiVideoSender.replaceTrack(videoTrack || null);
       await flushCandidates(state.pc);
       const answer = sanitizeDescription(await state.pc.createAnswer());
       await state.pc.setLocalDescription(answer);
@@ -1287,27 +1392,27 @@
     if (groupPeerPc(id)) return groupPeerPc(id);
     const pc = new RTCPeerConnection(RTC_CONFIG);
     const peer = { pc, video: null, audioStreams: [], pending: [], makingOffer: false, reconnectTimer: null, reconnectAttempts: 0 };
-    // Mesma ordem fixa de 4 transceptores do pcCreate() da chamada 1:1 (ver
-    // comentário lá): mic, câmera, áudio-do-sistema, vídeo-da-tela — câmera
-    // e tela com sender próprio pra não brigar pelo mesmo slot durante uma
-    // apresentação de tela em chamada de servidor/grupo.
-    let audioT = null, videoT = null, systemAudioT = null, screenVideoT = null;
-    try { audioT = pc.addTransceiver('audio', { direction: 'sendrecv' }); } catch (_) {}
-    try { videoT = pc.addTransceiver('video', { direction: 'sendrecv' }); } catch (_) {}
-    try { systemAudioT = pc.addTransceiver('audio', { direction: 'sendrecv' }); } catch (_) {}
-    try { screenVideoT = pc.addTransceiver('video', { direction: 'sendrecv' }); } catch (_) {}
-    pc._wifiAudioSender = audioT?.sender || null;
-    pc._wifiVideoSender = videoT?.sender || null;
-    pc._wifiSystemAudioSender = systemAudioT?.sender || null;
-    pc._wifiScreenVideoSender = screenVideoT?.sender || null;
-    pc._wifiVideoReceiver = videoT?.receiver || null;
-    pc._wifiScreenVideoReceiver = screenVideoT?.receiver || null;
+    // Mesma ordem fixa de 4 transceptores da chamada 1:1 (ver comentário
+    // grande em bindFixedTransceivers/addFixedTransceivers): mic, câmera,
+    // áudio-do-sistema, vídeo-da-tela — câmera e tela com sender próprio pra
+    // não brigar pelo mesmo slot durante uma apresentação de tela em
+    // chamada de servidor/grupo. Quem INICIA (initiator=true) já cria os 4
+    // transceptores agora e anexa mic/câmera na hora — não tem oferta
+    // remota ainda pra derivar deles. Quem RESPONDE (initiator=false)
+    // espera até depois do setRemoteDescription da oferta recebida (ver
+    // handleServerOffer) — mesmo motivo da chamada 1:1: transceptor
+    // pré-criado antes de aplicar uma oferta recebida fica órfão nesta
+    // versão do Chrome, e era por isso que quem RESPONDIA numa chamada de
+    // grupo também nunca transmitia nada de verdade pros outros
+    // participantes.
+    if (initiator) {
+      addFixedTransceivers(pc);
+      const audio = state.localStream?.getAudioTracks()[0];
+      const video = state.localStream?.getVideoTracks()[0];
+      if (pc._wifiAudioSender) pc._wifiAudioSender.replaceTrack(audio || null).catch(() => {});
+      if (pc._wifiVideoSender) pc._wifiVideoSender.replaceTrack(video || null).catch(() => {});
+    }
     state.groupPeers.set(id, peer);
-
-    const audio = state.localStream?.getAudioTracks()[0];
-    const video = state.localStream?.getVideoTracks()[0];
-    if (pc._wifiAudioSender) pc._wifiAudioSender.replaceTrack(audio || null).catch(() => {});
-    if (pc._wifiVideoSender) pc._wifiVideoSender.replaceTrack(video || null).catch(() => {});
 
     pc.onicecandidate = e => {
       if (e.candidate) window.ChatSocket?.sendServerCallIce?.({ toUserId: Number(id), serverId: state.groupServerId, channelId: state.groupChannelId, candidate: e.candidate });
@@ -1434,6 +1539,16 @@
     const peer = createGroupPeer(d.fromUserId, false);
     try {
       await peer.pc.setRemoteDescription(new RTCSessionDescription(d.sdp));
+      // Só agora existem os transceptores de verdade (ver o comentário
+      // grande em bindFixedTransceivers) — pega eles e SÓ ENTÃO anexa
+      // mic/câmera, em vez de fazer isso em createGroupPeer() antes do
+      // setRemoteDescription (o que deixava esse participante transmitindo
+      // pra transceptores órfãos que nunca chegavam nos outros).
+      bindFixedTransceivers(peer.pc);
+      const audio = state.localStream?.getAudioTracks()[0];
+      const video = state.localStream?.getVideoTracks()[0];
+      if (peer.pc._wifiAudioSender) peer.pc._wifiAudioSender.replaceTrack(audio || null).catch(() => {});
+      if (peer.pc._wifiVideoSender) peer.pc._wifiVideoSender.replaceTrack(video || null).catch(() => {});
       for (const c of peer.pending || []) { try { await peer.pc.addIceCandidate(c); } catch (_) {} }
       peer.pending = [];
       const answer = sanitizeDescription(await peer.pc.createAnswer());

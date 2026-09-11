@@ -3,6 +3,51 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+// Detecta o TIPO de dispositivo (celular ou computador) de verdade — não só
+// pelo tamanho da tela, que é o que quase todo o resto do CSS já fazia via
+// @media (max-width:...). O tamanho da tela sozinho engana nos dois
+// sentidos: uma janela de notebook redimensionada bem estreita continua
+// sendo um computador (mouse/teclado); um celular deitado (paisagem) ou um
+// tablet grande continuam sendo dispositivos de toque mesmo com uma tela
+// "larga". Roda ANTES do CSS carregar (script síncrono, bem no topo do
+// <head>) pra aplicar a classe em <html> a tempo — sem isso a página
+// nasceria com o layout "errado" por uma fração de segundo até o JS normal
+// (carregado com defer, só depois de tudo) rodar.
+//
+// Combina várias fontes, cada uma cobrindo o ponto cego da outra:
+//   1. Client Hints (navigator.userAgentData.mobile) — no Chrome/Edge/
+//      Android é a fonte mais confiável, não depende de string nenhuma.
+//   2. Palavras-chave de SO móvel no User-Agent — fallback pra navegadores
+//      sem Client Hints (Safari, Firefox).
+//   3. iPadOS 13+ manda um User-Agent de "Mac" de propósito (pra sites não
+//      tratarem o iPad como celular/tablet) — mas continua sendo touch sem
+//      mouse, então é tratado como móvel mesmo assim.
+//   4. Capacidade real de toque sem mouse (matchMedia pointer:coarse +
+//      hover:none) decide o resto dos casos.
+(function () {
+  var ua = navigator.userAgent || '';
+  var uaData = navigator.userAgentData;
+  var isMobile;
+  if (uaData && typeof uaData.mobile === 'boolean') {
+    isMobile = uaData.mobile;
+  } else if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) {
+    isMobile = true;
+  } else if (/Android|iPhone|iPad|iPod|IEMobile|Windows Phone|BlackBerry|Opera Mini|Mobile/i.test(ua)) {
+    isMobile = true;
+  } else {
+    var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    var noHover = window.matchMedia && window.matchMedia('(hover: none)').matches;
+    isMobile = !!(coarse && noHover);
+  }
+  var isTouch = !!((navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window);
+  window.DeviceInfo = { type: isMobile ? 'mobile' : 'desktop', isMobile: isMobile, isDesktop: !isMobile, isTouch: isTouch };
+  var root = document.documentElement;
+  root.classList.add(isMobile ? 'device-mobile' : 'device-desktop');
+  root.classList.add(isTouch ? 'device-touch' : 'device-no-touch');
+  root.setAttribute('data-device-type', window.DeviceInfo.type);
+})();
+</script>
 <title>WifiCord</title>
 <link rel="icon" href="/assets/logo.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">

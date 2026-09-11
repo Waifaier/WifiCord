@@ -2899,3 +2899,57 @@ input:-webkit-autofill:focus {
 }
 .call-context-menu .call-volume-row { padding: 0 2px; }
 .call-context-menu-btn { width: 100%; text-align: left; justify-content: flex-start; }
+
+/* =======================================================================
+   Layout adequado por TIPO de dispositivo (ver o script no topo do
+   index.html que detecta isso de verdade, não só pela largura da tela, e
+   marca <html> com .device-mobile/.device-desktop e .device-touch/
+   .device-no-touch). O resto do arquivo já tem bastante @media(max-width)
+   pra reorganizar colunas/grades em telas estreitas — o que falta aqui é
+   adaptar FUNÇÕES ao dispositivo, não só o tamanho: em celular não existe
+   botão direito de mouse, e um popover que nasce exatamente embaixo do
+   dedo fica dificil de alcançar/tocar (o dedo cobre o próprio menu). Bloco
+   colocado no fim do arquivo pelo mesmo motivo do bloco de cima (vencer as
+   regras antigas duplicadas por ordem, já que a especificidade empata). */
+
+/* Toque real (independente do tamanho da tela) merece alvos maiores — 44px
+   já era o mínimo recomendado, sobe um pouco mais pra folga confortável. */
+.device-touch .call-btn,
+.device-touch .call-device-arrow {
+  min-width: 50px !important;
+  height: 50px !important;
+}
+.device-touch .call-context-menu-btn,
+.device-touch .call-context-menu .call-volume-row input[type="range"] {
+  min-height: 40px;
+}
+
+/* Em celular (detecção real de dispositivo, não de largura) o menu de
+   botão direito vira uma folha inferior (bottom sheet) em vez de um
+   popover flutuando no ponto exato do toque — no Discord mobile é assim
+   que o menu de participante/transmissão aparece, e evita o dedo tampar o
+   próprio menu ou ele nascer cortado perto da borda da tela. */
+.device-mobile .call-context-menu {
+  left: 0 !important;
+  right: 0;
+  bottom: 0;
+  top: auto !important;
+  width: 100%;
+  min-width: 0;
+  border-radius: 16px 16px 0 0;
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -20px 50px rgba(0,0,0,.55);
+}
+.device-mobile .call-context-menu-title { font-size: 14px; }
+.device-mobile .call-context-menu-btn,
+.device-mobile .call-context-menu .call-volume-row input[type="range"] {
+  min-height: 44px;
+}
+
+/* Segurar o dedo (toque longo) faz as mesmas vezes do botão direito do
+   mouse — ver bindLongPress()/bindCallContextMenu() em call.js. Sem isso
+   não tinha NENHUMA forma de abrir esse menu em quem só usa a chamada pelo
+   celular. */
+.device-touch #call-remote-avatar,
+.device-touch #remote-video,
+.device-touch #remote-camera-pip { -webkit-touch-callout: none; user-select: none; }
