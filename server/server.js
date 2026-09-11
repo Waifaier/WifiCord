@@ -38,6 +38,22 @@ async function bootstrap() {
   // que existe uma versão mais nova rodando e avisar o usuário.
   const SERVER_BOOT_ID = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
+  // O index.html referencia /js/*.js e /css/*.css com nomes fixos, e esses
+  // arquivos são servidos com cache de 1 dia (ver staticOpts abaixo) pra não
+  // rebaixar o app com um round-trip a cada reload. O problema: sem isso,
+  // depois de um deploy novo o navegador de quem já usava o site continuava
+  // com a versão ANTIGA de call.js/style.css guardada até o cache expirar —
+  // "o Render mostra que fez deploy mas o site não muda" era exatamente
+  // esse cache. A correção é colocar `?v=<SERVER_BOOT_ID>` em cada
+  // src/href local: como o boot id muda a cada deploy, o navegador enxerga
+  // uma URL nova e busca o arquivo de novo, mesmo com os headers de cache
+  // antigos intactos — sem precisar de Ctrl+F5. Só o index.html em si
+  // precisa ser servido sem cache (abaixo) pra essa URL versionada chegar.
+  const fs = require('fs');
+  const INDEX_HTML = fs
+    .readFileSync(path.join(__dirname, '..', 'client', 'index.html'), 'utf8')
+    .replace(/(src|href)="(\/(?:js|css)\/[^"?]+)"/g, (_, attr, url) => `${attr}="${url}?v=${SERVER_BOOT_ID}"`);
+
   const PORT = process.env.PORT || 3000;
   const HOST = '0.0.0.0';
   const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -89,9 +105,22 @@ async function bootstrap() {
   app.use(express.json({ limit: '10mb' }));
   app.use(sessionMiddleware);
 
+  // Serve o index.html (já com ?v=<bootId> nos src/href — ver INDEX_HTML
+  // acima) SEM cache, sempre direto do processo atual. Tem que vir ANTES do
+  // express.static abaixo: senão o próprio express.static intercepta "/" e
+  // "/index.html" e volta a servir a versão antiga com cache de 1 dia,
+  // anulando o cache-busting.
+  app.get(['/', '/index.html'], (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
+    res.type('html').send(INDEX_HTML);
+  });
+
   // Cache agressivo para os arquivos estáticos do client (css/js/imagens).
   // O navegador para de rebaixar o app com um round-trip a cada reload:
   // passa a usar a cópia local por até 1 dia e ainda revalida por ETag.
+  // Seguro porque cada deploy muda a URL (?v=) referenciada pelo
+  // index.html acima, então uma versão nova nunca fica presa atrás do
+  // cache de uma URL antiga.
   const staticOpts = { maxAge: '1d', etag: true, lastModified: true };
   app.use(express.static(path.join(__dirname, '..', 'client'), staticOpts));
 
@@ -135,7 +164,8 @@ async function bootstrap() {
 
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/')) return next();
-    res.sendFile(path.join(__dirname, '..', 'client', 'index.html'));
+    res.setHeader('Cache-Control', 'no-cache');
+    res.type('html').send(INDEX_HTML);
   });
 
   app.use((err, req, res, next) => {
