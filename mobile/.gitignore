@@ -1,0 +1,19 @@
+# NUNCA suba a keystore de assinatura nem as senhas pro GitHub — o
+# repositório é público. Essa pasta fica só na sua máquina; as senhas vão
+# pro GitHub como "Secrets" (criptografados, não aparecem em lugar nenhum do
+# código) — ver mobile/keystore/LEIA-ME.txt.
+keystore/
+
+node_modules/
+www/dist/
+
+android/local.properties
+android/.gradle/
+android/app/build/
+android/build/
+android/captures/
+android/*.iml
+android/.idea/
+# Conteúdo copiado automaticamente por "npx cap sync" — o CI regenera isso
+# sozinho antes de compilar, não precisa versionar.
+android/app/src/main/assets/public/

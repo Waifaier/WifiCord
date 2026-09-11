@@ -306,6 +306,12 @@ router.get('/profile/:id', requireAuth, (req,res)=>{
   const user=User.findById(id);
   if(!user) return res.status(404).json({error:'Usuário não encontrado.'});
 
+  // "settings" guarda preferências pessoais (idioma, sensibilidade do
+  // microfone, densidade do chat, etc.) — não deve vazar pra quem visita o
+  // perfil de outra pessoa, só o próprio dono vê as suas.
+  const publicUser = User.toPublic(user);
+  if (id !== Number(req.session.userId)) delete publicUser.settings;
+
   const commonServers = db.prepare(`
     SELECT s.id,s.name,s.icon_url,s.owner_id
     FROM servers s
@@ -328,7 +334,7 @@ router.get('/profile/:id', requireAuth, (req,res)=>{
   }
 
   res.json({
-    user:User.toPublic(user),
+    user:publicUser,
     profileContext:{
       commonServers:commonServers.map(s=>({id:s.id,name:s.name,iconUrl:s.icon_url||null,isOwner:s.owner_id===id})),
       roles:roles.slice(0,12)

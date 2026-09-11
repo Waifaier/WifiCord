@@ -33,6 +33,11 @@ async function bootstrap() {
   const webrtcRouter = require('./routes/webrtc');
   const { initSockets } = require('./sockets');
 
+  // Identificador único gerado a cada vez que o processo sobe (cada deploy
+  // no Render reinicia o processo). O app desktop usa isso pra descobrir
+  // que existe uma versão mais nova rodando e avisar o usuário.
+  const SERVER_BOOT_ID = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
   const PORT = process.env.PORT || 3000;
   const HOST = '0.0.0.0';
   const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -120,6 +125,13 @@ async function bootstrap() {
   app.use('/api/media', mediaRouter);
   app.use('/api/games', gamesRouter);
   app.use('/api/webrtc', webrtcRouter);
+
+  // Usado pelo app desktop pra detectar quando uma nova versão foi
+  // publicada (ver desktop-app/main.js). Sem cache nenhum de propósito.
+  app.get('/api/version', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ bootId: SERVER_BOOT_ID });
+  });
 
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/')) return next();

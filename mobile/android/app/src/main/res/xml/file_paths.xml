@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path name="my_images" path="." />
+    <cache-path name="my_cache_images" path="." />
+    <!-- Pasta onde o UpdateManager baixa o APK novo antes de pedir pra
+         instalar (precisa de um caminho exposto via FileProvider porque o
+         Android não deixa abrir file:// direto pra outros apps, tem que ser
+         content://). -->
+    <cache-path name="updates" path="updates/" />
+</paths>

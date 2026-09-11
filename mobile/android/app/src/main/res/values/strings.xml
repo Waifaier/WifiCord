@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">WifiCord</string>
+    <string name="title_activity_main">WifiCord</string>
+    <string name="package_name">com.wificord.app</string>
+    <string name="custom_url_scheme">com.wificord.app</string>
+
+    <!-- Updater -->
+    <string name="update_channel_name">Atualizações do WifiCord</string>
+    <string name="update_available_title">Atualização disponível</string>
+    <string name="update_available_message">Tem uma versão nova do app WifiCord (%1$s). Baixar agora?</string>
+    <string name="update_download_now">Baixar agora</string>
+    <string name="update_later">Depois</string>
+    <string name="update_downloading_title">Baixando atualização…</string>
+    <string name="update_install_now">Instalar</string>
+    <string name="update_download_failed">Não deu pra baixar a atualização agora. Tenta de novo mais tarde.</string>
+    <string name="update_notification_title">Atualização do WifiCord disponível</string>
+    <string name="update_notification_text">Toca aqui pra baixar e instalar a versão nova.</string>
+</resources>

@@ -1,0 +1,123 @@
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+// versionCode/versionName vêm de variáveis de ambiente quando definidas (é o
+// workflow do GitHub Actions que define, incrementando a cada release) e
+// caem pra 1/"1.0-dev" em builds locais/manuais.
+def wcVersionCode = (System.getenv("WC_VERSION_CODE") ?: "1").toInteger()
+def wcVersionName = System.getenv("WC_VERSION_NAME") ?: "1.0-dev"
+// Owner/repo do GitHub onde os Releases (com o APK) são publicados — é lá
+// que o updater dentro do app vai procurar por versões novas. Dá pra
+// sobrescrever com env vars em builds locais; no CI (ver
+// .github/workflows/android-release.yml) já vem certo, apontando pro
+// próprio repositório.
+def wcGithubOwner = System.getenv("WC_GITHUB_OWNER") ?: "Waifaier"
+def wcGithubRepo = System.getenv("WC_GITHUB_REPO") ?: "WifiCord"
+
+android {
+    namespace "com.wificord.app"
+    compileSdk rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.wificord.app"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode wcVersionCode
+        versionName wcVersionName
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // Onde o updater (ver UpdateManager.kt) procura por novas versões.
+        buildConfigField "String", "GITHUB_OWNER", "\"${wcGithubOwner}\""
+        buildConfigField "String", "GITHUB_REPO", "\"${wcGithubRepo}\""
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        release {
+            def ksPath = System.getenv("WC_KEYSTORE_PATH")
+            if (ksPath) {
+                // rootProject.file (não file) porque WC_KEYSTORE_PATH é
+                // resolvido a partir da raiz do projeto Android
+                // (mobile/android/), que é onde o workflow do GitHub Actions
+                // decodifica o arquivo — não a partir de mobile/android/app/.
+                storeFile rootProject.file(ksPath)
+                storePassword System.getenv("WC_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("WC_KEY_ALIAS")
+                keyPassword System.getenv("WC_KEY_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Só assina de verdade se as variáveis de ambiente da keystore
+            // estiverem presentes (é o caso do workflow do GitHub Actions);
+            // localmente sem elas o Gradle cai pro debug key só pra não
+            // quebrar o build.
+            if (System.getenv("WC_KEYSTORE_PATH")) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+    buildFeatures {
+        buildConfig true
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+
+    // Kotlin
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.24"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+    implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.7.0"
+
+    // Updater: consulta a API do GitHub e baixa o APK do Release.
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+
+    // Verificação periódica de atualização em segundo plano (mesmo com o
+    // app fechado) + notificação "atualização disponível".
+    implementation "androidx.work:work-runtime-ktx:2.9.0"
+
+    // NOTA: as dependências do compartilhamento de tela nativo
+    // (MediaProjection + WebRTC + cliente Socket.IO) entram numa segunda
+    // etapa (ver tarefa separada) — de propósito FORA desse build inicial,
+    // pra não arriscar quebrar a compilação da parte principal (app +
+    // chamada de câmera/áudio + updater) por causa de uma versão de
+    // dependência do WebRTC que eu não consigo validar sem SDK Android
+    // neste ambiente.
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

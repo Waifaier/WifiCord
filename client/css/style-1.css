@@ -1170,7 +1170,34 @@ body { min-height:100vh; }
 
 /* Banner is strictly contained inside the profile card; never paints the chat. */.profile-card-banner{height:160px!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;position:relative!important;overflow:hidden!important}.profile-card-banner::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(14,14,22,.38));pointer-events:none}.profile-card{position:relative!important;overflow:hidden!important}.profile-card-body{position:relative;z-index:3}.profile-avatar{position:relative;z-index:5}
 
-.modal-games{width:min(900px,calc(100vw - 28px))!important;max-height:calc(100vh - 24px)!important;padding:22px!important}.games-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.game-cooldown{padding:7px 11px;border-radius:999px;background:#193a2b;color:#8ff0bb;font-weight:700;font-size:12px}.game-cooldown.locked{background:#402327;color:#ffadb3}.game-tabs{display:flex;gap:8px;margin:12px 0}.game-tab{padding:9px 12px;border-radius:10px;background:#1d1930;color:var(--text-muted)}.game-tab.active{background:#322a55;color:#fff}.game-hud{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}.game-hud span{padding:8px 11px;border-radius:10px;background:#171422}.flappy-wrap{position:relative;width:100%;max-width:760px;margin:0 auto;border-radius:16px;overflow:hidden;border:1px solid #ffffff12;background:#090810;box-shadow:0 16px 40px #0005}.flappy-wrap canvas{display:block;width:100%;height:auto}.flappy-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(8,7,15,.52);backdrop-filter:blur(3px);text-align:center}.flappy-overlay.hidden{display:none}.flappy-overlay strong{font-size:32px}.flappy-overlay span{color:#bbb6c9}.game-help{margin-top:10px;color:var(--text-muted);font-size:12px;text-align:center}
+/* --- Sala de jogos em glassmorphism: painéis translúcidos com blur em
+   vez dos blocos de cor sólida de antes, no mesmo espírito visual do
+   resto do app (cards com --glass-* já usados alhures). --- */
+.modal-games{width:min(900px,calc(100vw - 28px))!important;max-height:calc(100vh - 24px)!important;padding:22px!important;background:rgba(20,17,36,.72)!important;-webkit-backdrop-filter:blur(22px)!important;backdrop-filter:blur(22px)!important;border:1px solid rgba(255,255,255,.09)!important}
+.games-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+.game-cooldown{padding:7px 12px;border-radius:999px;background:rgba(45,214,140,.14);border:1px solid rgba(45,214,140,.35);color:#8ff0bb;font-weight:700;font-size:12px;backdrop-filter:blur(6px)}
+.game-cooldown.locked{background:rgba(255,90,100,.14);border-color:rgba(255,90,100,.35);color:#ffadb3}
+.game-tabs{display:flex;gap:8px;margin:12px 0;padding:5px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);width:fit-content}
+.game-tab{padding:9px 14px;border-radius:10px;background:transparent;color:var(--text-muted);transition:.15s}
+.game-tab.active{background:linear-gradient(135deg,var(--accent-primary-start),var(--accent-primary-end));color:#fff;box-shadow:0 6px 18px -8px var(--glow-violet)}
+.game-hud{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}
+.game-hud span{padding:8px 13px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(8px);font-variant-numeric:tabular-nums}
+.flappy-wrap{position:relative;width:100%;max-width:760px;margin:0 auto;border-radius:18px;overflow:hidden;border:1px solid rgba(124,92,255,.28);background:#090810;box-shadow:0 20px 50px -12px #000a,0 0 0 1px rgba(255,255,255,.04) inset,0 0 40px -18px var(--glow-violet)}
+.flappy-wrap canvas{display:block;width:100%;height:auto}
+.flappy-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(12,10,20,.55);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);text-align:center}
+.flappy-overlay.hidden{display:none}
+.flappy-overlay strong{font-size:34px;font-family:var(--font-display);background:linear-gradient(135deg,#fff,#c9b8ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.flappy-overlay span{color:#c9c4dd}
+
+/* --- Banner de atualização do app desktop (ver client/js/desktop-update.js) --- */
+#desktop-update-banner{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:999;display:flex;align-items:center;gap:14px;padding:10px 12px 10px 18px;border-radius:var(--radius-lg);background:var(--glass-bg);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid var(--glass-border);box-shadow:0 12px 34px -10px rgba(0,0,0,.6),0 0 30px -14px var(--glow-violet);color:var(--text-primary);font-size:13px;animation:wcUpdateBannerIn .35s var(--ease-smooth) both}
+@keyframes wcUpdateBannerIn{from{opacity:0;transform:translate(-50%,-12px)}to{opacity:1;transform:translate(-50%,0)}}
+#desktop-update-banner button{border:0;border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:600;background:linear-gradient(135deg,var(--accent-primary-start),var(--accent-primary-end));color:#0b0913;cursor:pointer;transition:transform .15s var(--ease-smooth),box-shadow .15s var(--ease-smooth);white-space:nowrap}
+#desktop-update-banner button:hover{transform:translateY(-1px);box-shadow:0 8px 20px -8px var(--glow-violet)}
+#desktop-update-banner button:disabled{opacity:.7;cursor:default;transform:none;box-shadow:none}
+@media (prefers-reduced-motion: reduce){#desktop-update-banner{animation:none}}
+@media (max-width:480px){#desktop-update-banner{left:10px;right:10px;top:10px;transform:none;flex-direction:column;align-items:stretch;text-align:center}#desktop-update-banner button{width:100%}}
+.game-help{margin-top:10px;color:var(--text-muted);font-size:12px;text-align:center}
 
 @media(max-width:700px){.call-stage{height:300px!important;min-height:240px!important}.call-stage:not(.sharing) .call-remote-avatar{left:calc(50% - 55px)!important}.call-stage:not(.sharing) .call-local-avatar{left:calc(50% + 55px)!important}.chat-audio-player{min-width:0}.incoming-dm-notice{left:12px;right:12px;top:12px}}
 
@@ -1611,6 +1638,23 @@ body { min-width: 0; min-height: 100dvh; overflow: hidden; }
 .call-bar:not(.call-reconnecting) #call-connection-status[data-state="connected"] + * { color: inherit; }
 @keyframes wcCallPulse { 50% { opacity: .45; transform: scale(.8); } }
 
+/* Bolinha de qualidade da chamada (RTT/perda de pacote via getStats) */
+.call-quality-dot { width: 7px; height: 7px; border-radius: 50%; background: #6a6478; flex: 0 0 auto; }
+.call-quality-dot[data-quality="good"] { background: #63e8a3; box-shadow: 0 0 8px rgba(99,232,163,.6); }
+.call-quality-dot[data-quality="ok"] { background: #f2c76a; box-shadow: 0 0 8px rgba(242,199,106,.55); }
+.call-quality-dot[data-quality="poor"] { background: #ff7d86; box-shadow: 0 0 8px rgba(255,125,134,.6); }
+.call-quality-dot[data-quality="unknown"] { background: #6a6478; box-shadow: none; }
+
+/* Volume individual do participante (chamada 1:1) */
+.call-stage-peer-wrap { display: flex; align-items: center; gap: 4px; min-width: 0; pointer-events: auto; }
+.call-volume-group { position: relative; }
+.call-volume-btn { width: 26px !important; height: 26px !important; min-width: 26px; font-size: 13px !important; background: rgba(255,255,255,.08) !important; margin-left: 0 !important; }
+.call-volume-btn:hover { background: rgba(255,255,255,.16) !important; }
+.call-volume-menu { bottom: auto; top: calc(100% + 8px); left: auto; right: 0; min-width: 180px; }
+.call-volume-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 12px; color: #cfc9e0; white-space: nowrap; }
+.call-volume-row input[type="range"] { flex: 1; accent-color: var(--accent-primary-start, #7c5cff); }
+#call-remote-volume-value { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; color: #fff; }
+
 .call-stage > #remote-video,
 .call-stage > #local-video { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; background: #050609; }
 .call-stage > #remote-video { z-index: 1; object-fit: contain !important; }
@@ -1669,6 +1713,12 @@ body { min-width: 0; min-height: 100dvh; overflow: hidden; }
 .server-call-tile-avatar { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; background: radial-gradient(circle, #28213f, #09090e); }
 .server-call-tile-avatar img { width: clamp(58px, 7vw, 96px) !important; height: clamp(58px, 7vw, 96px) !important; border-radius: 50%; object-fit: cover; }
 .server-call-tile video:not(.hidden) + .server-call-tile-avatar { display: none; }
+.server-call-tile-volume-wrap { position: absolute; right: 8px; bottom: 8px; z-index: 4; display: flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 999px; background: rgba(8,9,14,.78); backdrop-filter: blur(10px); opacity: 0; transform: translateY(4px); transition: opacity .15s ease, transform .15s ease; }
+.server-call-tile:hover .server-call-tile-volume-wrap,
+.server-call-tile:focus-within .server-call-tile-volume-wrap { opacity: 1; transform: translateY(0); }
+.server-call-tile-volume-icon { font-size: 11px; flex: 0 0 auto; }
+.server-call-tile-volume { width: 70px; accent-color: var(--accent-primary-start, #7c5cff); }
+@media (hover: none) { .server-call-tile-volume-wrap { opacity: 1; transform: none; } }
 
 .mini-call-dock { position: fixed; z-index: 10020; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); left: auto !important; width: fit-content; max-width: calc(100vw - 24px); display: flex; align-items: center; gap: 6px; padding: 7px; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: rgba(20,18,30,.94); backdrop-filter: blur(14px); box-shadow: 0 14px 40px rgba(0,0,0,.45); }
 .mini-call-dock button { width: 34px; height: 34px; border-radius: 10px; background: #29243c; color: #fff; }

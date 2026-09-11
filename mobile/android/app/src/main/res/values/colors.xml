@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Paleta da marca (mesmas cores de client/css/style.css :root) -->
+    <color name="colorPrimary">#7C5CFF</color>
+    <color name="colorPrimaryDark">#10121D</color>
+    <color name="colorAccent">#22D3EE</color>
+</resources>
