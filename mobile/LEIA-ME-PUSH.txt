@@ -1,0 +1,37 @@
+Notificação de ligação chegando com o app fechado/celular bloqueado
+====================================================================
+
+O código já está todo pronto (servidor + app Android). Falta só criar um
+projeto Firebase gratuito e me passar 2 coisas — sem isso o app continua
+funcionando 100% normal, só sem essa notificação específica.
+
+PASSO 1 — criar o projeto Firebase (grátis, ~2 minutos)
+--------------------------------------------------------
+1. Acesse https://console.firebase.google.com e crie um projeto novo
+   (qualquer nome, ex: "WifiCord").
+2. Dentro do projeto, clique em "Adicionar app" > Android.
+3. No campo "nome do pacote Android", digite exatamente: com.wificord.app
+4. Baixe o arquivo "google-services.json" que ele oferece.
+5. Me envie esse arquivo aqui no chat — eu coloco ele no lugar certo
+   (mobile/android/app/google-services.json) e aviso antes de sobrescrever
+   qualquer coisa, como sempre.
+
+PASSO 2 — chave do servidor (pra ele poder ENVIAR as notificações)
+--------------------------------------------------------------------
+1. No mesmo projeto Firebase: ⚙️ Configurações do projeto > aba
+   "Contas de serviço" (Service accounts).
+2. Clique em "Gerar nova chave privada" — baixa um arquivo .json.
+3. Vá no painel do Render (onde o WifiCord está hospedado) > seu serviço
+   > Environment.
+4. Crie uma variável de ambiente chamada FIREBASE_SERVICE_ACCOUNT_JSON e
+   cole o CONTEÚDO INTEIRO desse arquivo .json como valor (é só abrir o
+   arquivo, selecionar tudo, colar).
+5. Salve — o Render reinicia o serviço sozinho.
+
+Esse segundo arquivo é uma senha (dá poder de mandar notificação em nome
+do projeto) — por isso ele vai direto pro Render como variável secreta,
+nunca pro GitHub/git.
+
+Depois dos dois passos, é só gerar um novo instalador do app (Actions >
+"Build e publicar APK Android" > Run workflow) e testar ligando pra
+alguém com o app fechado.
