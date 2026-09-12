@@ -193,6 +193,26 @@ async function bootstrap() {
     // estiver configurada — senão é no-op).
     startAutoBackup();
   });
+
+  // ---------------------------------------------------------------------
+  // DIAGNÓSTICO TEMPORÁRIO — o processo está sendo morto por estourar
+  // 512MB no Render (free tier), mas o gráfico de memória de verdade
+  // ("Application Metrics") só existe no plano pago. Esse log aparece nos
+  // Logs normais (grátis) a cada 15s e mostra os números reais de memória
+  // do processo Node, junto com quantos sockets estão conectados agora —
+  // isso é o que vai mostrar se é um vazamento subindo aos poucos ou um
+  // pico ligado a uma ação específica. Tirar esse bloco assim que a causa
+  // for encontrada.
+  const memLogTimer = setInterval(() => {
+    const m = process.memoryUsage();
+    const mb = n => (n / 1024 / 1024).toFixed(1);
+    const clients = io.engine?.clientsCount ?? '?';
+    console.log(
+      `📊 [mem] rss=${mb(m.rss)}MB heapUsed=${mb(m.heapUsed)}MB heapTotal=${mb(m.heapTotal)}MB ` +
+      `external=${mb(m.external)}MB arrayBuffers=${mb(m.arrayBuffers)}MB sockets=${clients}`
+    );
+  }, 15000);
+  if (typeof memLogTimer.unref === 'function') memLogTimer.unref();
 }
 
 bootstrap().catch((err) => {
