@@ -72,9 +72,25 @@ const Message = {
       .get(id);
   },
 
+  // IMPORTANTE: estas duas consultas (histórico de canal/DM, até 300-1000
+  // mensagens de uma vez) NÃO trazem u.avatar_url como as outras. O avatar é
+  // salvo no banco como uma data URI base64 (até ~2,8MB de texto por
+  // usuário — ver server/routes/auth.js). Antes, cada uma das até 1000
+  // linhas retornadas aqui carregava uma CÓPIA COMPLETA do avatar do autor,
+  // sem nenhuma deduplicação: um canal com só algumas dezenas de mensagens
+  // de alguém com avatar grande já virava uma resposta JSON de centenas de
+  // MB (ou mais de 1GB) montada de uma só vez, o que estourava os 512MB do
+  // Render quase instantaneamente — rápido demais pro log de memória (a
+  // cada 15s) chegar a capturar o pico. Isso explica o crash específico ao
+  // entrar num canal/servidor com "algumas pessoas": mais gente = mais
+  // chance de alguém ali ter um avatar grande no histórico.
+  // O cliente já tem o avatarUrl de cada autor por outro caminho (lista de
+  // membros do servidor / lista de amigos), então tirar daqui é seguro — ver
+  // client/js/app.js, messageItemHtml(): ele já prioriza state.serverMembers
+  // / state.friends e só usa msg.author.avatarUrl como último recurso.
   listForChannel(channelId, limit) {
     const n=Math.max(1,Math.min(1000,Number(limit)||300));
-    return db.prepare(`SELECT m.*, u.username, u.display_name, u.avatar_url
+    return db.prepare(`SELECT m.*, u.username, u.display_name
       FROM messages m JOIN users u ON u.id=m.from_user_id
       WHERE m.id IN (SELECT id FROM messages WHERE channel_id=? ORDER BY id DESC LIMIT ?)
       ORDER BY m.id ASC`).all(channelId,n);
@@ -82,7 +98,7 @@ const Message = {
 
   listForDM(userA, userB, limit) {
     const n=Math.max(1,Math.min(1000,Number(limit)||300));
-    return db.prepare(`SELECT m.*, u.username, u.display_name, u.avatar_url
+    return db.prepare(`SELECT m.*, u.username, u.display_name
       FROM messages m JOIN users u ON u.id=m.from_user_id
       WHERE m.id IN (SELECT id FROM messages WHERE ((from_user_id=? AND to_user_id=?) OR (from_user_id=? AND to_user_id=?)) ORDER BY id DESC LIMIT ?)
       ORDER BY m.id ASC`).all(userA,userB,userB,userA,n);
