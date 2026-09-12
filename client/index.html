@@ -649,7 +649,8 @@
     <div class="share-pane" data-share-pane="window"><div class="share-source-card"><div class="share-source-icon" data-icon="window"></div><div><b>Janela</b><small>Compartilhe apenas uma janela.</small></div></div></div>
     <div class="share-pane" data-share-pane="tab"><div class="share-source-card"><div class="share-source-icon" data-icon="globe"></div><div><b>Aba do navegador</b><small>Ideal para vídeos e sites.</small></div></div></div>
     <div class="resolution-grid"><button data-resolution="720">720p<small>Sem WFNA</small></button><button data-resolution="1080">1080p<small>WFNA</small></button><button data-resolution="1440">1440p<small>WFNA</small></button><button data-resolution="2160">4K<small>WFNA</small></button></div>
-    <label class="settings-toggle"><input type="checkbox" id="share-system-audio"> Compartilhar áudio do sistema (quando disponível)</label>
+    <label class="settings-toggle" id="share-system-audio-row"><input type="checkbox" id="share-system-audio" checked> Compartilhar áudio do sistema</label>
+    <p class="text-muted" id="share-system-audio-hint" style="font-size:12px;margin:-6px 0 4px;">O navegador também vai pedir pra marcar "Compartilhar áudio" na própria janela de escolha — sem isso marcado dos dois lados, a apresentação fica muda.</p>
     <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Cancelar</button><button id="share-screen-confirm" class="btn btn-primary">Começar apresentação</button></div>
   </div>
 

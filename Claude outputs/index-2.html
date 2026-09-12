@@ -2,533 +2,791 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WifiCord — sua comunidade, em rede</title>
-<meta name="description" content="WifiCord: servidores, voz, vídeo e chat em tempo real. Baixe para Windows e Android, ou use direto no navegador.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+// Detecta o TIPO de dispositivo (celular ou computador) de verdade — não só
+// pelo tamanho da tela, que é o que quase todo o resto do CSS já fazia via
+// @media (max-width:...). O tamanho da tela sozinho engana nos dois
+// sentidos: uma janela de notebook redimensionada bem estreita continua
+// sendo um computador (mouse/teclado); um celular deitado (paisagem) ou um
+// tablet grande continuam sendo dispositivos de toque mesmo com uma tela
+// "larga". Roda ANTES do CSS carregar (script síncrono, bem no topo do
+// <head>) pra aplicar a classe em <html> a tempo — sem isso a página
+// nasceria com o layout "errado" por uma fração de segundo até o JS normal
+// (carregado com defer, só depois de tudo) rodar.
+//
+// Combina várias fontes, cada uma cobrindo o ponto cego da outra:
+//   1. Client Hints (navigator.userAgentData.mobile) — no Chrome/Edge/
+//      Android é a fonte mais confiável, não depende de string nenhuma.
+//   2. Palavras-chave de SO móvel no User-Agent — fallback pra navegadores
+//      sem Client Hints (Safari, Firefox).
+//   3. iPadOS 13+ manda um User-Agent de "Mac" de propósito (pra sites não
+//      tratarem o iPad como celular/tablet) — mas continua sendo touch sem
+//      mouse, então é tratado como móvel mesmo assim.
+//   4. Capacidade real de toque sem mouse (matchMedia pointer:coarse +
+//      hover:none) decide o resto dos casos.
+(function () {
+  var ua = navigator.userAgent || '';
+  var uaData = navigator.userAgentData;
+  var isMobile;
+  if (uaData && typeof uaData.mobile === 'boolean') {
+    isMobile = uaData.mobile;
+  } else if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) {
+    isMobile = true;
+  } else if (/Android|iPhone|iPad|iPod|IEMobile|Windows Phone|BlackBerry|Opera Mini|Mobile/i.test(ua)) {
+    isMobile = true;
+  } else {
+    var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    var noHover = window.matchMedia && window.matchMedia('(hover: none)').matches;
+    isMobile = !!(coarse && noHover);
+  }
+  var isTouch = !!((navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window);
+  window.DeviceInfo = { type: isMobile ? 'mobile' : 'desktop', isMobile: isMobile, isDesktop: !isMobile, isTouch: isTouch };
+  var root = document.documentElement;
+  root.classList.add(isMobile ? 'device-mobile' : 'device-desktop');
+  root.classList.add(isTouch ? 'device-touch' : 'device-no-touch');
+  root.setAttribute('data-device-type', window.DeviceInfo.type);
+})();
+</script>
+<title>WifiCord</title>
 <link rel="icon" href="/assets/logo.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --void:#06070c;
-    --panel:#0c0f16;
-    --panel-2:#11151f;
-    --line: rgba(232,238,247,.09);
-    --line-strong: rgba(232,238,247,.16);
-    --text:#e9edf5;
-    --text-dim:#9aa3b6;
-    --text-faint:#5b6376;
-    --cyan:#49f2d6;
-    --cyan-dim:#1d6a5e;
-    --violet:#8a6bff;
-    --coral:#ff5f7e;
-    --font-display:'Chakra Petch', ui-sans-serif, sans-serif;
-    --font-body:'IBM Plex Sans', ui-sans-serif, sans-serif;
-    --font-mono:'IBM Plex Mono', ui-monospace, monospace;
-    --gutter: max(20px, 5vw);
-    color-scheme: dark;
-  }
-  *{box-sizing:border-box;}
-  html{scroll-behavior:smooth;}
-  @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto;} }
-  body{
-    margin:0;
-    background:var(--void);
-    color:var(--text);
-    font-family:var(--font-body);
-    font-size:16px;
-    line-height:1.55;
-    -webkit-font-smoothing:antialiased;
-    overflow-x:hidden;
-  }
-  h1,h2,h3{font-family:var(--font-display); margin:0; text-wrap:balance; letter-spacing:.005em;}
-  p{margin:0;}
-  a{color:inherit;}
-  img{max-width:100%;}
-  ::selection{ background:var(--cyan); color:#06070c; }
-
-  #net-canvas{
-    position:fixed; inset:0; width:100%; height:100%;
-    z-index:0; pointer-events:none;
-    background:
-      radial-gradient(1100px 620px at 82% -8%, rgba(138,107,255,.12), transparent 60%),
-      radial-gradient(900px 700px at -10% 40%, rgba(73,242,214,.08), transparent 55%),
-      var(--void);
-  }
-
-  .page{ position:relative; z-index:1; }
-
-  /* ---------- nav ---------- */
-  .nav{
-    position:sticky; top:0; z-index:40;
-    display:flex; align-items:center; justify-content:space-between;
-    gap:16px;
-    padding:16px var(--gutter);
-    backdrop-filter: blur(14px);
-    background:linear-gradient(180deg, rgba(6,7,12,.82), rgba(6,7,12,.35));
-    border-bottom:1px solid var(--line);
-  }
-  .brand{ display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-weight:700; font-size:18px; letter-spacing:.01em; text-decoration:none; }
-  .brand-mark{ width:26px; height:26px; flex:0 0 auto; }
-  .brand-mark svg{ display:block; width:100%; height:100%; }
-  .nav-links{ display:flex; align-items:center; gap:22px; }
-  .nav-links a{ text-decoration:none; color:var(--text-dim); font-size:14px; font-weight:500; transition:color .15s ease; }
-  .nav-links a:hover{ color:var(--text); }
-  .btn{
-    display:inline-flex; align-items:center; justify-content:center; gap:8px;
-    font-family:var(--font-body); font-weight:600; font-size:14.5px;
-    padding:11px 20px; border-radius:8px; text-decoration:none; cursor:pointer;
-    border:1px solid transparent;
-    transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
-    white-space:nowrap;
-  }
-  .btn:active{ transform:translateY(1px); }
-  .btn-primary{ background:var(--cyan); color:#062420; }
-  .btn-primary:hover{ box-shadow:0 0 0 1px var(--cyan), 0 10px 30px -10px rgba(73,242,214,.55); transform:translateY(-1px); }
-  .btn-ghost{ background:transparent; border-color:var(--line-strong); color:var(--text); }
-  .btn-ghost:hover{ border-color:var(--cyan); color:var(--cyan); }
-  .btn-small{ padding:8px 14px; font-size:13px; }
-
-  /* ---------- hero ---------- */
-  .hero{
-    min-height:92vh;
-    display:flex; align-items:center;
-    padding:clamp(40px,10vh,120px) var(--gutter) 60px;
-  }
-  .hero-inner{ max-width:640px; }
-  .kicker{
-    font-family:var(--font-mono); font-size:12.5px; color:var(--cyan);
-    letter-spacing:.06em; display:flex; align-items:center; gap:9px; margin-bottom:22px;
-  }
-  .kicker-dot{ width:7px; height:7px; border-radius:50%; background:var(--cyan); box-shadow:0 0 0 3px rgba(73,242,214,.18); animation:pulse 2.4s ease-in-out infinite; }
-  @keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.35} }
-  @media (prefers-reduced-motion: reduce){ .kicker-dot{ animation:none; } }
-  .hero h1{
-    font-size:clamp(40px, 6vw, 68px);
-    font-weight:700; line-height:1.04; letter-spacing:-.01em;
-    color:var(--text);
-  }
-  .hero h1 em{ font-style:normal; color:var(--cyan); }
-  .hero p.lede{
-    margin-top:22px; font-size:clamp(16px,2vw,19px); color:var(--text-dim); max-width:52ch;
-  }
-  .hero-actions{ display:flex; flex-wrap:wrap; gap:14px; margin-top:34px; }
-  .hero-meta{
-    margin-top:56px; display:flex; gap:28px; flex-wrap:wrap;
-    font-family:var(--font-mono); font-size:12.5px; color:var(--text-faint);
-  }
-  .hero-meta b{ color:var(--text-dim); font-weight:500; }
-
-  /* ---------- sections ---------- */
-  section{ padding:min(14vh,140px) var(--gutter); position:relative; }
-  .section-head{ max-width:640px; margin-bottom:min(9vh,90px); }
-  .eyebrow{ font-family:var(--font-mono); font-size:12px; color:var(--text-faint); letter-spacing:.08em; margin-bottom:14px; }
-  .section-head h2{ font-size:clamp(28px,4vw,42px); font-weight:600; line-height:1.15; }
-  .section-head p{ margin-top:16px; color:var(--text-dim); font-size:16.5px; max-width:56ch; }
-
-  .feature-row{
-    display:grid; grid-template-columns:1fr 1fr; gap:clamp(28px,6vw,100px);
-    align-items:center;
-    padding:56px 0;
-    border-top:1px solid var(--line);
-  }
-  .feature-row:first-of-type{ border-top:none; }
-  .feature-row.reverse .feature-copy{ order:2; }
-  .feature-row.reverse .feature-visual{ order:1; }
-  .feature-num{ font-family:var(--font-mono); font-size:13px; color:var(--cyan); margin-bottom:14px; display:block; }
-  .feature-copy h3{ font-size:clamp(22px,2.6vw,30px); font-weight:600; }
-  .feature-copy p{ margin-top:14px; color:var(--text-dim); font-size:15.5px; max-width:46ch; }
-  .feature-tags{ display:flex; flex-wrap:wrap; gap:8px; margin-top:22px; }
-  .feature-tags span{
-    font-family:var(--font-mono); font-size:11.5px; color:var(--text-dim);
-    border:1px solid var(--line-strong); border-radius:999px; padding:5px 12px;
-  }
-
-  .feature-visual{
-    aspect-ratio:5/4; border-radius:16px; position:relative; overflow:hidden;
-    background:linear-gradient(160deg, rgba(73,242,214,.07), rgba(138,107,255,.05) 60%, rgba(255,255,255,.02));
-    border:1px solid var(--line);
-  }
-  .feature-visual::before{
-    content:''; position:absolute; inset:0;
-    background-image: radial-gradient(rgba(255,255,255,.14) 1px, transparent 1px);
-    background-size:22px 22px; opacity:.35;
-  }
-  .mock{ position:absolute; inset:0; display:flex; flex-direction:column; justify-content:flex-end; padding:18px; gap:8px; }
-  .mock-row{ display:flex; align-items:center; gap:9px; max-width:82%; }
-  .mock-row.self{ align-self:flex-end; flex-direction:row-reverse; max-width:70%; }
-  .mock-avatar{ width:24px; height:24px; border-radius:50%; flex:0 0 auto; background:linear-gradient(135deg,var(--cyan),var(--violet)); }
-  .mock-bubble{ background:rgba(255,255,255,.06); border:1px solid var(--line); border-radius:10px; padding:8px 12px; font-size:12.5px; color:var(--text-dim); }
-  .mock-row.self .mock-bubble{ background:rgba(73,242,214,.14); border-color:rgba(73,242,214,.3); color:var(--text); }
-  .mock-bars{ position:absolute; top:18px; left:18px; right:18px; display:flex; gap:5px; align-items:flex-end; height:48px; }
-  .mock-bars i{ flex:1; background:var(--cyan); opacity:.5; border-radius:3px 3px 0 0; }
-
-  /* ---------- download ---------- */
-  .download{ padding-bottom:min(18vh,160px); }
-  .dl-grid{ display:grid; grid-template-columns:1fr 1fr; gap:20px; max-width:920px; }
-  .dl-card{
-    border:1px solid var(--line-strong); border-radius:16px; padding:28px;
-    background:linear-gradient(160deg, rgba(255,255,255,.035), rgba(255,255,255,0));
-    display:flex; flex-direction:column; gap:16px;
-    position:relative; overflow:hidden;
-  }
-  .dl-card::after{
-    content:''; position:absolute; inset:auto -30% -60% auto; width:220px; height:220px;
-    background:radial-gradient(circle, rgba(73,242,214,.18), transparent 70%);
-    pointer-events:none;
-  }
-  .dl-top{ display:flex; align-items:center; gap:12px; }
-  .dl-icon{ width:38px; height:38px; flex:0 0 auto; color:var(--cyan); }
-  .dl-icon svg{ width:100%; height:100%; display:block; }
-  .dl-title{ font-family:var(--font-display); font-weight:600; font-size:19px; }
-  .dl-sub{ font-size:13.5px; color:var(--text-faint); }
-  .dl-version{
-    font-family:var(--font-mono); font-size:13px; color:var(--text-dim);
-    display:flex; align-items:center; gap:8px; min-height:20px;
-  }
-  .dl-version .dot{ width:6px; height:6px; border-radius:50%; background:var(--cyan); flex:0 0 auto; }
-  .dl-version.is-error .dot{ background:var(--text-faint); }
-  .dl-actions{ margin-top:auto; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-  .dl-actions .btn-primary[aria-disabled="true"]{ opacity:.45; pointer-events:none; }
-  .dl-note{ font-size:12px; color:var(--text-faint); }
-
-  /* ---------- footer ---------- */
-  footer{
-    border-top:1px solid var(--line);
-    padding:36px var(--gutter) 48px;
-    display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between;
-  }
-  .footer-links{ display:flex; gap:22px; flex-wrap:wrap; }
-  .footer-links a{ text-decoration:none; color:var(--text-dim); font-size:13.5px; }
-  .footer-links a:hover{ color:var(--cyan); }
-  .footer-copy{ font-size:12.5px; color:var(--text-faint); font-family:var(--font-mono); }
-
-  @media (max-width:820px){
-    .feature-row{ grid-template-columns:1fr; }
-    .feature-row.reverse .feature-copy,
-    .feature-row.reverse .feature-visual{ order:initial; }
-    .dl-grid{ grid-template-columns:1fr; }
-    .nav-links a:not(.btn){ display:none; }
-  }
-</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
+<section id="loading-screen" class="loading-screen">
+  <div class="signal-mark signal-mark-sm">
+    <span class="signal-arc signal-arc-3"></span>
+    <span class="signal-arc signal-arc-2"></span>
+    <span class="signal-arc signal-arc-1"></span>
+    <span class="signal-dot"></span>
+  </div>
+  <div class="loading-mark">WifiCord</div>
+  <p id="loading-phrase"></p>
+</section>
+<script>document.addEventListener('DOMContentLoaded',function(){var l=document.getElementById('loading-screen');if(l){l.classList.add('loading-hide');setTimeout(function(){l.remove();},500);}});</script>
 
-<canvas id="net-canvas" aria-hidden="true"></canvas>
+<!-- ===================== TELA DE AUTENTICAÇÃO ===================== -->
+<section id="auth-screen" class="screen">
+  <div class="auth-shell">
+    <aside class="auth-showcase" aria-hidden="true">
+      <div class="auth-showcase-art">
+        <canvas id="auth-orbit"></canvas>
+        <div class="signal-mark">
+          <span class="signal-arc signal-arc-3"></span>
+          <span class="signal-arc signal-arc-2"></span>
+          <span class="signal-arc signal-arc-1"></span>
+          <span class="signal-dot"></span>
+        </div>
+      </div>
+      <p class="auth-showcase-title">Sua conversa,<br>sempre no ar.</p>
+      <p class="auth-showcase-sub">Servidores, chamadas e amigos em um só lugar — sem travar, sem ruído.</p>
+    </aside>
 
-<div class="page">
-  <nav class="nav">
-    <a class="brand" href="#top">
-      <span class="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="14.5" stroke="url(#g1)" stroke-width="1.6"/><circle cx="16" cy="9" r="2.4" fill="#49f2d6"/><circle cx="9.5" cy="20.5" r="2.4" fill="#8a6bff"/><circle cx="22.5" cy="20.5" r="2.4" fill="#49f2d6"/><path d="M16 9L9.5 20.5M16 9L22.5 20.5M9.5 20.5H22.5" stroke="#8a6bff" stroke-width="1.2" opacity=".6"/><defs><linearGradient id="g1" x1="2" y1="2" x2="30" y2="30"><stop stop-color="#49f2d6"/><stop offset="1" stop-color="#8a6bff"/></linearGradient></defs></svg>
-      </span>
-      WifiCord
-    </a>
-    <div class="nav-links">
-      <a href="#recursos">Recursos</a>
-      <a href="#download">Baixar</a>
-      <a href="https://github.com/Waifaier/WifiCord" target="_blank" rel="noopener">GitHub</a>
-      <a class="btn btn-primary btn-small" href="https://wificord.onrender.com" target="_blank" rel="noopener">Abrir o app</a>
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="brand-logo"><img src="/assets/logo.svg" alt="WifiCord"></div>
+        <h1>WifiCord</h1>
+        <p class="text-muted">Converse em tempo real com seus amigos e servidores.</p>
+      </div>
+
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" data-tab="login">Entrar</button>
+        <button type="button" class="auth-tab" data-tab="register">Criar conta</button>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <label>Email
+          <input type="email" name="email" required autocomplete="email">
+        </label>
+        <label>Senha
+          <input type="password" name="password" required autocomplete="current-password">
+        </label>
+        <button type="submit" class="btn btn-primary">Entrar</button>
+      </form>
+
+      <form id="register-form" class="auth-form hidden">
+        <label>Nome de usuário
+          <input type="text" name="username" required minlength="3" maxlength="32" autocomplete="username">
+        </label>
+        <label>Nome de exibição
+          <input type="text" name="displayName" maxlength="64" autocomplete="nickname">
+        </label>
+        <label>Email
+          <input type="email" name="email" required autocomplete="email">
+        </label>
+        <label>Senha
+          <input type="password" name="password" required minlength="6" autocomplete="new-password">
+        </label>
+        <button type="submit" class="btn btn-primary">Criar conta</button>
+      </form>
+
+      <p style="text-align:center;margin-top:18px;font-size:12px;color:var(--text-muted);">
+        Ao continuar, você concorda com os <a href="/legal.html" target="_blank" style="color:var(--accent-secondary);">Termos de Uso e a Política de Privacidade</a>.
+      </p>
     </div>
+  </div>
+</section>
+
+<!-- ===================== APP ===================== -->
+<section id="app-screen" class="screen hidden">
+
+  <button id="mobile-menu-btn" type="button" aria-label="Abrir menu"></button>
+
+  <nav id="server-rail">
+    <div class="rail-logo" aria-hidden="true"><span></span></div>
+    <button type="button" id="home-btn" data-action="home" class="rail-btn active" title="Início">🏠</button>
+    <div class="rail-divider"></div>
+    <ul id="dm-quick-list" class="dm-quick-list" aria-label="Conversas recentes"></ul>
+    <div class="rail-divider rail-divider-small"></div>
+    <ul id="server-list" class="rail-list"></ul>
+    <button type="button" id="add-server-btn" class="rail-btn rail-btn-ghost" title="Criar servidor">+</button>
+    <button type="button" id="join-server-btn" class="rail-btn rail-btn-ghost" title="Entrar em servidor">🔗</button>
   </nav>
 
-  <header class="hero" id="top">
-    <div class="hero-inner">
-      <div class="kicker"><span class="kicker-dot"></span>REDE ATIVA · SEM CADASTRO PRA OLHAR</div>
-      <h1>Sua comunidade<br>tem uma <em>frequência</em><br>própria.</h1>
-      <p class="lede">WifiCord junta servidores, voz, vídeo e chat de texto numa rede só — instalado no Windows, no Android, ou direto no navegador, sem instalar nada.</p>
-      <div class="hero-actions">
-        <a class="btn btn-primary" href="#download">Baixar o WifiCord</a>
-        <a class="btn btn-ghost" href="https://github.com/Waifaier/WifiCord" target="_blank" rel="noopener">Ver o código-fonte</a>
+  <aside id="sidebar">
+    <div id="dm-panel">
+      <div class="sidebar-header">
+        <div><h2>Amigos</h2><p class="sidebar-header-sub">Conecte-se com quem importa</p></div>
+        <button type="button" id="add-friend-btn" class="btn btn-small">+ Adicionar</button>
       </div>
-      <div class="hero-meta">
-        <span><b>Código aberto</b> no GitHub</span>
-        <span><b>Windows · Android · Web</b></span>
-        <span><b>Builds automáticos</b> a cada atualização</span>
+      <div class="friend-search-wrap">
+        <input type="text" id="friend-search-input" class="friend-search-input" placeholder="Buscar amigos...">
+      </div>
+      <div class="sidebar-section">
+        <h3>Solicitações</h3>
+        <ul id="friend-requests-list" class="list"></ul>
+      </div>
+      <div class="sidebar-section">
+        <h3>Amigos</h3>
+        <ul id="friend-list" class="list"></ul>
       </div>
     </div>
-  </header>
 
-  <section id="recursos">
-    <div class="section-head">
-      <div class="eyebrow">O QUE TEM DENTRO</div>
-      <h2>Feito pra comunidade que não cabe num grupo de zap.</h2>
-      <p>Cada parte do WifiCord existe porque alguém precisou dela de verdade — não é lista de feature por listar.</p>
-    </div>
-
-    <div class="feature-row">
-      <div class="feature-copy">
-        <span class="feature-num">01</span>
-        <h3>Servidores com estrutura de verdade</h3>
-        <p>Canais de texto, voz, anúncios e mídia separados, cargos com permissão granular por canal, e convites que você controla.</p>
-        <div class="feature-tags"><span>canais de voz</span><span>cargos &amp; permissões</span><span>convites</span></div>
+    <div id="channels-panel" class="hidden">
+      <div class="sidebar-header">
+        <h2 id="active-server-name">Servidor</h2>
+        <div class="channel-header-actions"><button type="button" id="server-settings-btn" class="btn btn-icon" title="Configurações avançadas do servidor"></button><button type="button" id="add-channel-btn" class="btn btn-small">+ Canal</button></div>
       </div>
-      <div class="feature-visual">
-        <div class="mock-bars" aria-hidden="true">
-          <i style="height:40%"></i><i style="height:70%"></i><i style="height:30%"></i><i style="height:85%"></i><i style="height:50%"></i><i style="height:65%"></i><i style="height:25%"></i><i style="height:55%"></i>
-        </div>
-        <div class="mock" aria-hidden="true">
-          <div class="mock-row"><span class="mock-avatar"></span><span class="mock-bubble"># geral está pegando fogo hoje</span></div>
-          <div class="mock-row self"><span class="mock-avatar"></span><span class="mock-bubble">bora pro canal de voz</span></div>
+      <div class="sidebar-section">
+        <h3>Canais</h3>
+        <ul id="channel-list" class="list"></ul>
+      </div>
+      <div class="sidebar-section">
+        <h3>Convite</h3>
+        <div id="invite-card" class="invite-card">
+          <div class="invite-card-glow" aria-hidden="true"></div>
+          <span class="invite-card-icon">🔗</span>
+          <div class="invite-card-code"><small>wificord/</small><strong id="active-server-invite">—</strong></div>
+          <button type="button" id="invite-copy-btn" class="btn btn-small invite-copy-btn" title="Copiar convite">Copiar</button>
         </div>
       </div>
     </div>
 
-    <div class="feature-row reverse">
-      <div class="feature-copy">
-        <span class="feature-num">02</span>
-        <h3>Chamadas que aguentam gente</h3>
-        <p>Voz e vídeo em tempo real com compartilhamento de tela, várias câmeras abertas ao mesmo tempo, e tela cheia em qualquer participante.</p>
-        <div class="feature-tags"><span>voz &amp; vídeo</span><span>compartilhar tela</span><span>tela cheia</span></div>
+    <div id="user-bar">
+      <div class="avatar-wrap">
+        <div id="current-user-avatar" class="avatar-fallback">?</div>
+        <span id="current-user-status-dot" class="status-dot status-offline"></span>
       </div>
-      <div class="feature-visual">
-        <div class="mock" aria-hidden="true" style="flex-direction:row; align-items:center; justify-content:center; gap:14px;">
-          <span class="mock-avatar" style="width:46px;height:46px;box-shadow:0 0 0 2px rgba(73,242,214,.4)"></span>
-          <span class="mock-avatar" style="width:34px;height:34px;opacity:.7"></span>
-          <span class="mock-avatar" style="width:34px;height:34px;opacity:.7"></span>
+      <div class="user-meta">
+        <span id="current-user-name" class="user-name"></span>
+        <span id="current-user-username" class="user-username"></span>
+      </div>
+      <div class="user-bar-more-wrap">
+        <button type="button" id="user-more-btn" class="btn btn-icon" title="Mais opções" aria-label="Mais opções">⋯</button>
+        <div id="user-more-menu" class="user-bar-more-menu hidden">
+          <button type="button" id="admin-btn" class="btn btn-icon hidden" title="Painel administrativo">🛡️</button>
+          <button type="button" id="store-btn" class="btn btn-icon" title="Loja e pontos">🛍️</button>
+          <button type="button" id="games-btn" class="btn btn-icon" title="Minigames">🎮</button>
         </div>
       </div>
+      <button type="button" id="settings-btn" class="btn btn-icon" title="Configurações">⚙️</button>
+      <button type="button" id="logout-btn" class="btn btn-icon" title="Sair">⏻</button><div id="mini-call-dock" class="mini-call-dock hidden"><span class="mini-call-status">📞 Em chamada</span><button id="mini-call-mic" title="Microfone">🎤</button><button id="mini-call-cam" title="Câmera">📷</button><button id="mini-call-screen" title="Apresentar">🖥️</button><button id="mini-call-headphones" title="Desligar fone">🎧</button><button id="mini-call-hangup" class="danger" title="Desligar call">📵</button></div>
     </div>
+  </aside>
 
-    <div class="feature-row">
-      <div class="feature-copy">
-        <span class="feature-num">03</span>
-        <h3>Sua cara, seu servidor</h3>
-        <p>Papel de parede por conversa, banner e fundo personalizados no servidor, temas — tudo ajustável sem sair do lugar.</p>
-        <div class="feature-tags"><span>papel de parede</span><span>banner do servidor</span><span>temas</span></div>
-      </div>
-      <div class="feature-visual" style="background:linear-gradient(155deg, rgba(255,95,126,.10), rgba(138,107,255,.08) 55%, rgba(73,242,214,.06))">
-        <div class="mock" aria-hidden="true">
-          <div class="mock-row"><span class="mock-avatar"></span><span class="mock-bubble">mudei o fundo do server, olha</span></div>
-        </div>
-      </div>
-    </div>
+  <aside id="members-panel" class="members-panel hidden">
+    <div class="members-panel-header"><span>Membros</span><span id="members-count">0</span></div>
+    <div id="server-members-list" class="server-members-list"></div>
+  </aside>
 
-    <div class="feature-row reverse">
-      <div class="feature-copy">
-        <span class="feature-num">04</span>
-        <h3>Onde você estiver</h3>
-        <p>App nativo pra Windows e Android, além do navegador. Notificação de ligação chega mesmo com o app minimizado ou fechado.</p>
-        <div class="feature-tags"><span>Windows</span><span>Android</span><span>web</span><span>notificação em segundo plano</span></div>
+  <main id="main-panel">
+    <div id="server-background-layer" class="server-background-layer hidden" aria-hidden="true"></div>
+    <header id="chat-header">
+      <div id="chat-peer-avatar" class="chat-peer-avatar hidden"></div><div class="chat-title-wrap"><h2 id="chat-title">Selecione uma conversa</h2><p class="chat-title-sub">Suas mensagens, ideias e momentos em um só lugar.</p></div>
+      <div id="chat-header-actions" class="chat-header-actions">
+        <button type="button" id="start-voice-call-btn" class="btn-icon" title="Chamada de voz">📞</button>
+        <button type="button" id="start-video-call-btn" class="btn-icon" title="Chamada de vídeo">🎥</button>
+        <button type="button" id="chat-wallpaper-btn" class="btn-icon" title="Papel de parede da conversa">🖼️</button>
+        <button type="button" id="delete-dm-btn" class="btn-icon hidden" title="Apagar conversa">🗑️</button>
       </div>
-      <div class="feature-visual">
-        <div class="mock" aria-hidden="true" style="align-items:center; justify-content:center; flex-direction:row; gap:22px;">
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" style="opacity:.85"><path fill="#49f2d6" d="M3 5.6 10.3 4.5V11.4H3V5.6ZM11.2 4.4 21 3V11.3H11.2V4.4ZM3 12.3H10.3V19.4L3 18.3V12.3ZM11.2 12.3H21V20.9L11.2 19.5V12.3Z"/></svg>
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" style="opacity:.85"><path fill="#8a6bff" d="M17.6 9.48 19.34 6.5a.4.4 0 0 0-.69-.4l-1.76 3.05a10.3 10.3 0 0 0-8.78 0L6.35 6.1a.4.4 0 1 0-.69.4l1.74 2.98C4.6 11.15 2.5 14.28 2.5 17.9h19c0-3.62-2.1-6.75-3.9-8.42ZM8.5 15.2a1.1 1.1 0 1 1 0-2.2 1.1 1.1 0 0 1 0 2.2Zm7 0a1.1 1.1 0 1 1 0-2.2 1.1 1.1 0 0 1 0 2.2Z"/></svg>
-        </div>
-      </div>
-    </div>
-  </section>
+    </header>
 
-  <section class="download" id="download">
-    <div class="section-head">
-      <div class="eyebrow">BAIXAR</div>
-      <h2>Leve o WifiCord com você.</h2>
-      <p>Os instaladores são gerados direto do repositório no GitHub a cada atualização — o que você baixa aqui é sempre a build mais recente.</p>
-    </div>
+    <div id="chat-wallpaper-layer" class="chat-wallpaper-layer hidden" aria-hidden="true"></div>
 
-    <div class="dl-grid">
-      <div class="dl-card">
-        <div class="dl-top">
-          <span class="dl-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path fill="currentColor" d="M3 5.6 10.3 4.5V11.4H3V5.6ZM11.2 4.4 21 3V11.3H11.2V4.4ZM3 12.3H10.3V19.4L3 18.3V12.3ZM11.2 12.3H21V20.9L11.2 19.5V12.3Z"/></svg></span>
-          <div>
-            <div class="dl-title">Windows</div>
-            <div class="dl-sub">Instalador .exe · 64-bit</div>
+    <div id="call-bar" class="call-bar hidden">
+      <div class="call-stage">
+        <div class="call-stage-topbar">
+          <div class="call-stage-title"><span class="call-live-dot"></span><strong>Chamada</strong><span id="call-connection-status" data-state="connecting">Conectando…</span><span id="call-quality-dot" class="call-quality-dot" data-quality="unknown" title="Qualidade da conexão"></span></div>
+          <div class="call-stage-peer-wrap">
+            <div class="call-stage-peer" id="call-remote-label-top">Privado</div>
+            <span class="call-control-group call-volume-group">
+              <button type="button" id="call-remote-volume-btn" class="call-device-arrow call-volume-btn" title="Volume deste participante" aria-label="Volume deste participante">🔊</button>
+              <div id="call-remote-volume-menu" class="call-device-menu call-volume-menu hidden">
+                <label class="call-volume-row">Volume <span id="call-remote-volume-value">100%</span><input type="range" id="call-remote-volume-range" min="0" max="100" value="100"></label>
+              </div>
+            </span>
           </div>
         </div>
-        <div class="dl-version is-loading" data-role="version" data-platform="windows"><span class="dot"></span><span data-role="version-text">Verificando versão mais recente…</span></div>
-        <div class="dl-actions">
-          <a class="btn btn-primary" data-role="dl-btn" data-platform="windows" href="https://github.com/Waifaier/WifiCord/releases" target="_blank" rel="noopener" aria-disabled="true">Baixar para Windows</a>
-        </div>
-        <div class="dl-note">Windows pode avisar "editor desconhecido" — é normal em apps sem certificado pago; clique em "mais informações → executar assim mesmo".</div>
+        <div id="server-call-grid" class="server-call-grid hidden"></div>
+        <video id="remote-video" autoplay muted playsinline aria-label="Vídeo do participante"></video><audio id="remote-audio" autoplay playsinline></audio><audio id="remote-screen-audio" autoplay playsinline></audio>
+        <div id="call-remote-avatar" class="call-participant-avatar call-remote-avatar" title="Participante" aria-label="Participante"></div>
+        <div id="call-local-avatar" class="call-participant-avatar call-local-avatar" title="Você" aria-label="Você"></div>
+        <div id="call-live-label" class="call-screen-label hidden">🔴 APRESENTANDO <span id="call-remote-label">Conectando...</span></div>
+        <video id="local-video" autoplay muted playsinline class="call-local-preview" aria-label="Prévia da sua câmera"></video>
+        <video id="remote-camera-pip" autoplay muted playsinline class="hidden" aria-label="Câmera do participante durante a apresentação de tela"></video>
+        <video id="local-camera-pip" autoplay muted playsinline class="hidden" aria-label="Sua câmera durante a apresentação de tela"></video>
+        <div class="call-stage-empty" aria-hidden="true">📞</div>
+        <button type="button" id="call-stage-immersive-toggle" class="call-stage-immersive-toggle" title="Ocultar câmeras e perfis" aria-label="Ocultar câmeras e perfis">⌄</button>
       </div>
+      <div class="call-controls" aria-label="Controles da chamada">
 
-      <div class="dl-card">
-        <div class="dl-top">
-          <span class="dl-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path fill="currentColor" d="M17.6 9.48 19.34 6.5a.4.4 0 0 0-.69-.4l-1.76 3.05a10.3 10.3 0 0 0-8.78 0L6.35 6.1a.4.4 0 1 0-.69.4l1.74 2.98C4.6 11.15 2.5 14.28 2.5 17.9h19c0-3.62-2.1-6.75-3.9-8.42ZM8.5 15.2a1.1 1.1 0 1 1 0-2.2 1.1 1.1 0 0 1 0 2.2Zm7 0a1.1 1.1 0 1 1 0-2.2 1.1 1.1 0 0 1 0 2.2Z"/></svg></span>
-          <div>
-            <div class="dl-title">Android</div>
-            <div class="dl-sub">APK direto · fora da Play Store</div>
-          </div>
-        </div>
-        <div class="dl-version is-loading" data-role="version" data-platform="android"><span class="dot"></span><span data-role="version-text">Verificando versão mais recente…</span></div>
-        <div class="dl-actions">
-          <a class="btn btn-primary" data-role="dl-btn" data-platform="android" href="https://github.com/Waifaier/WifiCord/releases" target="_blank" rel="noopener" aria-disabled="true">Baixar para Android</a>
-        </div>
-        <div class="dl-note">Instalação fora da Play Store: o Android vai pedir permissão de "instalar apps desconhecidos" na primeira vez.</div>
+        <span class="call-control-group"><button type="button" id="call-toggle-mic" class="call-btn" title="Microfone" aria-label="Desativar microfone">🎤</button><button type="button" id="call-mic-menu" class="call-device-arrow" title="Trocar microfone">⌄</button><div id="call-mic-devices" class="call-device-menu hidden"></div></span>
+        <span class="call-control-group"><button type="button" id="call-toggle-cam" class="call-btn" title="Câmera" aria-label="Desativar câmera">📷</button><button type="button" id="call-cam-menu" class="call-device-arrow" title="Trocar câmera">⌄</button><div id="call-cam-devices" class="call-device-menu hidden"></div></span>
+        <button type="button" id="call-toggle-screen" class="call-btn" title="Compartilhar tela" aria-label="Compartilhar tela">🖥️</button>
+        <button type="button" id="call-fullscreen" class="call-btn" title="Tela cheia">⛶</button><button type="button" id="call-hangup" class="call-btn call-btn-danger" title="Encerrar chamada">📵</button>
       </div>
     </div>
-  </section>
 
-  <footer>
+    <div id="call-context-menu" class="call-context-menu hidden" role="menu">
+      <div id="call-context-menu-title" class="call-context-menu-title"></div>
+      <label class="call-volume-row">Volume da pessoa <span id="call-context-volume-value">100%</span><input type="range" id="call-context-volume-range" min="0" max="100" value="100"></label>
+      <label class="call-volume-row hidden" id="call-context-screen-volume-row">Volume da transmissão <span id="call-context-screen-volume-value">100%</span><input type="range" id="call-context-screen-volume-range" min="0" max="100" value="100"></label>
+      <button type="button" id="call-context-mute-toggle" class="btn btn-ghost call-context-menu-btn">Silenciar pessoa</button>
+      <button type="button" id="call-context-screen-mute-toggle" class="btn btn-ghost call-context-menu-btn hidden">Silenciar transmissão</button>
+    </div>
+
+    <ul id="messages-list" class="messages-list"></ul>
+
+    <div id="chat-empty-hero" class="chat-empty-hero" aria-hidden="true">
+      <div class="chat-empty-icon" data-icon="chat"></div>
+      <h2 class="chat-empty-title">Selecione uma <span>conversa</span></h2>
+      <p class="chat-empty-sub">Escolha um amigo na barra lateral para começar a conversar.</p>
+      <div class="chat-empty-cards">
+        <div class="chat-empty-card"><span class="chat-empty-card-icon" data-icon="users"></span><b>Faça novos amigos</b><small>Conecte-se com a galera</small></div>
+        <div class="chat-empty-card"><span class="chat-empty-card-icon" data-icon="chat"></span><b>Converse livremente</b><small>Troque ideias e momentos</small></div>
+        <div class="chat-empty-card"><span class="chat-empty-card-icon" data-icon="lock"></span><b>Tudo com segurança</b><small>Suas conversas protegidas</small></div>
+      </div>
+    </div>
+
+    <div id="typing-indicator" class="typing-indicator"></div>
+
+    <form id="message-form" class="message-form">
+      <div class="composer-tools"><button type="button" id="media-btn" class="composer-btn" title="Mídia">🖼️</button><button type="button" id="camera-btn" class="composer-btn" title="Câmera">📷</button><button type="button" id="emoji-btn" class="composer-btn" title="Emojis">😊</button><button type="button" id="sticker-btn" class="composer-btn" title="Figurinhas">✨</button></div><textarea id="message-input" maxlength="2000" rows="1" placeholder="Digite uma mensagem..." disabled></textarea>
+      <button type="submit" class="btn btn-primary" disabled>Enviar</button><div id="emoji-popover" class="emoji-popover hidden"></div><div id="sticker-popover" class="emoji-popover hidden"></div>
+      <div id="camera-popover" class="emoji-popover camera-popover hidden">
+        <button type="button" class="camera-popover-option" id="camera-take-photo">📸 Tirar foto</button>
+        <button type="button" class="camera-popover-option" id="camera-record-video">🎥 Gravar vídeo</button>
+      </div>
+      <input type="file" id="camera-photo-input" accept="image/*" capture="environment" hidden>
+      <input type="file" id="camera-video-input" accept="video/*" capture="environment" hidden>
+    </form>
+  </main>
+</section>
+
+<!-- ===================== MODAIS ===================== -->
+<div id="modal-overlay" class="modal-overlay hidden">
+
+  <div id="modal-add-friend" class="modal hidden">
+    <h3>Adicionar amigo</h3>
+    <form id="add-friend-form">
+      <label>Nome de usuário
+        <input type="text" name="username" required maxlength="32" placeholder="ex: maria_dev">
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
+        <button type="submit" class="btn btn-primary">Enviar solicitação</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="modal-create-server" class="modal hidden">
+    <h3>Criar servidor</h3>
+    <form id="create-server-form">
+      <label>Nome do servidor
+        <input type="text" name="name" required maxlength="64" placeholder="ex: Time de Projeto">
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
+        <button type="submit" class="btn btn-primary">Criar</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="modal-join-server" class="modal hidden">
+    <h3>Entrar em servidor</h3>
+    <form id="join-server-form">
+      <label>Código de convite
+        <input type="text" name="inviteCode" required placeholder="ex: wificord/a1b2c3d4">
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
+        <button type="submit" class="btn btn-primary">Entrar</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="modal-create-channel" class="modal hidden">
+    <h3>Criar canal</h3>
+    <form id="create-channel-form">
+      <label>Nome do canal<input type="text" name="name" required maxlength="64" placeholder="ex: geral"></label>
+      <label>Tipo<select name="type"><option value="text">💬 Texto</option><option value="announcement">📢 Anúncios</option><option value="media">🖼️ Mídia</option><option value="voice">🔊 Voz</option></select></label>
+      <label class="settings-toggle"><input type="checkbox" name="isPrivate"> Canal privado</label>
+      <p class="text-muted">Canais privados só ficam visíveis para quem você autorizar. O administrador do servidor sempre pode gerenciá-los.</p>
+      <label>Usuários autorizados (IDs separados por vírgula)<input type="text" name="allowedUserIds" placeholder="ex: 2,5,8"></label>
+      <label>Cargos autorizados (IDs separados por vírgula)<input type="text" name="allowedRoleIds" placeholder="ex: 1,3"></label>
+      <label>Tópico<textarea name="topic" maxlength="1024" placeholder="Sobre o que é este canal?"></textarea></label>
+      <label>Slowmode (segundos)<input type="number" name="slowmodeSeconds" min="0" max="21600" value="0"></label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
+        <button type="submit" class="btn btn-primary">Criar canal</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="modal-edit-channel" class="modal hidden">
+    <h3>Editar canal</h3>
+    <form id="edit-channel-form">
+      <input type="hidden" name="channelId">
+      <label>Nome do canal<input type="text" name="name" required maxlength="64"></label>
+      <label>Tópico<textarea name="topic" maxlength="1024" placeholder="Sobre o que é este canal?"></textarea></label>
+      <label>Slowmode (segundos)<input type="number" name="slowmodeSeconds" min="0" max="21600" value="0"></label>
+      <p class="text-muted">Enquanto o slowmode estiver ativo, cada pessoa (menos o dono do servidor) só pode enviar uma mensagem por esse intervalo neste canal.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
+        <button type="submit" class="btn btn-primary">Salvar</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="modal-settings" class="modal modal-settings hidden">
+    <h3>Configurações</h3>
+    <button type="button" id="modal-settings-close" class="modal-close-btn" aria-label="Fechar configurações" title="Fechar">✕</button>
+    <div class="settings-layout">
+      <nav class="settings-nav">
+        <button type="button" class="settings-tab active" data-settings-tab="profile">Perfil</button>
+        <button type="button" class="settings-tab wfna-only-tab" data-settings-tab="profile-effects">✨ Perfil WFNA</button>
+        <button type="button" class="settings-tab" data-settings-tab="appearance">Aparência</button>
+        <button type="button" class="settings-tab" data-settings-tab="notifications">Notificações</button>
+        <button type="button" class="settings-tab" data-settings-tab="privacy">Privacidade</button>
+        <button type="button" class="settings-tab" data-settings-tab="voice">Voz e vídeo</button>
+        <button type="button" class="settings-tab" data-settings-tab="chat">Chat</button>
+        <button type="button" class="settings-tab" data-settings-tab="advanced">Avançado</button>
+        <button type="button" class="settings-tab" data-settings-tab="accessibility">Acessibilidade</button>
+        <button type="button" class="settings-tab settings-tab-danger" data-settings-tab="logout">Sair da conta</button>
+      </nav>
+      <div class="settings-content">
+        <div class="settings-pane active" data-settings-pane="profile">
+  <div class="profile-editor-head">
     <div>
-      <div class="brand" style="font-size:15px; margin-bottom:6px;">WifiCord</div>
-      <div class="footer-copy">© <span data-role="year"></span> WifiCord — construído em código aberto.</div>
+      <h4>Personalizar perfil</h4>
+      <p class="text-muted">Monte uma identidade visual do seu jeito. As mudanças aparecem no preview antes de salvar.</p>
     </div>
-    <div class="footer-links">
-      <a href="https://wificord.onrender.com" target="_blank" rel="noopener">Abrir o app</a>
-      <a href="https://github.com/Waifaier/WifiCord" target="_blank" rel="noopener">GitHub</a>
-      <a href="https://github.com/Waifaier/WifiCord/releases" target="_blank" rel="noopener">Todas as versões</a>
+  </div>
+
+  <div class="wc-profile-editor">
+    <div class="wc-profile-controls">
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Identidade</span><small>Informações básicas</small></div>
+        <div class="wc-editor-grid">
+          <label>Nome de exibição<input type="text" id="settings-display-name" maxlength="64" placeholder="Seu nome"></label>
+          <label>Nome de usuário<input type="text" id="settings-username" disabled></label>
+          <label>Pronomes<input type="text" id="settings-profile-pronouns" maxlength="32" placeholder="Opcional"></label>
+          <label>Sobre você<textarea id="settings-bio" maxlength="190" placeholder="Conte algo sobre você..."></textarea></label>
+        </div>
+      </section>
+
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Imagem</span><small>Avatar e banner</small></div>
+        <div class="wc-media-actions">
+          <div class="wc-media-box">
+            <img class="wc-media-thumb wc-media-avatar-thumb" id="settings-avatar-preview" alt="Preview do avatar">
+            <div><strong>Avatar</strong><small>PNG, JPG, WEBP ou GIF</small></div>
+            <button type="button" class="btn btn-small" id="settings-avatar-edit-btn">Alterar</button>
+            <input type="file" id="settings-avatar-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+          </div>
+          <div class="wc-media-box">
+            <div class="wc-media-thumb wc-media-banner-thumb" id="settings-profile-banner"></div>
+            <div><strong>Banner</strong><small>Imagem ou cor</small></div>
+            <button type="button" class="btn btn-small" id="settings-banner-edit-btn">Alterar</button>
+            <input type="file" id="settings-banner-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+          </div>
+        </div>
+      </section>
+
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Tema</span><small>Escolha uma base e personalize</small></div>
+        <div class="wc-preset-row" id="wc-theme-presets">
+          <button type="button" data-theme-preset="galactic">🌌 Galactic</button>
+          <button type="button" data-theme-preset="aurora">🌈 Aurora</button>
+          <button type="button" data-theme-preset="cyber">⚡ Cyber</button>
+          <button type="button" data-theme-preset="void">🖤 Void</button>
+          <button type="button" data-theme-preset="frost">❄️ Frost</button>
+          <button type="button" data-theme-preset="minimal">◻ Minimal</button>
+        </div>
+        <div class="wc-color-grid">
+          <label>Cor principal<input type="color" id="settings-profile-primary" value="#5865F2"></label>
+          <label>Cor secundária<input type="color" id="settings-profile-secondary" value="#2f1b63"></label>
+          <label>Cor do destaque<input type="color" id="settings-profile-accent" value="#b58cff"></label>
+          <label>Cor do texto<input type="color" id="settings-profile-text" value="#f4f0ff"></label>
+        </div>
+        <div class="wc-select-grid">
+          <label>Gradiente<select id="settings-profile-gradient"><option value="linear">Linear</option><option value="radial">Radial</option></select></label>
+          <label>Direção<select id="settings-profile-angle"><option value="135deg">Diagonal</option><option value="90deg">Vertical</option><option value="0deg">Horizontal</option><option value="225deg">Invertido</option></select></label>
+          <label>Glow<select id="settings-profile-glow"><option value="none">Nenhum</option><option value="soft">Suave</option><option value="strong">Forte</option><option value="rainbow">Arco-íris</option></select></label>
+          <label>Layout<select id="settings-profile-layout"><option value="classic">Clássico</option><option value="compact">Compacto</option><option value="banner">Banner amplo</option><option value="glass">Vidro</option></select></label>
+        </div>
+      </section>
+
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Estilo do nome</span><small>Faça seu nome ter personalidade</small></div>
+        <div class="wc-select-grid">
+          <label>Fonte<select id="settings-name-font">
+            <option value="modern">Modern</option><option value="elegant">Elegant</option><option value="pixel">Pixel</option><option value="retro">Retro</option><option value="cyber">Cyber</option><option value="gothic">Gothic</option><option value="bold">Bold</option><option value="rounded">Rounded</option>
+          </select></label>
+          <label>Cor<select id="settings-name-color-mode"><option value="solid">Sólida</option><option value="gradient">Gradiente</option></select></label>
+          <label>Efeito<select id="settings-name-effect">
+            <option value="none">Normal</option><option value="neon">Neon</option><option value="glow">Glow</option><option value="shimmer">Shimmer</option><option value="rainbow">Rainbow</option><option value="gold">Gold</option><option value="ice">Ice</option><option value="holographic">Holográfico</option><option value="glitch">Glitch</option>
+          </select></label>
+          <label>Animação<select id="settings-name-animation"><option value="none">Nenhuma</option><option value="shimmer">Shimmer</option><option value="pulse">Glow Pulse</option><option value="flow">Gradient Flow</option><option value="glitch">Glitch</option></select></label>
+        </div>
+        <div class="wc-name-options">
+          <label>Cor do nome<input type="color" id="settings-name-color" value="#ffffff"></label>
+          <label>Segunda cor<input type="color" id="settings-name-color2" value="#a970ff"></label>
+          <label>Tamanho<input type="range" id="settings-name-size" min="20" max="42" value="30"></label>
+          <label>Peso<select id="settings-name-weight"><option value="600">Semibold</option><option value="700">Bold</option><option value="800">Extra bold</option></select></label>
+        </div>
+      </section>
+
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Decoração</span><small>Detalhes visuais</small></div>
+        <div class="wc-preset-row" id="wc-frame-presets">
+          <button type="button" data-frame="none">Sem moldura</button>
+          <button type="button" data-frame="neon">💜 Neon</button>
+          <button type="button" data-frame="galactic">🪐 Galactic</button>
+          <button type="button" data-frame="chrome">◈ Chrome</button>
+          <button type="button" data-frame="holographic">◇ Holographic</button>
+        </div>
+        <div class="wc-select-grid">
+          <label>Decoração<select id="settings-profile-decoration"><option value="none">Nenhuma</option><option value="stars">✦ Estrelas</option><option value="orbit">🪐 Órbita</option><option value="spark">✨ Spark</option><option value="cyber">⚡ Cyber</option></select></label>
+          <label>Emblema<select id="settings-profile-badge"><option value="none">Nenhum</option><option value="star">⭐ Estrela</option><option value="fire">🔥 Fogo</option><option value="rocket">🚀 Foguete</option><option value="crown">👑 Coroa</option></select></label>
+          <label>Placa de nome<select id="settings-nameplate"><option value="none">Nenhuma</option><option value="minimal">Minimal</option><option value="neon">Neon</option><option value="cyber">Cyber</option><option value="galaxy">Galaxy</option><option value="chrome">Chrome</option></select></label><label>Tag<input id="settings-profile-tag" maxlength="16" placeholder="DEV"></label>
+        </div>
+      </section>
+
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Atividade</span><small>O que você está fazendo</small></div>
+        <div class="wc-select-grid">
+          <label>Tipo<select id="settings-activity-type"><option value="">Sem atividade</option><option value="game">🎮 Jogando</option><option value="music">🎵 Ouvindo</option><option value="watching">📺 Assistindo</option><option value="coding">💻 Programando</option><option value="creating">🎨 Criando</option><option value="studying">📚 Estudando</option><option value="working">⚙️ Trabalhando</option></select></label>
+          <label>Título<input id="settings-activity-title" maxlength="80" placeholder="Ex.: Minecraft"></label>
+        </div>
+        <label>Descrição<input id="settings-activity-description" maxlength="120" placeholder="Ex.: Construindo algo novo"></label>
+      </section>
+
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Conexões</span><small>Links que aparecem no perfil</small></div>
+        <div class="wc-connections-grid">
+          <input id="settings-connection-1-name" maxlength="24" placeholder="GitHub">
+          <input id="settings-connection-1-url" maxlength="200" placeholder="https://...">
+          <input id="settings-connection-2-name" maxlength="24" placeholder="YouTube">
+          <input id="settings-connection-2-url" maxlength="200" placeholder="https://...">
+          <input id="settings-connection-3-name" maxlength="24" placeholder="Website">
+          <input id="settings-connection-3-url" maxlength="200" placeholder="https://...">
+        </div>
+      </section>
+
+      <section class="wc-editor-section wc-status-section">
+        <div class="wc-editor-section-title"><span>Status</span><small>Seu estado atual</small></div>
+        <div class="status-options"><button type="button" data-status="online"><i class="status-dot-icon"></i>Online</button><button type="button" data-status="away"><i class="status-dot-icon"></i>Ausente</button><button type="button" data-status="offline"><i class="status-dot-icon"></i>Offline</button></div>
+        <div class="status-custom-row"><input id="settings-status-emoji" maxlength="4" placeholder="🙂"><input id="settings-status-text" maxlength="128" placeholder="Status personalizado"></div>
+        <button type="button" id="settings-save-status" class="btn btn-small">Salvar status</button>
+      </section>
+
+      <div class="wc-editor-actions">
+        <button type="button" id="wc-profile-reset" class="btn btn-ghost">Restaurar padrão</button>
+        <button type="button" id="settings-save-profile" class="btn btn-primary">Salvar perfil</button>
+      </div>
     </div>
-  </footer>
+
+    <aside class="wc-profile-live">
+      <div class="wc-live-label"><span>PREVIEW</span><small>Ao vivo</small></div>
+      <div class="wc-preview-card" id="wc-profile-preview">
+        <div class="wc-preview-banner" id="wc-preview-banner"></div>
+        <div class="wc-preview-avatar-wrap" id="wc-preview-avatar-wrap"><div class="wc-preview-avatar" id="wc-preview-avatar"></div></div>
+        <div class="wc-preview-body">
+          <div class="wc-preview-name-row"><h3 id="wc-preview-name">Usuário</h3><span id="wc-preview-nameplate"></span></div>
+          <span class="wc-preview-username" id="wc-preview-username">@usuario</span>
+          <div class="wc-preview-badges" id="wc-preview-badges"></div>
+          <p class="wc-preview-bio" id="wc-preview-bio">Sem descrição.</p>
+          <div class="wc-preview-status" id="wc-preview-status"></div>
+          <div class="wc-preview-activity hidden" id="wc-preview-activity"></div>
+          <div class="wc-preview-connections" id="wc-preview-connections"></div>
+        </div>
+      </div>
+      <p class="wc-live-hint">O que você vê aqui é aproximadamente como outras pessoas verão seu perfil.</p>
+    </aside>
+  </div>
+</div>
+<div class="settings-pane" data-settings-pane="profile-effects">
+          <h4>✨ Efeitos animados do perfil</h4><p class="text-muted">Recursos premium do WFNA. Escolha como seu perfil aparece para outras pessoas.</p>
+          <div class="profile-effects-grid">
+            <label>Efeito<select id="settings-profile-effect"><option value="none">Nenhum</option><option value="float">🌌 Flutuar</option><option value="particles">✦ Partículas</option><option value="orbit">🪐 Órbita</option><option value="neon">💠 Neon pulsante</option><option value="rainbow">🌈 Arco-íris</option><option value="fire">🔥 Chamas</option><option value="snow">❄️ Neve</option><option value="hologram">🧬 Holograma</option><option value="glitch">📺 Glitch</option><option value="aurora">🌌 Aurora</option><option value="matrix">🟩 Matrix</option><option value="electric">⚡ Elétrico</option><option value="galaxy">🌠 Galáxia</option><option value="sakura">🌸 Sakura</option><option value="bolhas">🫧 Bolhas</option><option value="meteoros">☄️ Meteoros</option><option value="lava">🌋 Lava</option><option value="gelo">🧊 Gelo</option><option value="confete">🎊 Confete</option><option value="sonar">📡 Sonar</option><option value="tempestade">🌩️ Tempestade</option><option value="nebulosa">🔮 Nebulosa</option><option value="ouro">🪙 Ouro</option><option value="veneno">☠️ Veneno</option><option value="fantasma">👻 Fantasma</option><option value="circuito">🔌 Circuito</option><option value="diamante">💎 Diamante</option><option value="oceano">🌊 Oceano</option><option value="entardecer">🌇 Entardecer</option></select></label>
+            <label>Velocidade<select id="settings-profile-effect-speed"><option value="slow">Lenta</option><option value="normal">Normal</option><option value="fast">Rápida</option></select></label>
+            <label class="settings-toggle"><input type="checkbox" id="settings-profile-effect-enabled"> Ativar efeito animado</label>
+          </div>
+          <p id="settings-wfna-effect-status" class="text-muted">O WFNA libera estes efeitos.</p>
+          <button type="button" id="settings-save-profile-effects" class="btn btn-primary">Salvar efeitos</button>
+        </div>
+        <div class="settings-pane" data-settings-pane="appearance">
+          <h4>Aparência</h4>
+          <p class="text-muted">Personalize a interface.</p>
+          <label>Tema do aplicativo</label>
+          <div class="theme-preset-grid" id="theme-preset-grid">
+            <button type="button" class="theme-preset-swatch" data-theme="escuro"><i style="background:linear-gradient(135deg,#7C5CFF,#22D3EE)"></i><span>Escuro</span></button>
+            <button type="button" class="theme-preset-swatch" data-theme="claro"><i style="background:linear-gradient(135deg,#6C4CFF,#0EA5C4)"></i><span>Claro</span></button>
+            <button type="button" class="theme-preset-swatch" data-theme="cyber"><i style="background:linear-gradient(135deg,#FF2E88,#00F0FF)"></i><span>Cyber</span></button>
+            <button type="button" class="theme-preset-swatch" data-theme="sunset"><i style="background:linear-gradient(135deg,#FF7A45,#FFC24B)"></i><span>Sunset</span></button>
+            <button type="button" class="theme-preset-swatch" data-theme="floresta"><i style="background:linear-gradient(135deg,#34D399,#A3E635)"></i><span>Floresta</span></button>
+            <button type="button" class="theme-preset-swatch" data-theme="meianoite"><i style="background:linear-gradient(135deg,#4F6BFF,#38BDF8)"></i><span>Meia-noite</span></button>
+            <button type="button" class="theme-preset-swatch" data-theme="quartzo"><i style="background:linear-gradient(135deg,#FF5C8A,#FFB199)"></i><span>Quartzo</span></button>
+            <button type="button" class="theme-preset-swatch" data-theme="mono"><i style="background:linear-gradient(135deg,#9AA0AE,#D8DBE3)"></i><span>Mono</span></button>
+          </div>
+          <label>Cor de destaque <input type="color" id="settings-accent" value="#5865F2"></label><label class="settings-toggle"><input type="checkbox" id="settings-compact"> Modo compacto</label><label class="settings-toggle"><input type="checkbox" id="settings-reduce-motion"> Reduzir animações</label><button type="button" id="settings-save-appearance" class="btn btn-primary">Salvar aparência</button>
+        </div>
+        <div class="settings-pane" data-settings-pane="notifications">
+          <h4>Notificações</h4>
+          <label class="settings-toggle"><input type="checkbox" checked> Notificações de novas mensagens</label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-sound-toggle" checked> Sons e notificações sonoras</label><label>Som de mensagem<select id="settings-message-sound"><option value="soft">Suave</option><option value="pop">Pop</option><option value="digital">Digital</option></select></label><button type="button" id="settings-test-sound" class="btn btn-small">Testar som</button>
+        </div>
+        <div class="settings-pane" data-settings-pane="privacy">
+          <h4>Privacidade</h4>
+          <label class="settings-toggle"><input type="checkbox" checked> Permitir solicitações de amizade</label>
+          <label class="settings-toggle"><input type="checkbox" checked> Mostrar status online para amigos</label>
+        </div>
+        <div class="settings-pane" data-settings-pane="voice">
+          <h4>Voz e vídeo</h4>
+          <p class="text-muted">Escolha os dispositivos usados nas chamadas.</p><label>Microfone<select id="settings-microphone"></select></label><label>Câmera<select id="settings-camera"></select></label><label>Saída de áudio<select id="settings-output"></select></label><div class="device-actions"><button type="button" id="settings-refresh-devices" class="btn btn-small">Atualizar dispositivos</button><button type="button" id="settings-test-mic" class="btn btn-small">Testar microfone</button><button type="button" id="settings-preview-camera" class="btn btn-small">Prévia câmera</button></div><div id="settings-mic-meter" class="mic-meter"></div><div id="settings-mic-test-status" class="mic-test-status">Clique em “Testar microfone” para verificar entrada e nível.</div><video id="settings-camera-preview" autoplay muted playsinline></video>
+          <label class="settings-toggle"><input type="checkbox" checked> Ativar câmera ao iniciar chamada de vídeo</label>
+          <label class="settings-toggle"><input type="checkbox" checked> Cancelamento de eco</label>
+        </div>
+        <div class="settings-pane" data-settings-pane="chat">
+          <h4>Chat</h4><p class="text-muted">Controle a aparência e o comportamento das mensagens.</p>
+          <label>Densidade<select id="settings-chat-density"><option value="comfortable">Confortável</option><option value="cozy">Compacta</option><option value="compact">Muito compacta</option></select></label>
+          <label>Tamanho da fonte<select id="settings-font-size"><option value="small">Pequena</option><option value="medium">Média</option><option value="large">Grande</option></select></label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-show-timestamps" checked> Mostrar horários</label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-show-member-list" checked> Mostrar membros do servidor</label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-show-embeds" checked> Mostrar prévias de links</label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-sticker-animations" checked> Animar stickers</label>
+        </div>
+        <div class="settings-pane" data-settings-pane="advanced">
+          <h4>Configurações avançadas</h4><p class="text-muted">Mais controle sobre desempenho, mídia e efeitos.</p>
+          <label class="settings-toggle"><input type="checkbox" id="settings-autoplay-media" checked> Reprodução automática de mídia</label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-overlay-effects" checked> Efeitos de tela</label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-super-effects" checked> Super emojis em tela cheia</label>
+          <label class="settings-toggle"><input type="checkbox" id="settings-local-nicknames" checked> Usar apelidos locais</label>
+          <label>Idioma<select id="settings-language"><option value="pt-BR">Português (Brasil)</option><option value="en-US">English</option><option value="es-ES">Español</option></select></label>
+          <label>Qualidade de mídia<select id="settings-media-quality"><option value="auto">Automática</option><option value="high">Alta</option><option value="data-saver">Economia de dados</option></select></label><label class="settings-toggle"><input type="checkbox" id="settings-animated-profile" checked> Permitir animações no perfil</label><label class="settings-toggle"><input type="checkbox" id="settings-inline-media" checked> Mostrar mídia dentro do chat</label><label class="settings-toggle"><input type="checkbox" id="settings-auto-download"> Download automático de arquivos</label><button type="button" id="settings-save-advanced" class="btn btn-primary">Salvar configurações avançadas</button>
+          <div id="admin-claim-section" class="admin-claim-section hidden">
+            <h4>Ativar administrador</h4>
+            <p class="text-muted">Disponível apenas enquanto este WifiCord ainda não tiver nenhum administrador. Peça o código a quem configurou o servidor (variável de ambiente <code>ADMIN_CLAIM_CODE</code>).</p>
+            <label>Código de administrador
+              <input type="password" id="admin-claim-code" autocomplete="off" maxlength="128">
+            </label>
+            <button type="button" id="admin-claim-submit" class="btn btn-primary">Ativar administrador</button>
+            <p id="admin-claim-status" class="admin-claim-status"></p>
+          </div>
+        </div>
+        <div class="settings-pane" data-settings-pane="accessibility">
+          <h4>Acessibilidade</h4><p class="text-muted">Ajuste os controles para ficar confortável.</p>
+          <label class="settings-toggle"><input type="checkbox" id="settings-reduce-motion-2"> Reduzir movimento</label>
+          <label>Volume de saída<input id="settings-output-volume" type="range" min="0" max="100" value="100"></label>
+          <label>Volume do microfone<input id="settings-input-volume" type="range" min="0" max="200" value="100"></label>
+          <label>Sensibilidade da voz<input id="settings-voice-sensitivity" type="range" min="1" max="100" value="45"></label>
+          <button type="button" id="settings-save-accessibility" class="btn btn-primary">Salvar acessibilidade</button>
+        </div>
+        <div class="settings-pane" data-settings-pane="logout">
+          <h4>Sair da conta</h4>
+          <p class="text-muted">Você será desconectado do WifiCord neste dispositivo.</p>
+          <button type="button" id="settings-logout-btn" class="btn btn-primary">Sair da conta</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-close-modal>Fechar</button>
+    </div>
+  </div>
+
+  <div id="modal-server-settings" class="modal modal-server-settings hidden">
+    <div class="server-settings-header"><div><h3>Configurações avançadas do servidor</h3><p class="text-muted">Controle segurança, mídia, comunidade, automoderação e experiência.</p></div><span id="server-settings-lock">🔒</span></div>
+    <div class="server-settings-tabs"><button class="server-settings-tab active" data-server-tab="general">Geral</button><button class="server-settings-tab" data-server-tab="moderation">Moderação</button><button class="server-settings-tab" data-server-tab="media">Mídia</button><button class="server-settings-tab" data-server-tab="community">Comunidade</button><button class="server-settings-tab" data-server-tab="engagement">Engajamento</button><button class="server-settings-tab" data-server-tab="security">Segurança</button><button class="server-settings-tab" data-server-tab="onboarding">Entrada</button><button class="server-settings-tab" data-server-tab="roles">Cargos</button></div>
+    <div class="server-settings-pane active" data-server-pane="general"><div class="server-branding-box"><label>Nome do servidor<input id="server-profile-name" maxlength="64"></label><label>Ícone do servidor<div class="server-icon-wrap"><img id="server-icon-preview" class="server-icon-preview" alt="Ícone do servidor"><button type="button" class="media-edit-btn" id="server-icon-edit-btn" title="Alterar ícone" aria-label="Alterar ícone"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button><input type="file" id="server-icon-input" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div></label><label>Banner do servidor<div id="server-banner-preview" class="server-banner-box"><button type="button" class="media-edit-btn media-edit-btn-banner" id="server-banner-edit-btn" title="Alterar banner" aria-label="Alterar banner"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button><input type="file" id="server-banner-input" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div></label><label>Fundo do servidor<div id="server-bg-preview" class="server-banner-box" title="Aparece de fundo por trás dos canais e mensagens"><button type="button" class="media-edit-btn media-edit-btn-banner" id="server-bg-edit-btn" title="Alterar fundo" aria-label="Alterar fundo"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button><input type="file" id="server-bg-input" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div><button type="button" id="server-bg-clear" class="btn btn-small" style="margin-top:6px">Remover fundo</button></label></div><label>Verificação<select id="server-verification"><option value="none">Nenhuma</option><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option></select></label><label>Notificações padrão<select id="server-default-notifications"><option value="all">Todas</option><option value="mentions">Somente menções</option></select></label><label class="settings-toggle"><input type="checkbox" id="server-external-embeds"> Permitir prévias externas</label><label>Mensagem de boas-vindas<textarea id="server-welcome-message" maxlength="500"></textarea></label></div>
+    <div class="server-settings-pane" data-server-pane="moderation"><label>Filtro de conteúdo<select id="server-explicit-content"><option value="standard">Padrão</option><option value="strict">Estrito</option><option value="off">Desativado</option></select></label><p class="text-muted">Slowmode agora é configurado por canal: clique no ⚙️ ao lado do nome do canal, na lista de canais.</p><label class="settings-toggle"><input type="checkbox" id="server-automod"> AutoMod</label><label class="settings-toggle"><input type="checkbox" id="server-system-messages"> Mensagens do sistema</label></div>
+    <div class="server-settings-pane" data-server-pane="media"><label>Limite de arquivo (MB)<input id="server-max-file-size" type="number" min="1" max="4096"></label><label class="settings-toggle"><input type="checkbox" id="server-allow-media"> Permitir fotos, vídeos e arquivos</label><label class="settings-toggle"><input type="checkbox" id="server-allow-stickers"> Permitir stickers</label><label class="settings-toggle"><input type="checkbox" id="server-allow-super"> Permitir super emojis</label><label class="settings-toggle"><input type="checkbox" id="server-show-media-channel"> Exibir aba de mídia</label></div>
+    <div class="server-settings-pane" data-server-pane="community"><label class="settings-toggle"><input type="checkbox" id="server-community"> Ativar recursos de comunidade</label><label class="settings-toggle"><input type="checkbox" id="server-discoverable"> Servidor descobrível</label><label class="settings-toggle"><input type="checkbox" id="server-animated-icon"> Ícone animado</label><label class="settings-toggle"><input type="checkbox" id="server-invite-splash"> Tela personalizada de convite</label></div>
+    <div class="server-settings-pane" data-server-pane="engagement"><label class="settings-toggle"><input type="checkbox" id="server-threads"> Permitir threads</label><label class="settings-toggle"><input type="checkbox" id="server-reactions"> Permitir reações</label><label class="settings-toggle"><input type="checkbox" id="server-super-effects"> Permitir efeitos de Super Emoji</label><label>Retenção de mensagens<select id="server-retention"><option value="forever">Nunca excluir</option><option value="30">30 dias</option><option value="90">90 dias</option><option value="365">1 ano</option></select></label><label class="settings-toggle"><input type="checkbox" id="server-mentions"> Permitir menções a @everyone</label><label>Limite de pessoas por chamada (0 = ilimitado)<input id="server-voice-limit" type="number" min="0" max="99" value="0"></label></div>
+    <div class="server-settings-pane" data-server-pane="security"><label class="settings-toggle"><input type="checkbox" id="server-2fa"> Exigir 2FA para moderadores</label><label class="settings-toggle"><input type="checkbox" id="server-verification-level"> Exigir conta verificada</label><label class="settings-toggle"><input type="checkbox" id="server-link-filter"> Bloquear links suspeitos</label><label class="settings-toggle"><input type="checkbox" id="server-raid-protection"> Proteção contra raid</label><label>Tempo de timeout (segundos)<input id="server-timeout" type="number" min="0" max="2419200" value="300"></label><div id="server-transfer-box" class="server-transfer-box hidden"><h4>Transferir servidor</h4><p>Passe a posse deste servidor para outro membro. Você deixará de ser o dono e vira um membro comum.</p><div class="server-transfer-row"><select id="server-transfer-target"></select><button type="button" id="server-transfer-btn" class="btn btn-warning">👑 Transferir</button></div></div><div class="server-danger-zone"><h4>Zona de perigo</h4><p>Apagar o servidor remove todos os canais, mensagens, cargos e membros permanentemente. Essa ação não pode ser desfeita.</p><button type="button" id="server-delete-btn" class="btn btn-danger">🗑️ Apagar servidor</button></div></div>
+    <div class="server-settings-pane" data-server-pane="onboarding"><label>Mensagem de entrada<textarea id="server-onboarding-message" maxlength="1000"></textarea></label><label>Canal inicial<select id="server-onboarding-channel"></select></label><label class="settings-toggle"><input type="checkbox" id="server-onboarding-rules"> Exigir leitura das regras</label><label class="settings-toggle"><input type="checkbox" id="server-onboarding-screening"> Perguntar regras antes de entrar</label><label>URL de regras<input id="server-rules-url" maxlength="500"></label></div>
+    <div class="server-settings-pane" data-server-pane="roles"><div id="server-role-manager"></div><button id="server-create-role" class="btn btn-small">+ Criar cargo</button></div>
+    <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Cancelar</button><button id="server-settings-save" class="btn btn-primary">Salvar servidor</button></div>
+  </div>
+
+  <div id="modal-share-screen" class="modal modal-share-screen hidden">
+    <div class="share-header"><div><h3>Compartilhar sua tela</h3><p class="text-muted">Escolha o que compartilhar e a qualidade da apresentação.</p></div><span class="share-lock" id="share-quality-badge">720p</span></div>
+    <div class="share-tabs"><button class="share-tab active" data-share-tab="screen"><span data-icon="monitor"></span> Tela</button><button class="share-tab" data-share-tab="window"><span data-icon="window"></span> Janela</button><button class="share-tab" data-share-tab="tab"><span data-icon="globe"></span> Aba</button></div>
+    <div class="share-pane active" data-share-pane="screen"><div class="share-source-card"><div class="share-source-icon" data-icon="monitor"></div><div><b>Tela inteira</b><small>Mostra tudo o que estiver na tela.</small></div></div></div>
+    <div class="share-pane" data-share-pane="window"><div class="share-source-card"><div class="share-source-icon" data-icon="window"></div><div><b>Janela</b><small>Compartilhe apenas uma janela.</small></div></div></div>
+    <div class="share-pane" data-share-pane="tab"><div class="share-source-card"><div class="share-source-icon" data-icon="globe"></div><div><b>Aba do navegador</b><small>Ideal para vídeos e sites.</small></div></div></div>
+    <div class="resolution-grid"><button data-resolution="720">720p<small>Sem WFNA</small></button><button data-resolution="1080">1080p<small>WFNA</small></button><button data-resolution="1440">1440p<small>WFNA</small></button><button data-resolution="2160">4K<small>WFNA</small></button></div>
+    <label class="settings-toggle" id="share-system-audio-row"><input type="checkbox" id="share-system-audio" checked> Compartilhar áudio do sistema</label>
+    <p class="text-muted" id="share-system-audio-hint" style="font-size:12px;margin:-6px 0 4px;">O navegador também vai pedir pra marcar "Compartilhar áudio" na própria janela de escolha — sem isso marcado dos dois lados, a apresentação fica muda.</p>
+    <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Cancelar</button><button id="share-screen-confirm" class="btn btn-primary">Começar apresentação</button></div>
+  </div>
+
+  <div id="modal-media" class="modal modal-media hidden"><div class="media-header"><div><h3>Mídia</h3><p class="text-muted">Fotos, vídeos, GIFs, áudios e arquivos. Até 4 GB por arquivo.</p></div><button id="media-upload-btn" class="btn btn-primary">Enviar mídia</button><input id="media-file-input" type="file" multiple hidden accept="image/*,video/*,audio/*,.pdf,.zip,.7z,.rar,.txt,.json"></div><div class="media-tabs"><button class="media-tab active" data-media-filter="all">Tudo</button><button class="media-tab" data-media-filter="image">Fotos</button><button class="media-tab" data-media-filter="video">Vídeos</button><button class="media-tab" data-media-filter="audio">Áudios</button><button class="media-tab" data-media-filter="other">Arquivos</button></div><div id="media-upload-progress" class="media-upload-progress hidden"><span></span></div><div id="media-library-grid" class="media-library-grid"></div><div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Fechar</button></div></div>
+
+<div id="modal-wallpaper" class="modal modal-wallpaper hidden">
+    <div class="wallpaper-header"><div><h3>🖼️ Papel de parede da conversa</h3><p class="text-muted">Escolha um fundo só para esta conversa e ajuste como quiser.</p></div><button id="wallpaper-upload-btn" class="btn btn-small">Imagem própria</button><input id="wallpaper-file-input" type="file" hidden accept="image/*"></div>
+    <div id="wallpaper-preset-grid" class="wallpaper-preset-grid">
+      <button type="button" class="wallpaper-preset-swatch" data-wallpaper-preset="none"><i class="wc-wallpaper-preset-none"></i><span>Nenhum</span></button>
+      <button type="button" class="wallpaper-preset-swatch" data-wallpaper-preset="nebula"><i class="wc-wallpaper-preset-nebula"></i><span>Nebulosa</span></button>
+      <button type="button" class="wallpaper-preset-swatch" data-wallpaper-preset="aurora"><i class="wc-wallpaper-preset-aurora"></i><span>Aurora</span></button>
+      <button type="button" class="wallpaper-preset-swatch" data-wallpaper-preset="sunset"><i class="wc-wallpaper-preset-sunset"></i><span>Entardecer</span></button>
+      <button type="button" class="wallpaper-preset-swatch" data-wallpaper-preset="ocean"><i class="wc-wallpaper-preset-ocean"></i><span>Oceano</span></button>
+      <button type="button" class="wallpaper-preset-swatch" data-wallpaper-preset="forest"><i class="wc-wallpaper-preset-forest"></i><span>Floresta</span></button>
+      <button type="button" class="wallpaper-preset-swatch" data-wallpaper-preset="midnight"><i class="wc-wallpaper-preset-midnight"></i><span>Meia-noite</span></button>
+      <button type="button" class="wallpaper-preset-swatch" data-wallpaper-preset="cyberpunk"><i class="wc-wallpaper-preset-cyberpunk"></i><span>Cyberpunk</span></button>
+      <button type="button" class="wallpaper-preset-swatch" data-wallpaper-preset="sakura"><i class="wc-wallpaper-preset-sakura"></i><span>Sakura</span></button>
+      <button type="button" class="wallpaper-preset-swatch" data-wallpaper-preset="gold"><i class="wc-wallpaper-preset-gold"></i><span>Ouro</span></button>
+      <button type="button" class="wallpaper-preset-swatch" data-wallpaper-preset="galaxy"><i class="wc-wallpaper-preset-galaxy"></i><span>Galáxia</span></button>
+      <button type="button" class="wallpaper-preset-swatch" data-wallpaper-preset="candy"><i class="wc-wallpaper-preset-candy"></i><span>Doce</span></button>
+      <button type="button" class="wallpaper-preset-swatch" data-wallpaper-preset="mono"><i class="wc-wallpaper-preset-mono"></i><span>Minimal</span></button>
+    </div>
+    <div id="wallpaper-preview" class="wallpaper-preview"><div id="wallpaper-preview-layer" class="wallpaper-preview-layer"></div><span class="wallpaper-preview-msg">Prévia da conversa</span></div>
+    <div class="wallpaper-controls">
+      <label>Saturação <span id="wallpaper-saturation-value">100%</span><input type="range" id="wallpaper-saturation" min="0" max="200" value="100"></label>
+      <label>Contraste <span id="wallpaper-contrast-value">100%</span><input type="range" id="wallpaper-contrast" min="0" max="200" value="100"></label>
+      <label>Brilho <span id="wallpaper-brightness-value">100%</span><input type="range" id="wallpaper-brightness" min="0" max="200" value="100"></label>
+      <label>Escurecer <span id="wallpaper-dim-value">35%</span><input type="range" id="wallpaper-dim" min="0" max="90" value="35"></label>
+    </div>
+    <div class="modal-actions"><button class="btn btn-ghost" id="wallpaper-reset-btn">Restaurar padrão</button><button class="btn btn-ghost" data-close-modal>Fechar</button></div>
+  </div>
+
+<div id="modal-games" class="modal modal-games hidden">
+    <div class="games-header"><div><h3>🎮 Minigames</h3><p>Jogue para ganhar pontos. Jogue quantas vezes quiser e acumule pontos.</p></div><span id="game-cooldown" class="game-cooldown">Disponível</span></div>
+    <div class="game-tabs"><button class="game-tab active" data-game="flappy-cubes">🟪 Flappy Cubes</button></div>
+    <div class="game-hud"><span>🏆 Pontos: <b id="game-score">0</b></span><span>⭐ Melhor: <b id="game-best">0</b></span><span>🎁 Recompensa: <b id="game-reward">até 500</b></span></div>
+    <div class="flappy-wrap"><canvas id="flappy-canvas" width="760" height="430"></canvas><div id="flappy-overlay" class="flappy-overlay"><strong>Flappy Cubes</strong><span>Pressione Espaço, clique ou toque para voar.</span><button id="flappy-start" class="btn btn-primary">Jogar</button></div></div>
+    <div class="game-help">Evite os canos. Cada ponto vale pontos na loja. Sem limite de partidas.</div>
+    <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Fechar</button></div>
+  </div>
+
+  <div id="modal-admin" class="modal modal-admin hidden">
+    <div class="admin-header"><div><h3>Painel de administração</h3><p>Moderação, economia, permissões e efeitos reversíveis.</p></div><span class="admin-badge">ADMIN</span></div>
+    <div class="admin-tools"><input id="admin-search" placeholder="Pesquisar por usuário…"><button id="admin-search-btn" class="btn btn-small">Pesquisar</button><span class="admin-tools-hint">Moderação • Economia • Cargos • Efeitos • Segurança</span></div>
+    <div id="admin-users" class="admin-users"></div>
+    <section class="admin-log-section"><h4>Registro de ações</h4><div id="admin-logs" class="admin-logs"></div></section>
+    <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Fechar</button></div>
+  </div>
+
+  <div id="modal-profile" class="modal modal-profile hidden">
+  <div class="profile-card" id="profile-card">
+    <div class="profile-card-banner">
+      <div class="profile-card-banner-overlay"></div>
+    </div>
+    <div class="profile-avatar" id="profile-avatar-view"></div>
+    <div class="profile-effect-layer" id="profile-effect-layer"></div>
+    <div class="profile-card-body">
+      <div class="profile-identity-row">
+        <div class="profile-identity">
+          <div class="profile-name-wrap"><h3 id="profile-name">Usuário</h3><span id="profile-nameplate"></span></div>
+          <span id="profile-username">@usuario</span>
+          <span id="profile-pronouns" class="profile-pronouns"></span>
+        </div>
+        <div id="profile-actions" class="profile-actions"></div>
+      </div>
+      <div class="profile-badges" id="profile-badges"></div>
+      <div class="profile-status-line" id="profile-status"></div>
+      <div class="profile-activity hidden" id="profile-activity"></div>
+      <div class="profile-about profile-section-block">
+        <span class="profile-section-label">SOBRE MIM</span>
+        <p id="profile-bio"></p>
+      </div>
+      <div class="profile-info-grid">
+        <div class="profile-section-block">
+          <span class="profile-section-label">CARGOS</span>
+          <div id="profile-roles" class="profile-chips"></div>
+        </div>
+        <div class="profile-section-block">
+          <span class="profile-section-label">CONEXÕES</span>
+          <div id="profile-connections" class="profile-chips"></div>
+        </div>
+      </div>
+      <div class="profile-section-block">
+        <span class="profile-section-label">SERVIDORES EM COMUM</span>
+        <div id="profile-common-servers" class="profile-common-servers"></div>
+      </div>
+      <div class="profile-meta" id="profile-meta"></div>
+      <div class="profile-stats" aria-label="Estatísticas"><span id="profile-points">0 pontos</span><span id="profile-wfna">WFNA</span></div>
+    </div>
+  </div>
+  <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Fechar</button></div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>
-(function () {
-  'use strict';
-  document.getElementById('year') || null;
-  var yearEl = document.querySelector('[data-role="year"]');
-  if (yearEl) yearEl.textContent = new Date().getFullYear();
+<div id="modal-store" class="modal modal-store hidden">
+    <div class="store-header"><div><h3>Loja do WifiCord</h3><p>Personalize seu perfil com os pontos que você conquista conversando.</p></div><strong id="store-points">0 pontos</strong></div>
+    <div id="store-items" class="store-items"></div>
+    <div class="wfna-card"><div><b>🚀 WFNA</b><p>Premium: 25.000 pontos ou ativação por R$ 20,00 via checkout configurado.</p><ul class="wfna-benefits"><li>♾️ Super emojis ilimitados</li><li>🎥 Apresentação 1080p, 1440p e 4K</li><li>📦 Arquivos e vídeos de até 4 GB</li><li>✨ Personalização premium do perfil</li><li>🚀 Efeitos e animações premium</li></ul></div><strong id="store-wfna">—</strong><span id="store-super-quota" class="store-super-quota">10 super emojis gratuitos</span><div class="wfna-actions"><button id="store-wfna-buy" class="btn btn-primary">25.000 pontos</button><button id="store-wfna-paid" class="btn btn-small">Pagar R$ 20,00</button></div></div>
+    <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Fechar</button></div>
+  </div>
 
-  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  <div id="modal-incoming-call" class="modal modal-incoming-call hidden">
+    <div class="incoming-call-avatar-wrap"><div id="incoming-call-avatar" class="incoming-call-avatar"></div></div>
+    <h3>Chamada recebida</h3>
+    <p id="incoming-call-text" class="text-muted"></p>
+    <div class="incoming-call-actions">
+      <button type="button" id="incoming-call-reject" class="incoming-call-btn incoming-call-reject" title="Recusar">📵</button>
+      <button type="button" id="incoming-call-accept" class="incoming-call-btn incoming-call-accept" title="Atender">📞</button>
+    </div>
+  </div>
 
-  // ------------------------------------------------------------------
-  // Cena 3D: constelação representando a rede de servidores/pessoas.
-  // Câmera avança pela rede conforme o scroll da página.
-  // ------------------------------------------------------------------
-  (function initScene() {
-    var canvas = document.getElementById('net-canvas');
-    if (!canvas || typeof THREE === 'undefined') return;
+</div>
 
-    var renderer;
-    try {
-      renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false });
-    } catch (_) { return; }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+<div id="toast-container" class="toast-container"></div>
 
-    var scene = new THREE.Scene();
-    var camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 260);
-    camera.position.set(0, 0, 60);
-
-    var NODE_COUNT = window.innerWidth < 700 ? 70 : 140;
-    var SPREAD = { x: 46, y: 30, z: 200 };
-    var positions = new Float32Array(NODE_COUNT * 3);
-    for (var i = 0; i < NODE_COUNT; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * SPREAD.x * 2;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * SPREAD.y * 2;
-      positions[i * 3 + 2] = -Math.random() * SPREAD.z;
-    }
-    var pointsGeo = new THREE.BufferGeometry();
-    pointsGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    var pointsMat = new THREE.PointsMaterial({ color: 0x49f2d6, size: 1.15, transparent: true, opacity: 0.85 });
-    var points = new THREE.Points(pointsGeo, pointsMat);
-    scene.add(points);
-
-    // Conecta nós próximos com linhas finas (efeito "constelação").
-    var linePositions = [];
-    var LINK_DIST = 13;
-    for (var a = 0; a < NODE_COUNT; a++) {
-      for (var b = a + 1; b < NODE_COUNT; b++) {
-        var dx = positions[a * 3] - positions[b * 3];
-        var dy = positions[a * 3 + 1] - positions[b * 3 + 1];
-        var dz = positions[a * 3 + 2] - positions[b * 3 + 2];
-        var dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist < LINK_DIST) {
-          linePositions.push(positions[a*3],positions[a*3+1],positions[a*3+2], positions[b*3],positions[b*3+1],positions[b*3+2]);
-        }
-      }
-    }
-    var lineGeo = new THREE.BufferGeometry();
-    lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(linePositions), 3));
-    var lineMat = new THREE.LineBasicMaterial({ color: 0x8a6bff, transparent: true, opacity: 0.16 });
-    var lines = new THREE.LineSegments(lineGeo, lineMat);
-    scene.add(lines);
-
-    function resize() {
-      var w = window.innerWidth, h = window.innerHeight;
-      renderer.setSize(w, h, false);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-    }
-    resize();
-    window.addEventListener('resize', resize);
-
-    var mouseX = 0, mouseY = 0;
-    window.addEventListener('mousemove', function (e) {
-      mouseX = (e.clientX / window.innerWidth - 0.5);
-      mouseY = (e.clientY / window.innerHeight - 0.5);
-    });
-
-    var scrollProgress = 0;
-    function readScroll() {
-      var h = document.documentElement;
-      var max = (h.scrollHeight - h.clientHeight) || 1;
-      scrollProgress = Math.min(1, Math.max(0, window.scrollY / max));
-    }
-    window.addEventListener('scroll', readScroll, { passive: true });
-    readScroll();
-
-    var t = 0;
-    function tick() {
-      t += reduceMotion ? 0 : 0.0035;
-      camera.position.z = 60 - scrollProgress * SPREAD.z * 0.92;
-      camera.position.x = Math.sin(t) * 3 + mouseX * (reduceMotion ? 0 : 4);
-      camera.position.y = Math.cos(t * 0.8) * 2 + mouseY * (reduceMotion ? 0 : -3);
-      points.rotation.y = t * 0.06;
-      lines.rotation.y = t * 0.06;
-      renderer.render(scene, camera);
-      requestAnimationFrame(tick);
-    }
-    tick();
-  })();
-
-  // ------------------------------------------------------------------
-  // Downloads: busca as releases mais recentes direto do GitHub e
-  // preenche versão + link de cada plataforma. Atualiza sozinho a cada
-  // novo build publicado no repositório — nada fica hardcoded aqui.
-  // ------------------------------------------------------------------
-  (function initDownloads() {
-    var REPO = 'Waifaier/WifiCord';
-    var cards = {
-      windows: { versionEl: document.querySelector('[data-role="version"][data-platform="windows"]'), btn: document.querySelector('[data-role="dl-btn"][data-platform="windows"]'), match: function (name) { return /\.exe$/i.test(name); } },
-      android: { versionEl: document.querySelector('[data-role="version"][data-platform="android"]'), btn: document.querySelector('[data-role="dl-btn"][data-platform="android"]'), match: function (name) { return /\.apk$/i.test(name); } }
-    };
-
-    function setError(card, msg) {
-      if (!card.versionEl) return;
-      card.versionEl.classList.remove('is-loading');
-      card.versionEl.classList.add('is-error');
-      card.versionEl.querySelector('[data-role="version-text"]').textContent = msg;
-      if (card.btn) card.btn.removeAttribute('aria-disabled');
-    }
-
-    function setVersion(card, release, asset) {
-      if (!card.versionEl) return;
-      var versionMatch = (release.tag_name || release.name || '').match(/\d+(?:\.\d+){1,3}/);
-      var label = versionMatch ? 'v' + versionMatch[0] : (release.tag_name || 'mais recente');
-      var sizeMB = asset.size ? (asset.size / (1024 * 1024)).toFixed(1) + ' MB' : '';
-      card.versionEl.classList.remove('is-loading');
-      card.versionEl.querySelector('[data-role="version-text"]').textContent = label + (sizeMB ? ' · ' + sizeMB : '');
-      if (card.btn) {
-        card.btn.href = asset.browser_download_url;
-        card.btn.removeAttribute('aria-disabled');
-      }
-    }
-
-    fetch('https://api.github.com/repos/' + REPO + '/releases?per_page=30', { headers: { Accept: 'application/vnd.github+json' } })
-      .then(function (res) { if (!res.ok) throw new Error('status ' + res.status); return res.json(); })
-      .then(function (releases) {
-        if (!Array.isArray(releases)) throw new Error('formato inesperado');
-        Object.keys(cards).forEach(function (key) {
-          var card = cards[key];
-          var found = null;
-          for (var i = 0; i < releases.length; i++) {
-            var rel = releases[i];
-            if (rel.draft) continue;
-            var asset = (rel.assets || []).find(function (a) { return card.match(a.name || ''); });
-            if (asset) { found = { release: rel, asset: asset }; break; }
-          }
-          if (found) setVersion(card, found.release, found.asset);
-          else setError(card, 'Ver no GitHub');
-        });
-      })
-      .catch(function () {
-        Object.keys(cards).forEach(function (key) { setError(cards[key], 'Ver no GitHub'); });
-      });
-  })();
-})();
-</script>
+<!-- defer: baixa os 15 arquivos em paralelo (em vez de um por vez, em série)
+     e só executa depois do HTML pronto, mantendo a MESMA ordem de execução
+     de antes. Isso reduz bastante o tempo até o app ficar interativo,
+     principalmente em conexões móveis/wifi mais lentas. -->
+<script src="/js/titlebar.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
+<script src="/js/auth-3d.js" defer></script>
+<script src="/js/redesign-ui.js" defer></script>
+<script src="/js/icons.js" defer></script>
+<script src="/js/socket.js" defer></script>
+<script src="/js/sounds.js" defer></script>
+<script src="/js/settings.js" defer></script>
+<script src="/js/admin-claim.js" defer></script>
+<script src="/js/extras.js" defer></script>
+<script src="/js/media.js" defer></script>
+<script src="/js/server-settings.js" defer></script>
+<script src="/js/features.js" defer></script>
+<script src="/js/games.js" defer></script>
+<script src="/js/desktop-update.js" defer></script>
+<script src="/js/app.js" defer></script>
+<script src="/js/call.js" defer></script>
+<script src="/js/auth.js" defer></script>
 </body>
 </html>

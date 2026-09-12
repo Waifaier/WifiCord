@@ -3893,6 +3893,9 @@ html.has-custom-titlebar #members-panel {
   border: 2px solid var(--bg-deepest, #0b0913);
   pointer-events: none;
 }
+#share-system-audio-row.disabled { opacity: .45; }
+#share-system-audio-row.disabled input { cursor: not-allowed; }
+
 .server-mention-badge {
   position: absolute;
   right: -4px;

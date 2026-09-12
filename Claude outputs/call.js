@@ -148,7 +148,7 @@
     localAudioCtx: null, remoteAudioCtx: null,
     speakingTimer: null, remoteSpeakingTimer: null,
     fullscreen: false, adminVoiceMutedUntil: 0,
-    shareResolution: 720, shareType: 'screen', shareSystemAudio: false,
+    shareResolution: 720, shareType: 'screen', shareSystemAudio: true,
     groupMode: false, groupServerId: null, groupChannelId: null,
     groupType: 'audio', groupPeers: new Map(),
     qualityTimer: null,
@@ -230,6 +230,7 @@
       serverVoiceBtn: $('start-server-voice-call-btn'), serverVideoBtn: $('start-server-video-call-btn'),
       serverCallGrid: $('server-call-grid'), shareModal: $('modal-share-screen'),
       shareConfirm: $('share-screen-confirm'), shareSystemAudio: $('share-system-audio'),
+      shareSystemAudioRow: $('share-system-audio-row'), shareSystemAudioHint: $('share-system-audio-hint'),
       qualityDot: $('call-quality-dot'),
       remoteVolumeBtn: $('call-remote-volume-btn'), remoteVolumeMenu: $('call-remote-volume-menu'),
       remoteVolumeRange: $('call-remote-volume-range'), remoteVolumeValue: $('call-remote-volume-value'),
@@ -1544,13 +1545,35 @@
     } catch (_) { box.classList.add('hidden'); }
   }
 
+  // O Chrome (e a maioria dos navegadores) simplesmente não sabe capturar
+  // áudio quando o que está sendo compartilhado é uma JANELA específica —
+  // só funciona pra "tela inteira" ou "aba do navegador". Sem isso, a
+  // apresentação ficava sem som mesmo com a caixinha marcada, e a pessoa
+  // achava que era bug. Desmarca/desabilita e avisa em vez de deixar a
+  // promessa de "compartilhar áudio" quebrada silenciosamente.
+  function updateShareAudioAvailability(shareType) {
+    const supported = shareType !== 'window';
+    if (el.shareSystemAudio) {
+      el.shareSystemAudio.disabled = !supported;
+      if (!supported) el.shareSystemAudio.checked = false;
+      else if (!el.shareSystemAudio.dataset.userTouched) el.shareSystemAudio.checked = true;
+    }
+    el.shareSystemAudioRow?.classList.toggle('disabled', !supported);
+    if (el.shareSystemAudioHint) {
+      el.shareSystemAudioHint.textContent = supported
+        ? 'O navegador também vai pedir pra marcar "Compartilhar áudio" na própria janela de escolha — sem isso marcado dos dois lados, a apresentação fica muda.'
+        : 'Compartilhar áudio não funciona pra uma janela específica — escolha "Tela" ou "Aba" se precisar do som.';
+    }
+  }
+
   async function screenShare() {
     if (!state.inCall) return;
     if (state.screenStream) return stopScreen();
     const modal = el.shareModal;
-    if (!modal) return startScreenShareWithQuality(720, 'screen', false);
+    if (!modal) return startScreenShareWithQuality(720, 'screen', true);
     $('modal-overlay')?.classList.remove('hidden');
     modal.classList.remove('hidden');
+    updateShareAudioAvailability(state.shareType || 'screen');
     let selected = state.shareResolution || 720;
     if (!appState()?.currentUser?.wfna) selected = 720;
     modal.querySelectorAll('[data-resolution]').forEach(b => {
@@ -1565,10 +1588,15 @@
       };
     });
     modal.querySelectorAll('[data-share-tab]').forEach(b => b.onclick = () => {
+      updateShareAudioAvailability(b.dataset.shareTab);
       modal.querySelectorAll('[data-share-tab]').forEach(x => x.classList.toggle('active', x === b));
       modal.querySelectorAll('[data-share-pane]').forEach(x => x.classList.toggle('active', x.dataset.sharePane === b.dataset.shareTab));
       state.shareType = b.dataset.shareTab;
     });
+    if (el.shareSystemAudio && !el.shareSystemAudio.dataset.wired) {
+      el.shareSystemAudio.dataset.wired = '1';
+      el.shareSystemAudio.addEventListener('change', () => { el.shareSystemAudio.dataset.userTouched = '1'; });
+    }
     if (el.shareConfirm) el.shareConfirm.onclick = async () => {
       const type = state.shareType || 'screen';
       const systemAudio = !!el.shareSystemAudio?.checked;
@@ -1920,12 +1948,19 @@
         track.onended = () => setActive(false);
         if (!track.muted) setActive(true);
       } else {
+        // Mic e áudio-do-sistema (som de apresentação de tela) chegam em
+        // transceptores separados aqui também (mesma ideia da chamada 1:1 —
+        // ver comentário grande em pc.ontrack lá em cima), então o volume da
+        // apresentação de alguém não fica preso junto ao volume da voz dela.
+        const slot = fixedSlotIndex(pc, e.transceiver);
+        const isSystemAudio = slot === 2 || (slot === -1 && e.receiver === pc._wifiSystemAudioReceiver);
         const stream = e.streams?.[0] instanceof MediaStream ? e.streams[0] : new MediaStream([e.track]);
         const audioEl = document.createElement('audio');
         audioEl.autoplay = true; audioEl.playsInline = true; audioEl.srcObject = stream;
-        audioEl.volume = combinedVolume(id);
+        audioEl.volume = isSystemAudio ? combinedScreenVolume(id) : combinedVolume(id);
         audioEl.muted = state.headphonesOff;
         audioEl.dataset.callPeer = id;
+        audioEl.dataset.callPeerKind = isSystemAudio ? 'screen' : 'mic';
         document.body.appendChild(audioEl); peer.audioStreams.push(audioEl); retryMediaPlay(audioEl);
       }
     };
