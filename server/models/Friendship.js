@@ -1,5 +1,6 @@
 const db = require('../database/db');
 const User = require('./User');
+const Block = require('./Block');
 
 const Friendship = {
   findBetween(userA, userB) {
@@ -21,6 +22,11 @@ const Friendship = {
     if (friend.id === requesterId) {
       const err = new Error('Você não pode adicionar a si mesmo.');
       err.status = 400;
+      throw err;
+    }
+    if (Block.isBlocked(requesterId, friend.id)) {
+      const err = new Error('Não é possível enviar solicitação para este usuário.');
+      err.status = 403;
       throw err;
     }
     const existing = Friendship.findBetween(requesterId, friend.id);

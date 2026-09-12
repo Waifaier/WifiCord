@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../database/db');
 const User = require('../models/User');
 const Friendship = require('../models/Friendship');
+const Block = require('../models/Block');
 const { normalizeEmail, isNonEmptyString } = require('../utils/validate');
 const { makeRateLimiter } = require('../utils/rateLimiter');
 const { codeMatches } = require('../utils/adminAuth');
@@ -315,11 +316,30 @@ router.get('/profile/:id', requireAuth, (req,res)=>{
     rows.forEach(r=>roles.push({...r,serverId:s.id,serverName:s.name}));
   }
 
+  // Status de amizade/bloqueio entre quem está vendo e quem está sendo
+  // visto — o cliente usa isso pra decidir quais botões mostrar no cartão de
+  // perfil (Adicionar/Remover amigo, Bloquear/Desbloquear, Denunciar).
+  let relationship = { status: 'self', isBlockedByMe: false, hasBlockedMe: false };
+  if (id !== Number(req.session.userId)) {
+    const f = Friendship.findBetween(req.session.userId, id);
+    let status = 'none';
+    if (f) {
+      if (f.status === 'accepted') status = 'friends';
+      else if (f.status === 'pending') status = Number(f.requester_id) === Number(req.session.userId) ? 'pending_sent' : 'pending_received';
+    }
+    relationship = {
+      status,
+      isBlockedByMe: Block.blockedByMe(req.session.userId, id),
+      hasBlockedMe: Block.blockedByMe(id, req.session.userId),
+    };
+  }
+
   res.json({
     user:publicUser,
     profileContext:{
       commonServers:commonServers.map(s=>({id:s.id,name:s.name,iconUrl:s.icon_url||null,isOwner:s.owner_id===id})),
-      roles:roles.slice(0,12)
+      roles:roles.slice(0,12),
+      relationship
     }
   });
 });

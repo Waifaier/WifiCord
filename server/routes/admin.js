@@ -2,6 +2,7 @@ const express=require('express');
 const crypto=require('crypto');
 const db=require('../database/db');
 const User=require('../models/User');
+const Report=require('../models/Report');
 const {requireAuth}=require('./auth');
 const router=express.Router();
 
@@ -68,5 +69,37 @@ router.post('/users/:id/clear',(req,res)=>{const id=Number(req.params.id),u=User
 
 // Primeiro administrador: exige chave definida fora do navegador e só funciona enquanto não existe nenhum admin.
 router.post('/setup/claim', (req,res)=>res.status(403).json({error:'Use o comando local de ativação do administrador. A ativação por navegador está desabilitada.'}));
+
+// Denúncias enviadas por usuários (ver server/routes/moderation.js). Listagem
+// não traz avatar dos envolvidos de propósito — ver o comentário no topo de
+// server/models/Report.js.
+router.get('/reports',(req,res)=>{
+  const status=String(req.query.status||'pending');
+  res.json({reports:Report.list({status})});
+});
+router.post('/reports/:id/resolve',(req,res)=>{
+  const id=Number(req.params.id);
+  const report=Report.findById(id);
+  if(!report) return res.status(404).json({error:'Denúncia não encontrada.'});
+  if(report.status==='resolved') return res.status(400).json({error:'Essa denúncia já foi resolvida.'});
+  const action=String(req.body?.action||'');
+  if(!['ban','dismiss'].includes(action)) return res.status(400).json({error:'Ação inválida.'});
+  if(action==='ban'){
+    const targetId=Number(report.reportedUserId);
+    if(targetId===Number(req.session.userId)) return res.status(400).json({error:'Você não pode banir a si mesmo.'});
+    if(!User.findById(targetId)) return res.status(404).json({error:'Usuário denunciado não encontrado.'});
+    try{
+      const until=untilValue(req.body,'minutes');
+      User.setModeration(targetId,'bannedUntil',until);
+      User.setStatus(targetId,'offline');
+      logAction(req.session.userId,targetId,'ban',{until,viaReport:id});
+      emitToUser(req,targetId,'admin:ban',{until});
+      emitGlobal(req,'presence:update',{userId:targetId,status:'offline'});
+    }catch(e){return res.status(400).json({error:e.message});}
+  }
+  const updated=Report.resolve(id,{resolution:action,resolvedBy:req.session.userId});
+  logAction(req.session.userId,report.reportedUserId,'report_resolve',{reportId:id,action});
+  res.json({report:updated});
+});
 
 module.exports=router;

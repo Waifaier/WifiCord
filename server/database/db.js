@@ -190,6 +190,32 @@ CREATE TABLE IF NOT EXISTS push_tokens (
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens(user_id);
+CREATE TABLE IF NOT EXISTS blocked_users (
+  blocker_id INTEGER NOT NULL,
+  blocked_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (blocker_id, blocked_id),
+  FOREIGN KEY(blocker_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(blocked_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_blocked_users_blocked ON blocked_users(blocked_id);
+CREATE TABLE IF NOT EXISTS reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  reporter_id INTEGER NOT NULL,
+  reported_user_id INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  evidence_json TEXT NOT NULL DEFAULT '[]',
+  context_json TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'pending',
+  resolution TEXT,
+  resolved_by INTEGER,
+  resolved_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(reporter_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(reported_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(resolved_by) REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, id DESC);
 `);
 
 for (const [table, column, definition] of [

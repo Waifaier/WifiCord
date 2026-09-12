@@ -694,10 +694,46 @@
 
   <div id="modal-admin" class="modal modal-admin hidden">
     <div class="admin-header"><div><h3>Painel de administração</h3><p>Moderação, economia, permissões e efeitos reversíveis.</p></div><span class="admin-badge">ADMIN</span></div>
-    <div class="admin-tools"><input id="admin-search" placeholder="Pesquisar por usuário…"><button id="admin-search-btn" class="btn btn-small">Pesquisar</button><span class="admin-tools-hint">Moderação • Economia • Cargos • Efeitos • Segurança</span></div>
-    <div id="admin-users" class="admin-users"></div>
-    <section class="admin-log-section"><h4>Registro de ações</h4><div id="admin-logs" class="admin-logs"></div></section>
+    <div class="admin-tabs">
+      <button type="button" id="admin-tab-users" class="btn btn-small active">👥 Usuários</button>
+      <button type="button" id="admin-tab-reports" class="btn btn-small">🚩 Denúncias</button>
+    </div>
+    <div id="admin-panel-users">
+      <div class="admin-tools"><input id="admin-search" placeholder="Pesquisar por usuário…"><button id="admin-search-btn" class="btn btn-small">Pesquisar</button><span class="admin-tools-hint">Moderação • Economia • Cargos • Efeitos • Segurança</span></div>
+      <div id="admin-users" class="admin-users"></div>
+      <section class="admin-log-section"><h4>Registro de ações</h4><div id="admin-logs" class="admin-logs"></div></section>
+    </div>
+    <div id="admin-panel-reports" class="hidden">
+      <div class="admin-tools">
+        <select id="admin-reports-status">
+          <option value="pending">Pendentes</option>
+          <option value="resolved">Resolvidas</option>
+          <option value="all">Todas</option>
+        </select>
+        <button id="admin-reports-refresh" class="btn btn-small">🔄 Atualizar</button>
+        <span class="admin-tools-hint">Motivo • Prints enviados • Banir ou ignorar</span>
+      </div>
+      <div id="admin-reports" class="admin-reports"></div>
+    </div>
     <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Fechar</button></div>
+  </div>
+
+  <div id="modal-report" class="modal hidden">
+    <h3>Denunciar</h3>
+    <p class="text-muted" id="report-target-label"></p>
+    <form id="report-form">
+      <label>Motivo da denúncia
+        <textarea name="reason" maxlength="500" rows="4" required placeholder="Descreva o que aconteceu…"></textarea>
+      </label>
+      <label>Prints (opcional, até 3 imagens)
+        <input type="file" id="report-evidence-input" accept="image/*" multiple>
+      </label>
+      <div id="report-evidence-preview" class="report-evidence-preview"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
+        <button type="submit" class="btn btn-danger" id="report-submit-btn">Enviar denúncia</button>
+      </div>
+    </form>
   </div>
 
   <div id="modal-profile" class="modal modal-profile hidden">
