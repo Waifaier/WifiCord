@@ -203,7 +203,7 @@
         </div>
       </div>
       <button type="button" id="settings-btn" class="btn btn-icon" title="Configurações">⚙️</button>
-      <button type="button" id="logout-btn" class="btn btn-icon" title="Sair">⏻</button><div id="mini-call-dock" class="mini-call-dock hidden"><span class="mini-call-status">📞 Em chamada</span><button id="mini-call-mic" title="Microfone">🎤</button><button id="mini-call-cam" title="Câmera">📷</button><button id="mini-call-screen" title="Apresentar">🖥️</button><button id="mini-call-headphones" title="Desligar fone">🎧</button><button id="mini-call-hangup" class="danger" title="Desligar call">📵</button></div>
+      <button type="button" id="logout-btn" class="btn btn-icon" title="Sair">⏻</button><div id="mini-call-dock" class="mini-call-dock hidden" title="Voltar para a chamada"><span class="mini-call-status">📞 Em chamada</span><button type="button" id="mini-call-mic" title="Microfone">🎤</button><button type="button" id="mini-call-cam" title="Câmera">📷</button><button type="button" id="mini-call-screen" title="Apresentar">🖥️</button><button type="button" id="mini-call-headphones" title="Desligar fone">🎧</button><button type="button" id="mini-call-hangup" class="danger" title="Desligar call">📵</button></div>
     </div>
   </aside>
 
@@ -284,7 +284,7 @@
     <div id="typing-indicator" class="typing-indicator"></div>
 
     <form id="message-form" class="message-form">
-      <div class="composer-tools"><button type="button" id="media-btn" class="composer-btn" title="Mídia">🖼️</button><button type="button" id="camera-btn" class="composer-btn" title="Câmera">📷</button><button type="button" id="emoji-btn" class="composer-btn" title="Emojis">😊</button><button type="button" id="sticker-btn" class="composer-btn" title="Figurinhas">✨</button></div><textarea id="message-input" maxlength="2000" rows="1" placeholder="Digite uma mensagem..." disabled></textarea>
+      <div class="composer-tools"><button type="button" id="media-btn" class="composer-btn" title="Mídia">🖼️</button><button type="button" id="camera-btn" class="composer-btn" title="Câmera">📷</button><button type="button" id="emoji-btn" class="composer-btn" title="Emojis">😊</button><button type="button" id="sticker-btn" class="composer-btn" title="Figurinhas">✨</button><button type="button" id="backflip-btn" class="composer-btn hidden" title="Mortal no avatar">🤸</button></div><textarea id="message-input" maxlength="2000" rows="1" placeholder="Digite uma mensagem..." disabled></textarea>
       <button type="submit" class="btn btn-primary" disabled>Enviar</button><div id="emoji-popover" class="emoji-popover hidden"></div><div id="sticker-popover" class="emoji-popover hidden"></div>
       <div id="camera-popover" class="emoji-popover camera-popover hidden">
         <button type="button" class="camera-popover-option" id="camera-take-photo">📸 Tirar foto</button>
@@ -484,6 +484,18 @@
           <label>Emblema<select id="settings-profile-badge"><option value="none">Nenhum</option><option value="star">⭐ Estrela</option><option value="fire">🔥 Fogo</option><option value="rocket">🚀 Foguete</option><option value="crown">👑 Coroa</option></select></label>
           <label>Placa de nome<select id="settings-nameplate"><option value="none">Nenhuma</option><option value="minimal">Minimal</option><option value="neon">Neon</option><option value="cyber">Cyber</option><option value="galaxy">Galaxy</option><option value="chrome">Chrome</option></select></label><label>Tag<input id="settings-profile-tag" maxlength="16" placeholder="DEV"></label>
         </div>
+      </section>
+
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Avatar interativo</span><small>Presets animados para a foto de perfil</small></div>
+        <div class="wc-preset-row" id="wc-avatarfx-presets">
+          <button type="button" data-avatarfx="none">Nenhum</button>
+          <button type="button" data-avatarfx="pirouette">🌀 Pirueta</button>
+          <button type="button" data-avatarfx="hover-burst">✨ Brilho ao passar o mouse</button>
+          <button type="button" data-avatarfx="pet-cat">🐱 Gatinho companheiro</button>
+          <button type="button" data-avatarfx="pet-bird">🐦 Passarinho companheiro</button>
+        </div>
+        <p class="text-muted" style="margin:6px 0 0;font-size:12px">Os presets de gatinho/passarinho e a pirueta aparecem no seu cartão de perfil (abra "Ver perfil" para testar).</p>
       </section>
 
       <section class="wc-editor-section">

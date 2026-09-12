@@ -159,13 +159,29 @@
     // ativa, e pra devolver a câmera pro palco principal quando a
     // apresentação terminar.
     remoteCameraStream: null, remoteScreenActive: false,
+    // Stream de VERDADE da tela remota (1:1) — capturado só pra alimentar o
+    // popup flutuante (#call-float-popup) quando a pessoa sai da tela da
+    // call; remoteScreenActive por si só não guarda o MediaStream.
+    remoteScreenStream: null,
     // Fica false enquanto a troca inicial de oferta/resposta (startCall ou
     // accept) ainda não terminou. Evita que o próprio navegador dispare
     // 'negotiationneeded' (por causa dos addTransceiver no pcCreate) e
     // mande uma OUTRA oferta em paralelo à oferta manual — essa oferta
     // duplicada chegava do lado de quem atende como se fosse um segundo
     // convite e derrubava a ligação (ver handleOffer/onnegotiationneeded).
-    negotiationReady: false
+    negotiationReady: false,
+    // ---------------------------------------------------------------------
+    // Popup flutuante e arrastável com a apresentação de tela, visível
+    // quando a pessoa sai da conversa/canal da call (ver updateFloatPopup).
+    // floatSpotlightId: qual apresentador (1:1 é sempre o alvo da call; em
+    // grupo pode ser qualquer participante, ou 'self' pra sua própria tela)
+    // está em destaque no popup quando tem mais de uma apresentação.
+    // floatSideBySide: true quando a pessoa escolheu "ver as duas juntas"
+    // (só existe quando há exatamente 2 apresentações simultâneas).
+    // floatPopupDismissed: true depois que a pessoa fecha o popup com o X —
+    // volta a false na próxima vez que ela abrir a tela da call de novo.
+    // ---------------------------------------------------------------------
+    floatSpotlightId: null, floatSideBySide: false, floatPopupDismissed: false
   };
 
   const el = {};
@@ -227,6 +243,9 @@
       screenStage: $('call-screen-stage'),
       miniDock: $('mini-call-dock'), miniMic: $('mini-call-mic'), miniCam: $('mini-call-cam'),
       miniScreen: $('mini-call-screen'), miniHeadphones: $('mini-call-headphones'), miniHangup: $('mini-call-hangup'),
+      floatPopup: $('call-float-popup'), floatHandle: $('call-float-handle'), floatName: $('call-float-name'),
+      floatExpand: $('call-float-expand'), floatClose: $('call-float-close'), floatSwitcher: $('call-float-switcher'),
+      floatVideo: $('call-float-video'), floatVideo2: $('call-float-video-2'),
       serverVoiceBtn: $('start-server-voice-call-btn'), serverVideoBtn: $('start-server-video-call-btn'),
       serverCallGrid: $('server-call-grid'), shareModal: $('modal-share-screen'),
       shareConfirm: $('share-screen-confirm'), shareSystemAudio: $('share-system-audio'),
@@ -241,6 +260,83 @@
       callContextScreenVolumeRange: $('call-context-screen-volume-range'), callContextScreenVolumeValue: $('call-context-screen-volume-value'),
       callContextScreenMuteBtn: $('call-context-screen-mute-toggle'),
       callStage: document.querySelector('.call-stage'), stageImmersiveToggle: $('call-stage-immersive-toggle')
+    });
+    reparentFloatingElements();
+  }
+
+  // -------------------------------------------------------------------------
+  // #mini-call-dock e #call-float-popup usam position:fixed pensando em se
+  // ancorar no VIEWPORT inteiro, mas nascem no HTML dentro de #sidebar — e
+  // #sidebar tem backdrop-filter (efeito de vidro do painel lateral), que
+  // pela especificação do CSS cria um "containing block" próprio pra
+  // qualquer descendente position:fixed (mesmo efeito de transform). Ou
+  // seja: o "viewport" que position:fixed via aqui não era a tela toda,
+  // era só a caixa estreita do #sidebar (~260px, encostada na esquerda) —
+  // por isso a chamada minimizada nascia cortada no canto inferior
+  // esquerdo, por cima da barra do usuário, em vez de flutuar limpa no
+  // canto da tela. Mover os dois pra serem filhos DIRETOS do <body> (que
+  // não tem backdrop-filter/transform nenhum) resolve isso de raiz, sem
+  // precisar caçar mais nenhuma regra de CSS conflitante.
+  // -------------------------------------------------------------------------
+  function reparentFloatingElements() {
+    if (el.miniDock && el.miniDock.parentElement !== document.body) document.body.appendChild(el.miniDock);
+    if (el.floatPopup && el.floatPopup.parentElement !== document.body) document.body.appendChild(el.floatPopup);
+  }
+
+  // -------------------------------------------------------------------------
+  // Arrastar o popup flutuante pela tela (Pointer Events cobre mouse E toque
+  // com o mesmo código, sem precisar de dois caminhos separados). Enquanto
+  // arrasta, passa a usar left/top em pixel (em vez do right/bottom fixo do
+  // CSS) e desliga a transição suave — CSS .call-float-popup.dragging — pra
+  // não "arrastar atrasado"; ao soltar, a transição volta (é o que dá a
+  // "animação smooth" pedida quando o popup aparece/desaparece/troca de
+  // apresentação, sem deixar o arrastar em si com esse mesmo atraso).
+  // -------------------------------------------------------------------------
+  function bindFloatPopupDrag() {
+    const popup = el.floatPopup, handle = el.floatHandle;
+    if (!popup || !handle || handle.dataset.dragWired) return;
+    handle.dataset.dragWired = '1';
+    let dragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+    handle.addEventListener('pointerdown', e => {
+      if (e.target.closest('button')) return; // não arrasta clicando nos botões de fechar/expandir
+      const rect = popup.getBoundingClientRect();
+      dragging = true;
+      startX = e.clientX; startY = e.clientY;
+      startLeft = rect.left; startTop = rect.top;
+      popup.classList.add('dragging');
+      try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
+    });
+    handle.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const rect = popup.getBoundingClientRect();
+      const maxLeft = Math.max(8, window.innerWidth - rect.width - 8);
+      const maxTop = Math.max(8, window.innerHeight - rect.height - 8);
+      const left = Math.min(Math.max(8, startLeft + (e.clientX - startX)), maxLeft);
+      const top = Math.min(Math.max(8, startTop + (e.clientY - startY)), maxTop);
+      popup.style.left = left + 'px';
+      popup.style.top = top + 'px';
+      popup.style.right = 'auto';
+      popup.style.bottom = 'auto';
+    });
+    const endDrag = e => {
+      if (!dragging) return;
+      dragging = false;
+      popup.classList.remove('dragging');
+      try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+    };
+    handle.addEventListener('pointerup', endDrag);
+    handle.addEventListener('pointercancel', endDrag);
+    // Se a janela for redimensionada (ou a tela girar no celular) com o
+    // popup posicionado manualmente, garante que ele não fique preso fora
+    // da tela nova.
+    window.addEventListener('resize', () => {
+      if (popup.classList.contains('hidden') || (!popup.style.left && !popup.style.top)) return;
+      const rect = popup.getBoundingClientRect();
+      const maxLeft = Math.max(8, window.innerWidth - rect.width - 8);
+      const maxTop = Math.max(8, window.innerHeight - rect.height - 8);
+      popup.style.left = Math.min(Math.max(8, rect.left), maxLeft) + 'px';
+      popup.style.top = Math.min(Math.max(8, rect.top), maxTop) + 'px';
     });
   }
 
@@ -261,6 +357,10 @@
   }
   function friendName(id) {
     const u = user(id);
+    return u?.displayName || u?.username || 'Usuário';
+  }
+  function groupMemberName(id) {
+    const u = groupUser(id);
     return u?.displayName || u?.username || 'Usuário';
   }
   function avatarMarkup(u) {
@@ -516,6 +616,19 @@
     updateCallStageMode();
   }
 
+  // Volta pra tela da própria call (canal/DM onde ela está rolando) — usada
+  // tanto pelo botão de expandir do popup flutuante quanto por clicar no
+  // mini-dock (fora dos botões de controle).
+  function restoreCallView() {
+    if (state.groupMode) {
+      const sid = state.groupServerId, cid = state.groupChannelId;
+      if (!sid || !cid) return;
+      Promise.resolve(window.App?.openServer?.(sid)).then(() => window.App?.openChannel?.(cid));
+    } else if (state.targetUserId) {
+      window.App?.openDM?.(state.targetUserId);
+    }
+  }
+
   function syncContext() {
     const s = appState();
     const inTarget = !!state.inCall && !state.groupMode && !!s?.activeDMUserId && String(s.activeDMUserId) === String(state.targetUserId);
@@ -525,6 +638,94 @@
     updateButtons();
     if (inTarget) refreshParticipants();
     if (inGroup) renderGroupTiles();
+    updateFloatPopup();
+  }
+
+  // -------------------------------------------------------------------------
+  // Popup flutuante com a apresentação de tela — aparece quando a pessoa
+  // está numa chamada (1:1 ou de servidor) MAS saiu da conversa/canal da
+  // própria call (mesma condição que esconde a call-bar e mostra o
+  // mini-call-dock — ver syncContext acima), E tem pelo menos uma
+  // apresentação de tela ativa pra mostrar. Dá pra escolher, quando há mais
+  // de uma pessoa apresentando ao mesmo tempo numa chamada de servidor,
+  // assistir uma específica ou as duas lado a lado (ver o seletor de pílulas
+  // em #call-float-switcher).
+  // -------------------------------------------------------------------------
+  function activeGroupPresenters() {
+    const out = [];
+    for (const [id, peer] of state.groupPeers) {
+      if (peer.screenTrack && peer.video instanceof MediaStream && peer.video.getVideoTracks().length) {
+        out.push({ id, name: groupMemberName(id), stream: peer.video });
+      }
+    }
+    return out;
+  }
+
+  function setFloatVideoSource(videoEl, stream) {
+    if (!videoEl) return;
+    if (videoEl.srcObject !== stream) videoEl.srcObject = stream || null;
+    if (stream) videoEl.play?.().catch(() => {});
+  }
+
+  function updateFloatPopup() {
+    if (!el.floatPopup) return;
+    const s = appState();
+    const inTarget = !!state.inCall && !state.groupMode && !!s?.activeDMUserId && String(s.activeDMUserId) === String(state.targetUserId);
+    const inGroup = !!state.inCall && state.groupMode && String(s?.activeServerId) === String(state.groupServerId) && String(s?.activeChannelId) === String(state.groupChannelId);
+    const viewingCall = inTarget || inGroup;
+    // Voltar pra tela da própria call "perdoa" um fechamento anterior do
+    // popup — a próxima vez que a pessoa sair de novo, ele volta a aparecer.
+    if (viewingCall) state.floatPopupDismissed = false;
+
+    let presenters = [];
+    if (state.inCall && state.groupMode) {
+      presenters = activeGroupPresenters();
+    } else if (state.inCall && !state.groupMode) {
+      if (state.remoteScreenStream) presenters.push({ id: String(state.targetUserId), name: friendName(state.targetUserId), stream: state.remoteScreenStream });
+      if (state.screenStream) presenters.push({ id: 'self', name: 'Você', stream: state.screenStream });
+    }
+
+    const shouldShow = !!state.inCall && !viewingCall && !state.floatPopupDismissed && presenters.length > 0;
+    el.floatPopup.classList.toggle('hidden', !shouldShow);
+    if (!shouldShow) {
+      setFloatVideoSource(el.floatVideo, null);
+      setFloatVideoSource(el.floatVideo2, null);
+      el.floatVideo2?.classList.add('hidden');
+      el.floatPopup.classList.remove('split');
+      return;
+    }
+
+    if (!presenters.some(p => String(p.id) === String(state.floatSpotlightId))) {
+      state.floatSpotlightId = presenters[0].id;
+    }
+    const canSplit = presenters.length >= 2;
+    if (!canSplit) state.floatSideBySide = false;
+    el.floatPopup.classList.toggle('split', canSplit && state.floatSideBySide);
+
+    if (canSplit && state.floatSideBySide) {
+      setFloatVideoSource(el.floatVideo, presenters[0].stream);
+      setFloatVideoSource(el.floatVideo2, presenters[1].stream);
+      el.floatVideo2?.classList.remove('hidden');
+      if (el.floatName) el.floatName.textContent = presenters.map(p => p.name).join(' + ');
+    } else {
+      const active = presenters.find(p => String(p.id) === String(state.floatSpotlightId)) || presenters[0];
+      setFloatVideoSource(el.floatVideo, active.stream);
+      setFloatVideoSource(el.floatVideo2, null);
+      el.floatVideo2?.classList.add('hidden');
+      if (el.floatName) el.floatName.textContent = active.name;
+    }
+
+    if (el.floatSwitcher) {
+      el.floatSwitcher.classList.toggle('hidden', presenters.length < 2);
+      if (presenters.length >= 2) {
+        el.floatSwitcher.innerHTML = presenters.map(p => {
+          const active = !state.floatSideBySide && String(p.id) === String(state.floatSpotlightId);
+          return `<button type="button" class="call-float-pill${active ? ' active' : ''}" data-float-pick="${esc(p.id)}">${esc(p.name)}</button>`;
+        }).join('') + (presenters.length === 2
+          ? `<button type="button" class="call-float-pill${state.floatSideBySide ? ' active' : ''}" data-float-pick="__both">Assistir as duas</button>`
+          : '');
+      }
+    }
   }
 
   function makeMediaConstraints(video) {
@@ -677,10 +878,12 @@
     el.remoteAudio.muted = state.headphonesOff;
     el.remoteAudio.volume = combinedVolume(state.targetUserId);
     window.Settings?.applyOutput?.(el.remoteAudio);
-    const play = () => el.remoteAudio?.play?.().catch(() => {});
-    play();
-    setTimeout(play, 100);
-    setTimeout(play, 500);
+    // Antes só tentava play() em 0/100/500ms e desistia — se o autoplay com
+    // som estivesse bloqueado nesse instante (ver primeAudioPlayback), a
+    // call 1:1 ficava muda pro resto da ligação. Agora usa o mesmo
+    // mecanismo das calls de grupo: registra um retry pro próximo
+    // toque/clique da pessoa na página também.
+    retryMediaPlay(el.remoteAudio);
   }
 
   // Som da apresentação de tela (áudio-do-sistema) da outra pessoa — sempre
@@ -695,10 +898,7 @@
     el.remoteScreenAudio.muted = state.headphonesOff;
     el.remoteScreenAudio.volume = combinedScreenVolume(state.targetUserId);
     window.Settings?.applyOutput?.(el.remoteScreenAudio);
-    const play = () => el.remoteScreenAudio?.play?.().catch(() => {});
-    play();
-    setTimeout(play, 100);
-    setTimeout(play, 500);
+    retryMediaPlay(el.remoteScreenAudio);
   }
 
   function addRemoteTrack(track, remoteStream, isRemoteVideo) {
@@ -943,6 +1143,7 @@
           const activate = () => {
             console.log('[WifiCord/call] tela remota ATIVA (unmute) — mostrando no palco');
             state.remoteScreenActive = true;
+            state.remoteScreenStream = stream;
             el.callBar?.classList.remove('audio-call');
             el.callBar?.classList.add('has-remote-video', 'has-remote', 'remote-sharing');
             attachRemoteStream(stream);
@@ -954,10 +1155,12 @@
               label.classList.remove('hidden');
               label.innerHTML = '🔴 <span id="call-remote-label">' + esc(friendName(state.targetUserId)) + '</span> está apresentando';
             }
+            updateFloatPopup();
           };
           const deactivate = () => {
             console.log('[WifiCord/call] tela remota INATIVA (mute/ended)');
             state.remoteScreenActive = false;
+            state.remoteScreenStream = null;
             el.callBar?.classList.remove('remote-sharing', 'screen-minimized');
             resetStageImmersive();
             detachRemoteCameraPip();
@@ -970,6 +1173,7 @@
               el.callBar?.classList.remove('has-remote-video');
               if (state.callType === 'audio') el.callBar?.classList.add('audio-call');
             }
+            updateFloatPopup();
           };
           track.onunmute = activate;
           track.onmute = deactivate;
@@ -1214,6 +1418,11 @@
   async function startCall(target, type) {
     if (!target) return window.App?.toast('Selecione um amigo para ligar.', 'error');
     if (state.inCall || state.pendingOffer) return;
+    // Mesma ideia do startServerCall: "destrava" o autoplay com som
+    // sincronamente dentro do clique que inicia a ligação — sem isso, em
+    // alguns navegadores/celulares o áudio remoto nunca sai (ver comentário
+    // grande em primeAudioPlayback lá em cima).
+    primeAudioPlayback();
     try {
       await prepare(target, type, false);
       const offer = sanitizeDescription(await state.pc.createOffer());
@@ -1308,6 +1517,10 @@
   async function accept() {
     const d = state.pendingOffer;
     if (!d) return;
+    // Mesmo motivo do startCall acima: o clique em "Atender" é o gesto do
+    // usuário que temos — precisa destravar o autoplay com som aqui dentro,
+    // não só lá na frente quando o áudio remoto realmente chegar.
+    primeAudioPlayback();
     window.Sounds?.stopLoop();
     closeModals();
     try {
@@ -1420,7 +1633,8 @@
     state.adminVoiceMutedUntil = 0; state._localSpeaking = false; state._remoteSpeaking = false;
     state.reconnectAttempts = 0; state.makingOffer = false; state.ignoreOffer = false;
     state.negotiationReady = false;
-    state.remoteCameraStream = null; state.remoteScreenActive = false;
+    state.remoteCameraStream = null; state.remoteScreenActive = false; state.remoteScreenStream = null;
+    state.floatSpotlightId = null; state.floatSideBySide = false; state.floatPopupDismissed = false;
     cleanupMediaElement(el.localVideo); cleanupMediaElement(el.remoteVideo);
     detachRemoteCameraPip();
     if (el.localCameraPip) { el.localCameraPip.classList.add('hidden'); el.localCameraPip.srcObject = null; }
@@ -1431,6 +1645,7 @@
     resetStageImmersive();
     closeCallContextMenu();
     closeModals(); updateButtons();
+    updateFloatPopup();
     window.Sounds?.play('call-leave');
   }
 
@@ -1677,6 +1892,7 @@
       }
       ensureLocalCameraPip();
       updateButtons();
+      updateFloatPopup();
       window.Sounds?.play('screen-start');
       track.onended = () => { stopScreen().catch(console.error); };
     } catch (e) {
@@ -1721,6 +1937,7 @@
     $('call-live-label')?.classList.add('hidden');
     if (state.callType === 'audio' && !el.callBar?.classList.contains('has-remote-video')) el.callBar?.classList.add('audio-call');
     updateButtons();
+    updateFloatPopup();
     window.Sounds?.play('screen-stop');
   }
 
@@ -1832,7 +2049,12 @@
     for (const [id, peer] of state.groupPeers) {
       const u = groupUser(id) || {};
       const tile = document.createElement('div');
-      tile.className = 'server-call-tile';
+      // .is-presenting deixa a tile de quem está apresentando tela maior na
+      // grade (ver CSS) — junto com o clique-pra-tela-cheia já existente no
+      // <video>, é como dá pra "escolher qual apresentação assistir" (ou as
+      // duas ao mesmo tempo, já que a grade mostra todo mundo lado a lado)
+      // sem precisar de uma UI de palco/spotlight separada.
+      tile.className = 'server-call-tile' + (peer.screenTrack ? ' is-presenting' : '');
       tile.dataset.userId = id;
       const vol = getUserVolume(id);
       // Antes isso vinha sempre com "Conectando" fixo no HTML, então toda
@@ -1942,6 +2164,7 @@
           peer.video.getVideoTracks().forEach(t => { if (t !== showTrack) peer.video.removeTrack(t); });
           if (showTrack && !peer.video.getTracks().some(t => t.id === showTrack.id)) peer.video.addTrack(showTrack);
           renderGroupTiles();
+          updateFloatPopup();
         };
         track.onunmute = () => setActive(true);
         track.onmute = () => setActive(false);
@@ -2038,6 +2261,7 @@
     peer.audioStreams?.forEach(a => a.remove());
     state.groupPeers.delete(String(id));
     renderGroupTiles();
+    updateFloatPopup();
   }
 
   async function startServerCall(serverId, channelId, type) {
@@ -2146,6 +2370,25 @@
     el.miniCam?.addEventListener('click', toggleCam);
     el.miniScreen?.addEventListener('click', screenShare);
     el.miniHangup?.addEventListener('click', () => endCall(true));
+    el.floatClose?.addEventListener('click', () => {
+      state.floatPopupDismissed = true;
+      updateFloatPopup();
+    });
+    el.floatExpand?.addEventListener('click', restoreCallView);
+    // Clicar em qualquer parte do mini-dock que não seja um dos botões de
+    // controle (mic/câmera/tela/fone/desligar) volta pra tela da call —
+    // antes não existia nenhum jeito de "restaurar" a partir dele.
+    el.miniDock?.addEventListener('click', e => {
+      if (e.target.closest('button')) return;
+      restoreCallView();
+    });
+    el.floatSwitcher?.addEventListener('click', e => {
+      const btn = e.target.closest('[data-float-pick]');
+      if (!btn) return;
+      if (btn.dataset.floatPick === '__both') state.floatSideBySide = true;
+      else { state.floatSideBySide = false; state.floatSpotlightId = btn.dataset.floatPick; }
+      updateFloatPopup();
+    });
     el.miniHeadphones?.addEventListener('click', () => {
       state.headphonesOff = !state.headphonesOff;
       if (el.remoteAudio) el.remoteAudio.muted = state.headphonesOff;
@@ -2184,7 +2427,7 @@
     navigator.mediaDevices?.addEventListener?.('devicechange', () => window.Settings?.refreshDevices?.());
   }
 
-  function init() { cache(); bind(); updateButtons(); iceConfigPromise = loadIceConfig(); }
+  function init() { cache(); bind(); bindFloatPopupDrag(); updateButtons(); iceConfigPromise = loadIceConfig(); }
 
   // Helper de diagnóstico pra rodar no console (F12) quando uma chamada não
   // está mostrando vídeo: mostra o estado da conexão, os transceivers e as
