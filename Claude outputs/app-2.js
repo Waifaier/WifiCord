@@ -277,6 +277,9 @@
     searchMatches: [],
     searchIndex: -1,
     tabUnreadCount: 0,
+    voicePresence: {},
+    unreadServerIds: new Set(),
+    mentionCounts: new Map(),
   };
 
   // ---------------------------------------------------------------------
@@ -436,14 +439,42 @@
     el.serverList.innerHTML = state.servers
       .map(function (server) {
         const activeClass = server.id === state.activeServerId ? ' active' : '';
+        const sid = String(server.id);
+        const mentionCount = state.mentionCounts?.get(sid) || 0;
+        const hasUnread = state.unreadServerIds?.has(sid);
+        const indicator = mentionCount > 0
+          ? '<span class="server-mention-badge">' + (mentionCount > 99 ? '99+' : String(mentionCount)) + '</span>'
+          : (hasUnread ? '<span class="server-unread-dot"></span>' : '');
         return (
           '<li class="server-item' + activeClass + '" data-server-id="' + escapeHtml(server.id) +
           '" role="button" tabindex="0" title="' + escapeHtml(server.name) + '">' +
           avatarHtml({ name: server.name, avatarUrl: server.iconUrl }) +
+          indicator +
           '</li>'
         );
       })
       .join('');
+  }
+
+  // --- Indicadores de atividade/menção por servidor (rail) ----------------
+  function handleServerActivity(data) {
+    if (!data || !data.serverId) return;
+    if (state.currentUser && String(data.authorId) === String(state.currentUser.id)) return;
+    const sid = String(data.serverId);
+    const viewingThisChannel = String(state.activeServerId) === sid && String(state.activeChannelId) === String(data.channelId);
+    if (viewingThisChannel) return;
+    state.unreadServerIds.add(sid);
+    renderServers();
+  }
+
+  function handleMention(data) {
+    if (!data || !data.serverId) return;
+    const sid = String(data.serverId);
+    state.mentionCounts.set(sid, (state.mentionCounts.get(sid) || 0) + 1);
+    state.unreadServerIds.add(sid);
+    renderServers();
+    const server = serverById(data.serverId);
+    toast('Você foi mencionado' + (server ? ' em ' + server.name : '') + '.', 'info');
   }
 
   function renderDMQuickList() {
@@ -466,21 +497,60 @@
       setEmpty(el.channelList, 'Nenhum canal neste servidor.');
       return;
     }
+    const activeServer = serverById(state.activeServerId);
+    const voiceLimit = Number(activeServer?.voiceUserLimit) || 0;
     el.channelList.innerHTML = state.channels
       .map(function (channel) {
         const activeClass = channel.id === state.activeChannelId ? ' active' : '';
         const isUnread = String(channel.id) !== String(state.activeChannelId) && state.unreadChannelIds.has(String(channel.id));
+        const isVoice = channel.type === 'voice';
+        const occupantIds = isVoice ? (state.voicePresence?.[channel.id] || state.voicePresence?.[String(channel.id)] || []) : [];
+        let countHtml = '';
+        let avatarsRow = '';
+        if (isVoice) {
+          if (occupantIds.length || voiceLimit > 0) {
+            const countLabel = voiceLimit > 0 ? (occupantIds.length + '/' + voiceLimit) : String(occupantIds.length);
+            countHtml = '<span class="channel-voice-count">' + escapeHtml(countLabel) + '</span>';
+          }
+          if (occupantIds.length) {
+            const shown = occupantIds.slice(0, 5);
+            const avatars = shown.map(function (uid) {
+              const m = state.serverMembers.find(function (x) { return String(x.id) === String(uid); });
+              const label = m ? memberDisplayName(m) : 'Usuário';
+              const inner = m && m.avatarUrl
+                ? '<img src="' + escapeHtml(m.avatarUrl) + '" alt="" loading="lazy">'
+                : '<span>' + escapeHtml(initialFor(label)) + '</span>';
+              return '<span class="channel-voice-avatar" title="' + escapeHtml(label) + '">' + inner + '</span>';
+            }).join('');
+            const extra = occupantIds.length - shown.length;
+            avatarsRow = '<div class="channel-voice-avatars">' + avatars +
+              (extra > 0 ? '<span class="channel-voice-avatar channel-voice-avatar-more">+' + extra + '</span>' : '') +
+              '</div>';
+          }
+        }
         return (
-          '<li class="channel-item' + activeClass + (isUnread ? ' has-unread' : '') + '" data-channel-id="' + escapeHtml(channel.id) + '" data-channel-type="' + escapeHtml(channel.type || 'text') +
+          '<li class="channel-item' + activeClass + (isUnread ? ' has-unread' : '') + (isVoice && occupantIds.length ? ' has-voice-presence' : '') + '" data-channel-id="' + escapeHtml(channel.id) + '" data-channel-type="' + escapeHtml(channel.type || 'text') +
           '" role="button" tabindex="0">' +
+          '<div class="channel-item-row">' +
           '<span class="channel-hash">' + (channel.type === 'voice' ? '🔊' : channel.type === 'announcement' ? '📢' : channel.type === 'media' ? '🖼️' : '#') + '</span><span class="channel-name">' + escapeHtml(channel.name) + '</span>' +
+          countHtml +
           (channel.slowmodeSeconds > 0 ? '<span class="channel-slowmode-badge" title="Slowmode: ' + channel.slowmodeSeconds + 's">⏱️</span>' : '') +
           (isUnread ? '<span class="channel-unread-dot" title="Não lido"></span>' : '') +
           '<button type="button" class="channel-edit-btn" data-channel-edit="' + escapeHtml(channel.id) + '" title="Editar canal (nome, tópico, slowmode)">⚙️</button>' +
+          '</div>' +
+          avatarsRow +
           '</li>'
         );
       })
       .join('');
+  }
+
+  // --- Presença ao vivo nos canais de voz do servidor (avatares + contagem) ---
+  function handleServerCallPresence(data) {
+    if (!data || data.channelId == null) return;
+    state.voicePresence = state.voicePresence || {};
+    state.voicePresence[String(data.channelId)] = Array.isArray(data.userIds) ? data.userIds : [];
+    if (state.channels.some(function (c) { return String(c.id) === String(data.channelId); })) renderChannels();
   }
 
   // ---------------------------------------------------------------------
@@ -1177,11 +1247,19 @@
   // --- Fundo personalizado do servidor ------------------------------------
   function applyServerBackground(server) {
     const layer = el.serverBackgroundLayer;
-    if (!layer) return;
-    const url = server && server.backgroundUrl;
-    if (!url) { layer.classList.add('hidden'); layer.style.backgroundImage = ''; return; }
-    layer.style.backgroundImage = 'url("' + url + '")';
-    layer.classList.remove('hidden');
+    if (layer) {
+      const url = server && server.backgroundUrl;
+      if (!url) { layer.classList.add('hidden'); layer.style.backgroundImage = ''; }
+      else { layer.style.backgroundImage = 'url("' + url + '")'; layer.classList.remove('hidden'); }
+    }
+    const header = document.querySelector('#channels-panel .sidebar-header');
+    if (header) {
+      const bannerUrl = server && server.bannerUrl;
+      header.classList.toggle('has-server-banner', !!bannerUrl);
+      header.style.backgroundImage = bannerUrl
+        ? 'linear-gradient(180deg, rgba(10,8,20,.18), rgba(10,8,20,.9) 92%), url("' + bannerUrl + '")'
+        : '';
+    }
   }
 
   function setActiveChannel(channelId) {
@@ -1295,6 +1373,9 @@
         channels = (data && data.channels) || [];
       }
       (channels || []).forEach(function (c) { state.unreadChannelIds.delete(String(c.id)); });
+      state.unreadServerIds.delete(String(serverId));
+      state.mentionCounts.delete(String(serverId));
+      renderServers();
       if (String(state.activeServerId) === String(serverId)) renderChannels();
       toast('Servidor marcado como lido.', 'success');
     } catch (err) {
@@ -1354,6 +1435,9 @@
       renderFriends();
       renderFriendRequests();
       renderServers();
+      // Entra na sala de cada servidor para receber indicador de atividade/
+      // menção mesmo em servidores que não estão abertos no momento.
+      state.servers.forEach(function (s) { window.ChatSocket.joinServer(s.id); });
       showDMPanel();
     } catch (err) {
       toast(err.message || 'Erro ao carregar dados iniciais.', 'error');
@@ -1376,6 +1460,9 @@
     if (el.activeServerInvite) el.activeServerInvite.textContent = server ? server.inviteCode : '—';
 
     window.ChatSocket.joinServer(serverId);
+    state.unreadServerIds.delete(String(serverId));
+    state.mentionCounts.delete(String(serverId));
+    renderServers();
 
     try {
       const [data,membersData] = await Promise.all([
@@ -1391,6 +1478,12 @@
       // o indicador de não lido funcione mesmo sem abrir cada canal.
       state.channels.forEach(function (c) { window.ChatSocket.joinChannel(c.id); });
       renderChannels(); renderServerMembers();
+      window.ChatSocket.requestServerCallPresence?.(serverId, function (res) {
+        if (res && res.ok && String(state.activeServerId) === String(serverId)) {
+          state.voicePresence = res.presence || {};
+          renderChannels();
+        }
+      });
       if (String(state.activeServerId) === String(serverId) && state.channels.length) {
         await openChannel(state.channels[0].id);
       } else if (!state.channels.length && el.chatTitle) {
@@ -2570,6 +2663,9 @@
     openServer: openServer,
     markChannelRead: markChannelRead,
     markServerRead: markServerRead,
+    handleServerActivity: handleServerActivity,
+    handleMention: handleMention,
+    handleServerCallPresence: handleServerCallPresence,
     handleIncomingMessage: handleIncomingMessage,
     showIncomingDMNotice: showIncomingDMNotice,
     handleMessageDeleted: handleMessageDeleted,

@@ -3818,3 +3818,97 @@ html.has-custom-titlebar #members-panel {
   }
 }
 
+/* --- v10: corrige papel de parede/fundo do servidor invisíveis -----------
+   #main-panel nunca definia um z-index próprio, então as camadas com
+   z-index negativo (.chat-wallpaper-layer, .server-background-layer)
+   escapavam para um contexto de empilhamento mais alto e ficavam atrás do
+   próprio fundo opaco do #main-panel. isolation:isolate força #main-panel a
+   criar seu próprio contexto, mantendo as camadas visíveis por trás do
+   conteúdo do chat, na frente do fundo do painel. */
+#main-panel { isolation: isolate !important; }
+
+/* --- Banner do servidor atrás do nome, no topo da lista de canais -------- */
+#channels-panel .sidebar-header.has-server-banner {
+  background-size: cover !important;
+  background-position: center !important;
+  padding: 54px 20px 10px !important;
+  align-items: flex-end !important;
+  border-radius: 0 0 12px 12px;
+  transition: background-image .2s ease;
+}
+#channels-panel .sidebar-header.has-server-banner h2,
+#channels-panel .sidebar-header.has-server-banner .sidebar-header-sub {
+  text-shadow: 0 2px 6px rgba(0,0,0,.85), 0 0 3px rgba(0,0,0,.7);
+}
+
+/* --- Avatares + contagem ao vivo nos canais de voz do servidor ----------- */
+.channel-item[data-channel-type="voice"] .channel-item-row { display: flex; align-items: center; gap: 6px; }
+.channel-voice-count {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted, #9a95ab);
+  background: rgba(255,255,255,.06);
+  border-radius: 999px;
+  padding: 1px 7px;
+  flex: 0 0 auto;
+}
+.channel-item.has-voice-presence .channel-voice-count { color: #3ba55d; background: rgba(59,165,93,.15); }
+.channel-item .channel-edit-btn { margin-left: 4px; }
+.channel-voice-avatars {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 0 6px 26px;
+  flex-wrap: wrap;
+}
+.channel-voice-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #2b2740;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-primary, #eee);
+  border: 1px solid rgba(255,255,255,.08);
+  flex: 0 0 auto;
+}
+.channel-voice-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.channel-voice-avatar-more { background: rgba(255,255,255,.08); font-size: 8.5px; }
+
+/* --- Indicador de mensagem não lida / menção nos ícones de servidor ------ */
+.server-item { overflow: visible !important; }
+.server-unread-dot {
+  position: absolute;
+  left: -3px;
+  bottom: 3px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--bg-deepest, #0b0913);
+  pointer-events: none;
+}
+.server-mention-badge {
+  position: absolute;
+  right: -4px;
+  top: -3px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ed4245;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 17px;
+  text-align: center;
+  border: 2px solid var(--bg-deepest, #0b0913);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
