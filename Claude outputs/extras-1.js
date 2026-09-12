@@ -85,7 +85,7 @@ const THEMES={
   frost:{primary:'#647cff',secondary:'#173d68',accent:'#a9e8ff',text:'#f2fbff',gradient:'linear',angle:'135deg',glow:'soft'},
   minimal:{primary:'#786b96',secondary:'#17151e',accent:'#ffffff',text:'#f5f2f8',gradient:'linear',angle:'90deg',glow:'none'}
 };
-const DEFAULT_PROFILE={primary:'#5865F2',secondary:'#24104d',accent:'#c59cff',text:'#f6f1ff',gradient:'radial',angle:'135deg',glow:'soft',layout:'classic',nameFont:'modern',nameColorMode:'solid',nameColor:'#ffffff',nameColor2:'#a970ff',nameEffect:'none',nameAnimation:'none',nameSize:30,nameWeight:700,frame:'none',decoration:'none',badge:'none',nameplate:'none',pronouns:'',activity:{type:'',title:'',description:''},connections:[]};
+const DEFAULT_PROFILE={primary:'#5865F2',secondary:'#24104d',accent:'#c59cff',text:'#f6f1ff',gradient:'radial',angle:'135deg',glow:'soft',layout:'classic',nameFont:'modern',nameColorMode:'solid',nameColor:'#ffffff',nameColor2:'#a970ff',nameEffect:'none',nameAnimation:'none',nameSize:30,nameWeight:700,frame:'none',decoration:'none',badge:'none',nameplate:'none',avatarFx:'none',pronouns:'',activity:{type:'',title:'',description:''},connections:[]};
 
 function getProfile(){return window.App?.getState?.()?.currentUser?.settings?.profileCustomization||{}}
 function value(id, fallback=''){return document.getElementById(id)?.value ?? fallback}
@@ -98,7 +98,7 @@ function collectProfile(){
   p.primary=value('settings-profile-primary',p.primary);p.secondary=value('settings-profile-secondary',p.secondary);p.accent=value('settings-profile-accent',p.accent);p.text=value('settings-profile-text',p.text);
   p.gradient=value('settings-profile-gradient',p.gradient);p.angle=value('settings-profile-angle',p.angle);p.glow=value('settings-profile-glow',p.glow);p.layout=value('settings-profile-layout',p.layout);
   p.nameFont=value('settings-name-font',p.nameFont);p.nameColorMode=value('settings-name-color-mode',p.nameColorMode);p.nameColor=value('settings-name-color',p.nameColor);p.nameColor2=value('settings-name-color2',p.nameColor2);p.nameEffect=value('settings-name-effect',p.nameEffect);p.nameAnimation=value('settings-name-animation',p.nameAnimation);p.nameSize=Number(value('settings-name-size',p.nameSize));p.nameWeight=Number(value('settings-name-weight',p.nameWeight));
-  p.frame=String(p.frame||'none');p.serverTag=value('settings-profile-tag',p.serverTag||'');p.decoration=value('settings-profile-decoration',p.decoration);p.badge=value('settings-profile-badge',p.badge);p.nameplate=value('settings-nameplate',p.nameplate);p.pronouns=value('settings-profile-pronouns',p.pronouns);
+  p.frame=String(p.frame||'none');p.avatarFx=String(window.__wcTempAvatarFx!=null?window.__wcTempAvatarFx:(p.avatarFx||'none'));p.serverTag=value('settings-profile-tag',p.serverTag||'');p.decoration=value('settings-profile-decoration',p.decoration);p.badge=value('settings-profile-badge',p.badge);p.nameplate=value('settings-nameplate',p.nameplate);p.pronouns=value('settings-profile-pronouns',p.pronouns);
   p.activity={type:value('settings-activity-type',p.activity.type),title:value('settings-activity-title',p.activity.title),description:value('settings-activity-description',p.activity.description)};
   p.connections=[];for(let i=1;i<=3;i++){const name=value(`settings-connection-${i}-name`),url=value(`settings-connection-${i}-url`);if(name&&url)p.connections.push({name,url})}
   return p;
@@ -114,7 +114,7 @@ function render(){
   root.dataset.glow=p.glow;root.dataset.font=p.nameFont;root.dataset.effect=p.nameEffect;root.dataset.animation=p.nameAnimation;root.dataset.colorMode=p.nameColorMode;root.dataset.frame=p.frame;root.dataset.decoration=p.decoration;
   const b=document.getElementById('wc-preview-banner');if(b)b.style.background=banner?`url("${String(banner).replace(/"/g,'')}") center/cover`:`${p.gradient==='radial'?'radial-gradient':'linear-gradient'}(${p.angle},${p.primary},${p.secondary})`;
   const av=document.getElementById('wc-preview-avatar');if(av)av.innerHTML=avatar?`<img src="${esc(avatar)}" alt="">`:`<span>${esc((u.displayName||u.username||'?')[0].toUpperCase())}</span>`;
-  const thumb=document.getElementById('settings-avatar-preview');if(thumb&&avatar)thumb.src=avatar;const bt=document.getElementById('settings-profile-banner');if(bt&&banner)bt.style.backgroundImage=`url("${String(banner).replace(/"/g,'')}")`;const ar=document.getElementById('wc-preview-avatar-wrap');if(ar)ar.dataset.frame=p.frame;
+  const thumb=document.getElementById('settings-avatar-preview');if(thumb&&avatar)thumb.src=avatar;const bt=document.getElementById('settings-profile-banner');if(bt&&banner)bt.style.backgroundImage=`url("${String(banner).replace(/"/g,'')}")`;const ar=document.getElementById('wc-preview-avatar-wrap');if(ar){ar.dataset.frame=p.frame;ar.dataset.avatarfx=p.avatarFx||'none';}
   const name=document.getElementById('wc-preview-name');if(name){name.textContent=value('settings-display-name',u.displayName||u.username||'Usuário');name.dataset.effect=p.nameEffect;name.dataset.animation=p.nameAnimation}
   const np=document.getElementById('wc-preview-nameplate');if(np)np.textContent=p.nameplate==='none'?'':p.nameplate.toUpperCase();
     const ub=document.getElementById('wc-preview-username');if(ub)ub.textContent='@'+(u.username||'usuario');
@@ -134,6 +134,7 @@ const ProfileDesigner={
     setVal('settings-name-font',p.nameFont);setVal('settings-name-color-mode',p.nameColorMode);setVal('settings-name-color',p.nameColor);setVal('settings-name-color2',p.nameColor2);setVal('settings-name-effect',p.nameEffect);setVal('settings-name-animation',p.nameAnimation);setVal('settings-name-size',p.nameSize);setVal('settings-name-weight',p.nameWeight);
     setVal('settings-profile-decoration',p.decoration);setVal('settings-profile-badge',p.badge);setVal('settings-nameplate',p.nameplate);setVal('settings-profile-pronouns',p.pronouns);setVal('settings-profile-tag',p.serverTag||'');
     document.querySelectorAll('#wc-frame-presets [data-frame]').forEach(b=>b.classList.toggle('active',b.dataset.frame===p.frame));window.__wcTempFrame=p.frame;
+    document.querySelectorAll('#wc-avatarfx-presets [data-avatarfx]').forEach(b=>b.classList.toggle('active',b.dataset.avatarfx===p.avatarFx));window.__wcTempAvatarFx=p.avatarFx;
     setVal('settings-activity-type',p.activity.type);setVal('settings-activity-title',p.activity.title);setVal('settings-activity-description',p.activity.description);
     (p.connections||[]).slice(0,3).forEach((x,i)=>{setVal(`settings-connection-${i+1}-name`,x.name);setVal(`settings-connection-${i+1}-url`,x.url)});
     const thumb=document.getElementById('settings-avatar-preview');if(thumb)thumb.src=u.avatarUrl||'';const b=document.getElementById('settings-profile-banner');if(b)b.style.backgroundImage=u.bannerUrl?`url("${u.bannerUrl}")`:'';
@@ -145,6 +146,7 @@ window.ProfileDesigner=ProfileDesigner;
 
 document.querySelectorAll('#wc-theme-presets [data-theme-preset]').forEach(b=>b.addEventListener('click',()=>applyTheme(b.dataset.themePreset)));
 document.querySelectorAll('#wc-frame-presets [data-frame]').forEach(b=>b.addEventListener('click',()=>{setVal('settings-profile-decoration',value('settings-profile-decoration'));document.querySelectorAll('#wc-frame-presets [data-frame]').forEach(x=>x.classList.toggle('active',x===b));const p=mergeProfile();p.frame=b.dataset.frame;document.getElementById('wc-profile-preview').dataset.frame=p.frame;window.__wcTempFrame=p.frame;render()}));
+document.querySelectorAll('#wc-avatarfx-presets [data-avatarfx]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#wc-avatarfx-presets [data-avatarfx]').forEach(x=>x.classList.toggle('active',x===b));window.__wcTempAvatarFx=b.dataset.avatarfx;const wrap=document.getElementById('wc-preview-avatar-wrap');if(wrap)wrap.dataset.avatarfx=b.dataset.avatarfx;render()}));
 document.querySelectorAll('.wc-profile-controls input,.wc-profile-controls select,.wc-profile-controls textarea').forEach(e=>e.addEventListener('input',render));
 document.querySelectorAll('.wc-profile-controls select').forEach(e=>e.addEventListener('change',render));
 
@@ -152,7 +154,10 @@ document.getElementById('wc-profile-reset')?.addEventListener('click',()=>{
   if(!confirm('Restaurar a personalização padrão?'))return;
   const p={...DEFAULT_PROFILE,activity:{...DEFAULT_PROFILE.activity},connections:[]};
   Object.entries({primary:'settings-profile-primary',secondary:'settings-profile-secondary',accent:'settings-profile-accent',text:'settings-profile-text',gradient:'settings-profile-gradient',angle:'settings-profile-angle',glow:'settings-profile-glow',layout:'settings-profile-layout',nameFont:'settings-name-font',nameColorMode:'settings-name-color-mode',nameColor:'settings-name-color',nameColor2:'settings-name-color2',nameEffect:'settings-name-effect',nameAnimation:'settings-name-animation',nameSize:'settings-name-size',nameWeight:'settings-name-weight',decoration:'settings-profile-decoration',badge:'settings-profile-badge',nameplate:'settings-nameplate',serverTag:'settings-profile-tag',pronouns:'settings-profile-pronouns','activity.type':'settings-activity-type','activity.title':'settings-activity-title','activity.description':'settings-activity-description'}).forEach(([k,id])=>{let v=k.includes('.')?p.activity[k.split('.')[1]]:p[k];setVal(id,v)});
-  for(let i=1;i<=3;i++){setVal(`settings-connection-${i}-name`,'');setVal(`settings-connection-${i}-url`,'')}window.__wcTempFrame='none';render();
+  for(let i=1;i<=3;i++){setVal(`settings-connection-${i}-name`,'');setVal(`settings-connection-${i}-url`,'')}window.__wcTempFrame='none';window.__wcTempAvatarFx='none';
+  document.querySelectorAll('#wc-frame-presets [data-frame]').forEach(x=>x.classList.toggle('active',x.dataset.frame==='none'));
+  document.querySelectorAll('#wc-avatarfx-presets [data-avatarfx]').forEach(x=>x.classList.toggle('active',x.dataset.avatarfx==='none'));
+  render();
 });
 
 document.getElementById('settings-save-profile')?.addEventListener('click',async()=>{
@@ -163,9 +168,9 @@ document.getElementById('settings-save-profile')?.addEventListener('click',async
     if(bannerData!==undefined)body.bannerUrl=bannerData;
     const r=await fetch('/api/auth/profile',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Não foi possível salvar o perfil.');
-    const p=collectProfile();p.frame=window.__wcTempFrame||p.frame;
+    const p=collectProfile();p.frame=window.__wcTempFrame||p.frame;p.avatarFx=window.__wcTempAvatarFx||p.avatarFx;
     await saveSettings({profileCustomization:p},'Perfil salvo com sucesso.');
-    avatarData=undefined;bannerData=undefined;window.__wcTempFrame=undefined;
+    avatarData=undefined;bannerData=undefined;window.__wcTempFrame=undefined;window.__wcTempAvatarFx=undefined;
     ProfileDesigner.refresh();
   }catch(e){window.App?.toast?.(e.message,'error')}
   finally{btn.dataset.busy='';btn.disabled=false;btn.textContent=old}

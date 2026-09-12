@@ -284,7 +284,7 @@
     <div id="typing-indicator" class="typing-indicator"></div>
 
     <form id="message-form" class="message-form">
-      <div class="composer-tools"><button type="button" id="media-btn" class="composer-btn" title="Mídia">🖼️</button><button type="button" id="camera-btn" class="composer-btn" title="Câmera">📷</button><button type="button" id="emoji-btn" class="composer-btn" title="Emojis">😊</button><button type="button" id="sticker-btn" class="composer-btn" title="Figurinhas">✨</button></div><textarea id="message-input" maxlength="2000" rows="1" placeholder="Digite uma mensagem..." disabled></textarea>
+      <div class="composer-tools"><button type="button" id="media-btn" class="composer-btn" title="Mídia">🖼️</button><button type="button" id="camera-btn" class="composer-btn" title="Câmera">📷</button><button type="button" id="emoji-btn" class="composer-btn" title="Emojis">😊</button><button type="button" id="sticker-btn" class="composer-btn" title="Figurinhas">✨</button><button type="button" id="backflip-btn" class="composer-btn hidden" title="Mortal no avatar">🤸</button></div><textarea id="message-input" maxlength="2000" rows="1" placeholder="Digite uma mensagem..." disabled></textarea>
       <button type="submit" class="btn btn-primary" disabled>Enviar</button><div id="emoji-popover" class="emoji-popover hidden"></div><div id="sticker-popover" class="emoji-popover hidden"></div>
       <div id="camera-popover" class="emoji-popover camera-popover hidden">
         <button type="button" class="camera-popover-option" id="camera-take-photo">📸 Tirar foto</button>
@@ -484,6 +484,18 @@
           <label>Emblema<select id="settings-profile-badge"><option value="none">Nenhum</option><option value="star">⭐ Estrela</option><option value="fire">🔥 Fogo</option><option value="rocket">🚀 Foguete</option><option value="crown">👑 Coroa</option></select></label>
           <label>Placa de nome<select id="settings-nameplate"><option value="none">Nenhuma</option><option value="minimal">Minimal</option><option value="neon">Neon</option><option value="cyber">Cyber</option><option value="galaxy">Galaxy</option><option value="chrome">Chrome</option></select></label><label>Tag<input id="settings-profile-tag" maxlength="16" placeholder="DEV"></label>
         </div>
+      </section>
+
+      <section class="wc-editor-section">
+        <div class="wc-editor-section-title"><span>Avatar interativo</span><small>Presets animados para a foto de perfil</small></div>
+        <div class="wc-preset-row" id="wc-avatarfx-presets">
+          <button type="button" data-avatarfx="none">Nenhum</button>
+          <button type="button" data-avatarfx="pirouette">🌀 Pirueta</button>
+          <button type="button" data-avatarfx="hover-burst">✨ Brilho ao passar o mouse</button>
+          <button type="button" data-avatarfx="pet-cat">🐱 Gatinho companheiro</button>
+          <button type="button" data-avatarfx="pet-bird">🐦 Passarinho companheiro</button>
+        </div>
+        <p class="text-muted" style="margin:6px 0 0;font-size:12px">Os presets de gatinho/passarinho e a pirueta aparecem no seu cartão de perfil (abra "Ver perfil" para testar).</p>
       </section>
 
       <section class="wc-editor-section">
@@ -694,10 +706,46 @@
 
   <div id="modal-admin" class="modal modal-admin hidden">
     <div class="admin-header"><div><h3>Painel de administração</h3><p>Moderação, economia, permissões e efeitos reversíveis.</p></div><span class="admin-badge">ADMIN</span></div>
-    <div class="admin-tools"><input id="admin-search" placeholder="Pesquisar por usuário…"><button id="admin-search-btn" class="btn btn-small">Pesquisar</button><span class="admin-tools-hint">Moderação • Economia • Cargos • Efeitos • Segurança</span></div>
-    <div id="admin-users" class="admin-users"></div>
-    <section class="admin-log-section"><h4>Registro de ações</h4><div id="admin-logs" class="admin-logs"></div></section>
+    <div class="admin-tabs">
+      <button type="button" id="admin-tab-users" class="btn btn-small active">👥 Usuários</button>
+      <button type="button" id="admin-tab-reports" class="btn btn-small">🚩 Denúncias</button>
+    </div>
+    <div id="admin-panel-users">
+      <div class="admin-tools"><input id="admin-search" placeholder="Pesquisar por usuário…"><button id="admin-search-btn" class="btn btn-small">Pesquisar</button><span class="admin-tools-hint">Moderação • Economia • Cargos • Efeitos • Segurança</span></div>
+      <div id="admin-users" class="admin-users"></div>
+      <section class="admin-log-section"><h4>Registro de ações</h4><div id="admin-logs" class="admin-logs"></div></section>
+    </div>
+    <div id="admin-panel-reports" class="hidden">
+      <div class="admin-tools">
+        <select id="admin-reports-status">
+          <option value="pending">Pendentes</option>
+          <option value="resolved">Resolvidas</option>
+          <option value="all">Todas</option>
+        </select>
+        <button id="admin-reports-refresh" class="btn btn-small">🔄 Atualizar</button>
+        <span class="admin-tools-hint">Motivo • Prints enviados • Banir ou ignorar</span>
+      </div>
+      <div id="admin-reports" class="admin-reports"></div>
+    </div>
     <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Fechar</button></div>
+  </div>
+
+  <div id="modal-report" class="modal hidden">
+    <h3>Denunciar</h3>
+    <p class="text-muted" id="report-target-label"></p>
+    <form id="report-form">
+      <label>Motivo da denúncia
+        <textarea name="reason" maxlength="500" rows="4" required placeholder="Descreva o que aconteceu…"></textarea>
+      </label>
+      <label>Prints (opcional, até 3 imagens)
+        <input type="file" id="report-evidence-input" accept="image/*" multiple>
+      </label>
+      <div id="report-evidence-preview" class="report-evidence-preview"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
+        <button type="submit" class="btn btn-danger" id="report-submit-btn">Enviar denúncia</button>
+      </div>
+    </form>
   </div>
 
   <div id="modal-profile" class="modal modal-profile hidden">

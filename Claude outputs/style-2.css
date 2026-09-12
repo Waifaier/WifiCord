@@ -3915,3 +3915,89 @@ html.has-custom-titlebar #members-panel {
   pointer-events: none;
 }
 
+/* ================================================================
+   Amigos / bloqueio / denúncias — cartão de perfil, contexto de membro e
+   mensagem, e a aba "Denúncias" do painel de admin.
+   Ver client/js/features.js (renderProfileActions, memberContext,
+   messageContext, adminPanel/loadReports) e server/routes/moderation.js.
+   ================================================================ */
+.admin-tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.admin-tabs .btn.active { background: var(--accent); color: #fff; border-color: transparent; }
+
+.admin-reports { display: flex; flex-direction: column; gap: 12px; max-height: 60vh; overflow: auto; padding-right: 4px; }
+.report-card { background: #141521; border: 1px solid #ffffff0d; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.report-card-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: baseline; }
+.report-reported { font-size: 14px; }
+.report-meta { font-size: 12px; color: #8f91a4; }
+.report-reason { font-size: 13px; color: #ddd; white-space: pre-wrap; }
+.report-context { font-size: 12px; color: #aaa; font-style: italic; background: #0f1017; border-radius: 8px; padding: 8px; }
+.report-evidence { display: flex; gap: 8px; flex-wrap: wrap; }
+.report-evidence img { width: 90px; height: 90px; object-fit: cover; border-radius: 8px; border: 1px solid #ffffff14; }
+.report-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.report-resolution { font-size: 12px; color: #8f91a4; }
+
+.profile-blocked-note { font-size: 13px; color: #ff8fa3; }
+
+#report-form label { display: block; margin-bottom: 12px; }
+.report-evidence-preview { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.report-evidence-thumb { position: relative; width: 64px; height: 64px; }
+.report-evidence-thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
+.report-evidence-thumb button {
+  position: absolute; top: -6px; right: -6px; width: 20px; height: 20px;
+  border-radius: 50%; background: #ff4d6d; color: #fff; border: 0;
+  cursor: pointer; font-size: 11px; line-height: 20px; padding: 0;
+}
+
+@media (max-width: 900px) {
+  .admin-reports { max-height: 50vh; }
+  .report-evidence img, .report-evidence-thumb { width: 70px; height: 70px; }
+}
+
+/* Avatar interativo: presets "Pirueta", "Brilho ao passar o mouse" e os
+   companheiros (gatinho/passarinho) que seguem o mouse dentro do cartão de
+   perfil. Reaproveita as classes .profile-avatar-decorated já existentes. */
+@keyframes avatarPirouette { to { transform: rotate(360deg); } }
+.profile-avatar-decorated.avatar-fx-pirouette img,
+.profile-avatar-decorated.avatar-fx-pirouette > span { animation: avatarPirouette 2.6s linear infinite; }
+
+@keyframes avatarHoverBurst {
+  0% { transform: scale(.4) rotate(0deg); opacity: 0; }
+  40% { opacity: 1; }
+  100% { transform: scale(1.6) rotate(30deg); opacity: 0; }
+}
+.profile-avatar-decorated.avatar-fx-hover-burst { cursor: pointer; }
+.profile-avatar-decorated.avatar-fx-hover-burst::after {
+  content: '✨ ✨ ✨'; position: absolute; inset: -16px; z-index: 5;
+  display: grid; place-items: center; font-size: 15px; opacity: 0; pointer-events: none;
+}
+.profile-avatar-decorated.avatar-fx-hover-burst:hover::after { opacity: 1; animation: avatarHoverBurst .6s ease-out; }
+
+.wc-avatar-pet {
+  position: absolute; top: 0; left: 0; font-size: 26px; pointer-events: none;
+  z-index: 6; filter: drop-shadow(0 3px 6px #000a); will-change: transform;
+}
+
+/* Preview ao vivo no editor de perfil (aba de personalização). */
+#wc-preview-avatar-wrap[data-avatarfx="pirouette"] .wc-preview-avatar img,
+#wc-preview-avatar-wrap[data-avatarfx="pirouette"] .wc-preview-avatar span { animation: avatarPirouette 2.6s linear infinite; }
+#wc-preview-avatar-wrap[data-avatarfx="hover-burst"] { cursor: pointer; }
+#wc-preview-avatar-wrap[data-avatarfx="hover-burst"]::after {
+  content: '✨ ✨ ✨'; position: absolute; inset: -16px; z-index: 5;
+  display: grid; place-items: center; font-size: 15px; opacity: 0; pointer-events: none;
+}
+#wc-preview-avatar-wrap[data-avatarfx="hover-burst"]:hover::after { opacity: 1; animation: avatarHoverBurst .6s ease-out; }
+
+/* Botão "mortal": só aparece para a allowlist (ver features.js) e faz a
+   própria foto de perfil de quem clicou dar um mortal, visível pra todos. */
+@keyframes avatarBackflip {
+  0% { transform: rotate(0deg) scaleY(1); }
+  15% { transform: rotate(60deg) scaleY(.6); }
+  30% { transform: rotate(150deg) scaleY(1); }
+  50% { transform: rotate(270deg) scaleY(.6); }
+  70% { transform: rotate(360deg) scaleY(1) translateY(-10px); }
+  85% { transform: rotate(360deg) translateY(-4px); }
+  100% { transform: rotate(360deg) translateY(0); }
+}
+.avatar-backflip { display: inline-block; animation: avatarBackflip .8s cubic-bezier(.34,1.56,.64,1); }
+#backflip-btn { font-size: 18px; }
+

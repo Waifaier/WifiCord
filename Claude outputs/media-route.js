@@ -1,0 +1,266 @@
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const db = require('../database/db');
+const User = require('../models/User');
+const { requireAuth } = require('./auth');
+const { UPLOAD_DIR } = require('../storage');
+
+const router = express.Router();
+
+// Era 4GB — enorme demais pro servidor gratuito (512MB de RAM/container).
+// Mesmo o upload sendo gravado direto no disco em stream (nunca carrega o
+// arquivo inteiro na memória do processo Node — ver req.pipe(stream)
+// abaixo), a ESCRITA em si ainda passa pelo cache de página do Linux, que
+// conta dentro do limite de memória do container. Um upload grande (mesmo
+// bem menor que 4GB) podia sozinho estourar esse limite e derrubar o
+// servidor pra TODO MUNDO, não só pra quem estava enviando.
+const MAX_BYTES = 50 * 1024 * 1024;
+
+const ALLOWED = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'image/avif',
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+  'video/x-matroska',
+  'audio/mpeg',
+  'audio/ogg',
+  'audio/wav',
+  'audio/webm',
+  'application/pdf',
+  'application/zip',
+  'application/x-7z-compressed',
+  'application/x-rar-compressed',
+  'text/plain',
+  'application/json',
+  'application/octet-stream'
+]);
+
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+// A extensão salva em disco é SEMPRE escolhida pelo servidor a partir do
+// mime detectado — nunca a partir do nome de arquivo enviado pelo cliente.
+// Isso fecha um caminho de XSS armazenado: sem isso, alguém podia mandar
+// Content-Type "application/octet-stream" (permitido, pra arquivos
+// genéricos) com um X-File-Name terminando em ".html" e conseguir um
+// arquivo .html de verdade salvo em /uploads, servido pelo mesmo domínio
+// do app e executado como página normal pelo navegador de quem abrisse o
+// link. Com a extensão fixada pelo mime, isso não é mais possível.
+const SAFE_EXTENSION_BY_MIME = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+  'image/avif': '.avif',
+  'video/mp4': '.mp4',
+  'video/webm': '.webm',
+  'video/quicktime': '.mov',
+  'video/x-matroska': '.mkv',
+  'audio/mpeg': '.mp3',
+  'audio/ogg': '.ogg',
+  'audio/wav': '.wav',
+  'audio/webm': '.webm',
+  'application/pdf': '.pdf',
+  'application/zip': '.zip',
+  'application/x-7z-compressed': '.7z',
+  'application/x-rar-compressed': '.rar',
+  'text/plain': '.txt',
+  'application/json': '.json',
+  'application/octet-stream': '.bin',
+};
+
+function safeName(name) {
+  return String(name || 'arquivo')
+    .replace(/[^a-zA-Z0-9._-]+/g, '_')
+    .slice(0, 120) || 'arquivo';
+}
+
+function publicRow(row) {
+  return {
+    id: row.id,
+    name: row.original_name,
+    mime: row.mime_type,
+    size: Number(row.size_bytes),
+    url: row.url,
+    createdAt: row.created_at,
+    ownerId: row.user_id
+  };
+}
+
+router.get('/library', requireAuth, async (req, res) => {
+  try {
+    const rows = db.prepare(`SELECT * FROM media_files WHERE user_id = ? ORDER BY id DESC LIMIT 200`).all(req.session.userId);
+
+    res.json({
+      media: rows.map(publicRow)
+    });
+  } catch (err) {
+    console.error('Erro ao carregar biblioteca:', err);
+    res.status(500).json({
+      error: 'Não foi possível carregar a biblioteca.'
+    });
+  }
+});
+
+router.post('/upload', requireAuth, async (req, res) => {
+  const mime = String(
+    req.headers['content-type'] || 'application/octet-stream'
+  )
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+
+  let rawName = String(req.headers['x-file-name'] || 'arquivo');
+
+  try {
+    rawName = decodeURIComponent(rawName);
+  } catch (_) {}
+
+  const name = safeName(rawName);
+  const sizeHeader = Number(req.headers['content-length'] || 0);
+
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId);
+
+    if (!user) {
+      return res.status(401).json({
+        error: 'Não autenticado.'
+      });
+    }
+
+    if (sizeHeader > MAX_BYTES) {
+      return res.status(413).json({
+        error: 'O arquivo excede o limite de 50 MB.'
+      });
+    }
+
+    if (!ALLOWED.has(mime)) {
+      return res.status(415).json({
+        error: 'Tipo de arquivo não suportado.'
+      });
+    }
+
+    const ext = SAFE_EXTENSION_BY_MIME[mime] || '.bin';
+
+    const filename =
+      `${Date.now()}-${crypto.randomBytes(10).toString('hex')}${ext}`;
+
+    const dest = path.join(UPLOAD_DIR, filename);
+
+    const stream = fs.createWriteStream(dest, {
+      flags: 'wx'
+    });
+
+    let bytes = 0;
+    let aborted = false;
+    let responded = false;
+
+    req.on('data', chunk => {
+      bytes += chunk.length;
+
+      if (bytes > MAX_BYTES && !aborted) {
+        aborted = true;
+
+        req.destroy(new Error('Arquivo muito grande'));
+        stream.destroy();
+
+        try {
+          fs.unlinkSync(dest);
+        } catch (_) {}
+      }
+    });
+
+    req.on('aborted', () => {
+      aborted = true;
+
+      stream.destroy();
+
+      try {
+        fs.unlinkSync(dest);
+      } catch (_) {}
+    });
+
+    stream.on('error', err => {
+      if (responded) return;
+
+      responded = true;
+
+      console.error('Erro no upload:', err);
+
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: aborted
+            ? 'Upload interrompido.'
+            : 'Não foi possível salvar o arquivo.'
+        });
+      }
+    });
+
+    stream.on('finish', async () => {
+      if (aborted || responded) return;
+
+      try {
+        const stat = fs.statSync(dest);
+
+        if (stat.size > MAX_BYTES) {
+          try {
+            fs.unlinkSync(dest);
+          } catch (_) {}
+
+          responded = true;
+
+          return res.status(413).json({
+            error: 'O arquivo excede o limite de 50 MB.'
+          });
+        }
+
+        const url = `/uploads/${encodeURIComponent(filename)}`;
+
+        const info = db.prepare(`INSERT INTO media_files
+           (user_id, original_name, stored_name, mime_type, size_bytes, url)
+           VALUES (?, ?, ?, ?, ?, ?)`).run(
+          req.session.userId, name, filename, mime, stat.size, url
+        );
+        const row = db.prepare('SELECT * FROM media_files WHERE id = ?').get(info.lastInsertRowid);
+
+        responded = true;
+
+        res.json({
+          ok: true,
+          media: publicRow(row)
+        });
+      } catch (err) {
+        console.error('Erro ao registrar mídia no SQLite:', err);
+
+        try {
+          fs.unlinkSync(dest);
+        } catch (_) {}
+
+        if (!responded && !res.headersSent) {
+          responded = true;
+
+          res.status(500).json({
+            error: 'Não foi possível registrar o arquivo.'
+          });
+        }
+      }
+    });
+
+    req.pipe(stream);
+  } catch (err) {
+    console.error('Erro no upload:', err);
+
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: 'Erro interno durante o upload.'
+      });
+    }
+  }
+});
+
+module.exports = router;

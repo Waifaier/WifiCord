@@ -100,6 +100,8 @@
       });
 
       this.socket.on('friend:request:update', function () { if (window.App) window.App.refreshFriendsRealtime(); });
+      this.socket.on('avatar:backflip', function (data) { window.WCFeatures?.applyAvatarBackflip?.(data); });
+      this.socket.on('admin:report:new', function () { window.App?.toast?.('Nova denúncia recebida.', 'info'); });
       this.socket.on('server:profile:update', function(d){ window.App?.handleServerProfileUpdate?.(d?.server); });
       this.socket.on('server:members:update', async function (d) { if (!d?.serverId || !window.App?.getState) return; const s=window.App.getState(); if(String(s.activeServerId)!==String(d.serverId)) return; try { const r=await fetch('/api/servers/'+encodeURIComponent(d.serverId)+'/members',{credentials:'same-origin'}); const data=await r.json(); if(r.ok) window.App.setServerMembers(data); } catch(_){} });
       this.socket.on('server:channels:update', async function(d){ if(!d?.serverId||!window.App?.getState) return; const s=window.App.getState(); if(String(s.activeServerId)!==String(d.serverId)) return; try{await window.App.openServer(d.serverId);}catch(_){} });
@@ -215,6 +217,10 @@
     toggleReaction(messageId, emoji, callback) {
       if (!this.socket) return;
       this.socket.emit('message:reaction', { messageId, emoji }, callback);
+    },
+
+    triggerBackflip() {
+      if (this.socket) this.socket.emit('avatar:backflip');
     },
   };
 
