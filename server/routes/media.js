@@ -9,7 +9,14 @@ const { UPLOAD_DIR } = require('../storage');
 
 const router = express.Router();
 
-const MAX_BYTES = 4 * 1024 * 1024 * 1024;
+// Era 4GB — enorme demais pro servidor gratuito (512MB de RAM/container).
+// Mesmo o upload sendo gravado direto no disco em stream (nunca carrega o
+// arquivo inteiro na memória do processo Node — ver req.pipe(stream)
+// abaixo), a ESCRITA em si ainda passa pelo cache de página do Linux, que
+// conta dentro do limite de memória do container. Um upload grande (mesmo
+// bem menor que 4GB) podia sozinho estourar esse limite e derrubar o
+// servidor pra TODO MUNDO, não só pra quem estava enviando.
+const MAX_BYTES = 50 * 1024 * 1024;
 
 const ALLOWED = new Set([
   'image/png',
@@ -128,7 +135,7 @@ router.post('/upload', requireAuth, async (req, res) => {
 
     if (sizeHeader > MAX_BYTES) {
       return res.status(413).json({
-        error: 'O arquivo excede o limite de 4 GB.'
+        error: 'O arquivo excede o limite de 50 MB.'
       });
     }
 
@@ -208,7 +215,7 @@ router.post('/upload', requireAuth, async (req, res) => {
           responded = true;
 
           return res.status(413).json({
-            error: 'O arquivo excede o limite de 4 GB.'
+            error: 'O arquivo excede o limite de 50 MB.'
           });
         }
 
