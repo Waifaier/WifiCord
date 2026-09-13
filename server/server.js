@@ -33,6 +33,7 @@ async function bootstrap() {
   const webrtcRouter = require('./routes/webrtc');
   const pushRouter = require('./routes/push');
   const moderationRouter = require('./routes/moderation');
+  const announcementsRouter = require('./routes/announcements');
   const { initSockets } = require('./sockets');
 
   // Identificador único gerado a cada vez que o processo sobe (cada deploy
@@ -158,6 +159,7 @@ async function bootstrap() {
   app.use('/api/webrtc', webrtcRouter);
   app.use('/api/push', pushRouter);
   app.use('/api/moderation', moderationRouter);
+  app.use('/api/announcements', announcementsRouter);
 
   // Usado pelo app desktop pra detectar quando uma nova versão foi
   // publicada (ver desktop-app/main.js). Sem cache nenhum de propósito.

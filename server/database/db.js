@@ -216,6 +216,14 @@ CREATE TABLE IF NOT EXISTS reports (
   FOREIGN KEY(resolved_by) REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, id DESC);
+CREATE TABLE IF NOT EXISTS announcements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_by INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL
+);
 `);
 
 for (const [table, column, definition] of [

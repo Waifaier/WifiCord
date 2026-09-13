@@ -20,6 +20,10 @@
 
       this.socket.on('connect', function () {
         if (window.App && window.App.refreshFriendsRealtime) window.App.refreshFriendsRealtime();
+        // Confere se existe um aviso da equipe ainda não lido por esta
+        // pessoa (ver client/js/announcements.js) — cobre quem abre o site
+        // DEPOIS que o aviso já foi enviado, não só quem já estava online.
+        window.WCAnnouncements?.checkCurrent?.();
       });
 
       this.socket.on('connect_error', function (err) {
@@ -104,6 +108,7 @@
       this.socket.on('friend:request:update', function () { if (window.App) window.App.refreshFriendsRealtime(); });
       this.socket.on('avatar:backflip', function (data) { window.WCFeatures?.applyAvatarBackflip?.(data); });
       this.socket.on('admin:report:new', function () { window.App?.toast?.('Nova denúncia recebida.', 'info'); });
+      this.socket.on('admin:announcement', function (d) { window.WCAnnouncements?.handleIncoming?.(d?.announcement); });
       this.socket.on('server:profile:update', function(d){ window.App?.handleServerProfileUpdate?.(d?.server); });
       this.socket.on('server:members:update', async function (d) { if (!d?.serverId || !window.App?.getState) return; const s=window.App.getState(); if(String(s.activeServerId)!==String(d.serverId)) return; try { const r=await fetch('/api/servers/'+encodeURIComponent(d.serverId)+'/members',{credentials:'same-origin'}); const data=await r.json(); if(r.ok) window.App.setServerMembers(data); } catch(_){} });
       this.socket.on('server:channels:update', async function(d){ if(!d?.serverId||!window.App?.getState) return; const s=window.App.getState(); if(String(s.activeServerId)!==String(d.serverId)) return; try{await window.App.openServer(d.serverId);}catch(_){} });

@@ -204,6 +204,23 @@
       </div>
       <button type="button" id="settings-btn" class="btn btn-icon" title="Configurações">⚙️</button>
       <button type="button" id="logout-btn" class="btn btn-icon" title="Sair">⏻</button><div id="mini-call-dock" class="mini-call-dock hidden" title="Voltar para a chamada"><span class="mini-call-status">📞 Em chamada</span><button type="button" id="mini-call-mic" title="Microfone">🎤</button><button type="button" id="mini-call-cam" title="Câmera">📷</button><button type="button" id="mini-call-screen" title="Apresentar">🖥️</button><button type="button" id="mini-call-headphones" title="Desligar fone">🎧</button><button type="button" id="mini-call-hangup" class="danger" title="Desligar call">📵</button></div>
+      <!-- Popup flutuante com a apresentação de tela de alguém, visível quando
+           você sai da tela da própria call mas a apresentação continua rolando
+           (ver updateFloatPopup em call.js) — arrastável pela barrinha do topo. -->
+      <div id="call-float-popup" class="call-float-popup hidden">
+        <div id="call-float-handle" class="call-float-handle">
+          <span id="call-float-name" class="call-float-name">Apresentando</span>
+          <div class="call-float-handle-actions">
+            <button type="button" id="call-float-expand" class="call-float-icon-btn" title="Voltar para a chamada" aria-label="Voltar para a chamada">⤢</button>
+            <button type="button" id="call-float-close" class="call-float-icon-btn" title="Fechar" aria-label="Fechar">✕</button>
+          </div>
+        </div>
+        <div class="call-float-body">
+          <video id="call-float-video" autoplay muted playsinline aria-label="Apresentação de tela"></video>
+          <video id="call-float-video-2" autoplay muted playsinline class="hidden" aria-label="Segunda apresentação de tela"></video>
+        </div>
+        <div id="call-float-switcher" class="call-float-switcher hidden"></div>
+      </div>
     </div>
   </aside>
 
@@ -709,6 +726,7 @@
     <div class="admin-tabs">
       <button type="button" id="admin-tab-users" class="btn btn-small active">👥 Usuários</button>
       <button type="button" id="admin-tab-reports" class="btn btn-small">🚩 Denúncias</button>
+      <button type="button" id="admin-tab-announcements" class="btn btn-small">📣 Avisos</button>
     </div>
     <div id="admin-panel-users">
       <div class="admin-tools"><input id="admin-search" placeholder="Pesquisar por usuário…"><button id="admin-search-btn" class="btn btn-small">Pesquisar</button><span class="admin-tools-hint">Moderação • Economia • Cargos • Efeitos • Segurança</span></div>
@@ -726,6 +744,22 @@
         <span class="admin-tools-hint">Motivo • Prints enviados • Banir ou ignorar</span>
       </div>
       <div id="admin-reports" class="admin-reports"></div>
+    </div>
+    <div id="admin-panel-announcements" class="hidden">
+      <p class="admin-announcements-hint">Envie um aviso pra aparecer na tela de todo mundo agora mesmo. Enviar um aviso novo substitui o anterior.</p>
+      <form id="admin-announcement-form" class="admin-announcement-form">
+        <label>Título
+          <input type="text" id="admin-announcement-title" maxlength="120" placeholder="Ex.: A transmissão da versão beta foi finalizada!" required>
+        </label>
+        <label>Mensagem
+          <textarea id="admin-announcement-message" maxlength="800" rows="4" placeholder="Ex.: Todos os serviços já estão operando normalmente. Agradecemos a todos que participaram e testaram junto com a gente." required></textarea>
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="admin-announcement-preview-btn" class="btn btn-ghost">Pré-visualizar</button>
+          <button type="submit" class="btn btn-primary">Enviar aviso pra todo mundo</button>
+        </div>
+      </form>
+      <div id="admin-announcement-current" class="admin-announcement-current"></div>
     </div>
     <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Fechar</button></div>
   </div>
@@ -813,6 +847,22 @@
 
 <div id="toast-container" class="toast-container"></div>
 
+<!-- Aviso da equipe: pop-up que aparece pra todo mundo quando um admin manda
+     um aviso pelo painel administrativo (ver client/js/announcements.js). -->
+<div id="announcement-overlay" class="announcement-overlay hidden">
+  <div id="announcement-card" class="announcement-card" role="dialog" aria-modal="true" aria-labelledby="announcement-heading">
+    <div class="announcement-card-top">
+      <span class="announcement-badge"><i class="announcement-badge-dot"></i>AVISO</span>
+      <button type="button" id="announcement-close" class="announcement-close-btn" aria-label="Fechar" data-icon="close"></button>
+    </div>
+    <div class="announcement-icon" data-icon="megaphone" aria-hidden="true"></div>
+    <h2 id="announcement-heading" class="announcement-heading">Aviso da <span>Equipe</span></h2>
+    <h3 id="announcement-title" class="announcement-title"></h3>
+    <p id="announcement-message" class="announcement-message"></p>
+    <button type="button" id="announcement-ok" class="announcement-ok-btn">Entendi! <i data-icon="check-circle"></i></button>
+  </div>
+</div>
+
 <!-- defer: baixa os 15 arquivos em paralelo (em vez de um por vez, em série)
      e só executa depois do HTML pronto, mantendo a MESMA ordem de execução
      de antes. Isso reduz bastante o tempo até o app ficar interativo,
@@ -823,6 +873,7 @@
 <script src="/js/auth-3d.js" defer></script>
 <script src="/js/redesign-ui.js" defer></script>
 <script src="/js/icons.js" defer></script>
+<script src="/js/announcements.js" defer></script>
 <script src="/js/notifications.js" defer></script>
 <script src="/js/socket.js" defer></script>
 <script src="/js/sounds.js" defer></script>

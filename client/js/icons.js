@@ -37,6 +37,9 @@
     window: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><circle cx="6.5" cy="6.5" r=".4" fill="currentColor" stroke="none"/>'),
     globe: svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.5 4 5.6 4 9s-1.4 6.5-4 9c-2.6-2.5-4-5.6-4-9s1.4-6.5 4-9z"/>'),
     sparkles: svg('<path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>'),
+    close: svg('<path d="M6 6l12 12"/><path d="M18 6L6 18"/>'),
+    megaphone: svg('<path d="M3 10v4a1 1 0 0 0 1 1h1.4l1.1 5h2l-1-5H9l10 4V6L9 10H4a1 1 0 0 0-1 1z"/><path d="M17.5 8.2a5 5 0 0 1 0 7.6"/>'),
+    'check-circle': svg('<circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16 9.4"/>'),
   };
 
   function setIcon(id, name) {

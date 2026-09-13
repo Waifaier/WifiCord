@@ -259,7 +259,8 @@
       callContextScreenVolumeRow: $('call-context-screen-volume-row'),
       callContextScreenVolumeRange: $('call-context-screen-volume-range'), callContextScreenVolumeValue: $('call-context-screen-volume-value'),
       callContextScreenMuteBtn: $('call-context-screen-mute-toggle'),
-      callStage: document.querySelector('.call-stage'), stageImmersiveToggle: $('call-stage-immersive-toggle')
+      callStage: document.querySelector('.call-stage'), stageImmersiveToggle: $('call-stage-immersive-toggle'),
+      userBar: $('user-bar')
     });
     reparentFloatingElements();
   }
@@ -282,6 +283,33 @@
     if (el.miniDock && el.miniDock.parentElement !== document.body) document.body.appendChild(el.miniDock);
     if (el.floatPopup && el.floatPopup.parentElement !== document.body) document.body.appendChild(el.floatPopup);
   }
+
+  // -------------------------------------------------------------------------
+  // Gruda o mini-dock bem em cima do cartão do próprio usuário (#user-bar,
+  // canto inferior esquerdo da barra lateral) em vez de deixá-lo flutuando
+  // solto num canto qualquer da tela (era assim antes — pedido explícito
+  // pra mudar). Continua sendo filho do <body> (ver reparentFloatingElements
+  // acima — necessário pra não ficar cortado pelo backdrop-filter do
+  // #sidebar), só que agora a posição É CALCULADA a partir de onde o
+  // #user-bar realmente está na tela, em vez de um canto fixo do viewport.
+  // Se por algum motivo o #user-bar não for encontrado/estiver com tamanho
+  // zero (layout ainda não pronto, tela muito estreita etc.), não mexe em
+  // nada — o CSS já tem uma posição de reserva num canto da tela (ver
+  // .mini-call-dock no style.css) pra nunca sumir de vez.
+  // -------------------------------------------------------------------------
+  function positionMiniDock() {
+    if (!el.miniDock || !el.userBar) return;
+    const rect = el.userBar.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const gap = 8;
+    el.miniDock.style.left = Math.round(rect.left) + 'px';
+    el.miniDock.style.right = 'auto';
+    el.miniDock.style.bottom = Math.round(window.innerHeight - rect.top + gap) + 'px';
+    el.miniDock.style.top = 'auto';
+    el.miniDock.style.maxWidth = Math.round(rect.width) + 'px';
+  }
+  window.addEventListener('resize', positionMiniDock);
+  window.addEventListener('orientationchange', () => setTimeout(positionMiniDock, 150));
 
   // -------------------------------------------------------------------------
   // Arrastar o popup flutuante pela tela (Pointer Events cobre mouse E toque
@@ -634,7 +662,9 @@
     const inTarget = !!state.inCall && !state.groupMode && !!s?.activeDMUserId && String(s.activeDMUserId) === String(state.targetUserId);
     const inGroup = !!state.inCall && state.groupMode && String(s?.activeServerId) === String(state.groupServerId) && String(s?.activeChannelId) === String(state.groupChannelId);
     el.callBar?.classList.toggle('hidden', !(inTarget || inGroup));
-    el.miniDock?.classList.toggle('hidden', !state.inCall || inTarget || inGroup);
+    const showMiniDock = !!state.inCall && !inTarget && !inGroup;
+    el.miniDock?.classList.toggle('hidden', !showMiniDock);
+    if (showMiniDock) positionMiniDock();
     updateButtons();
     if (inTarget) refreshParticipants();
     if (inGroup) renderGroupTiles();

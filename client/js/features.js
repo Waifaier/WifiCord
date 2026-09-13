@@ -3,23 +3,57 @@
 const $=id=>document.getElementById(id), esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(url,opt={}){opt=Object.assign({},opt,{credentials:'same-origin'});opt.headers=Object.assign({'Content-Type':'application/json'},opt.headers||{});let r;for(let i=0;i<2;i++){try{r=await fetch(url,opt);break}catch(e){if(i)throw Error('Não foi possível conectar ao servidor.');await new Promise(x=>setTimeout(x,250));}}const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||('Erro na requisição ('+r.status+')'));return d;}
 function open(id){const o=$('modal-overlay');if(!o)return;o.classList.remove('hidden');document.querySelectorAll('.modal').forEach(x=>x.classList.add('hidden'));$(id)?.classList.remove('hidden');}
-function close(){document.getElementById('modal-overlay')?.classList.add('hidden');document.querySelectorAll('.modal').forEach(m=>m.classList.add('hidden'));}
+function close(){document.getElementById('modal-overlay')?.classList.add('hidden');document.querySelectorAll('.modal').forEach(m=>m.classList.add('hidden'));stopAvatarPet();}
 function avatar(u){
   const ps=u?.settings?.profileCustomization||u?.profileSettings?.profileCustomization||u?.settings||{};
   const frameName=ps.frame&&ps.frame!=='none'?ps.frame:(u?.frame||'');
   const decorName=ps.decoration&&ps.decoration!=='none'?ps.decoration:(u?.decoration||'');
   const effect=u?.wfna&&u?.settings?.profileEffectEnabled&&u?.settings?.profileEffect&&u.settings.profileEffect!=='none'?u.settings.profileEffect:'';
+  const fxName=ps.avatarFx&&ps.avatarFx!=='none'?ps.avatarFx:'';
   const inner=u?.avatarUrl?`<img class="avatar-img" src="${esc(u.avatarUrl)}" alt="">`:`<span>${esc((u?.displayName||u?.username||'?')[0].toUpperCase())}</span>`;
   const frame=frameName?' frame-'+esc(String(frameName).replace(/^frame-/,'')):'';
   const decor=decorName?' decoration-'+esc(String(decorName).replace(/^decor-/,'')):'';
   const effectClass=effect?' profile-mini-effect-'+esc(effect):'';
+  const fxClass=fxName?' avatar-fx-'+esc(fxName):'';
   const rocket=u?.wfna?'<span class="wfna-profile-rocket" aria-label="WFNA">🚀</span>':'';
-  return `<span class="profile-avatar-decorated${frame}${decor}${effectClass}" style="--profile-color:${esc(ps.primary||ps.profileColor||'#5865F2')}">${inner}<i class="avatar-frame-overlay"></i><b class="avatar-decoration-overlay"></b><em class="avatar-effect-overlay"></em>${rocket}</span>`;
+  return `<span class="profile-avatar-decorated${frame}${decor}${effectClass}${fxClass}" style="--profile-color:${esc(ps.primary||ps.profileColor||'#5865F2')}">${inner}<i class="avatar-frame-overlay"></i><b class="avatar-decoration-overlay"></b><em class="avatar-effect-overlay"></em>${rocket}</span>`;
+}
+
+// Pet que segue o mouse dentro do cartão de perfil (presets pet-cat/pet-bird).
+// Só existe enquanto o modal de perfil está aberto e só reage a movimentos
+// dentro do próprio cartão, pra não pesar o resto da interface.
+let petState=null;
+function stopAvatarPet(){
+  if(!petState)return;
+  petState.card?.removeEventListener('mousemove',petState.onMove);
+  petState.raf&&cancelAnimationFrame(petState.raf);
+  petState.el?.remove();
+  petState=null;
+}
+function startAvatarPet(kind){
+  stopAvatarPet();
+  const card=$('profile-card');if(!card)return;
+  const el=document.createElement('div');
+  el.className='wc-avatar-pet';
+  el.textContent=kind==='pet-bird'?'🐦':'🐱';
+  card.appendChild(el);
+  const st={card,el,x:60,y:60,tx:60,ty:60,onMove:null,raf:null};
+  st.onMove=ev=>{const r=card.getBoundingClientRect();st.tx=ev.clientX-r.left;st.ty=ev.clientY-r.top;};
+  card.addEventListener('mousemove',st.onMove);
+  const tick=()=>{
+    st.x+=(st.tx-st.x)*0.12;st.y+=(st.ty-st.y)*0.12;
+    el.style.transform=`translate(${st.x-16}px,${st.y-16}px)`;
+    st.raf=requestAnimationFrame(tick);
+  };
+  st.raf=requestAnimationFrame(tick);
+  petState=st;
 }
 function rocket(){const o=document.createElement('div');o.className='rocket-overlay show';o.innerHTML='<div class="rocket-trail"></div><div class="rocket">🚀</div>';document.body.appendChild(o);setTimeout(()=>o.remove(),2200);}
+let lastProfileId=null;
 async function profile(id){
   try{
     const d=await api('/api/auth/profile/'+id),u=d.user,me=String(u.id)===String(window.App?.getState?.()?.currentUser?.id);
+    lastProfileId=u.id;
     const c=$('profile-card');if(!c)throw Error('Perfil indisponível.');
     const ps={...(u.settings?.profileCustomization||{})};
     const color=ps.primary||ps.profileColor||'#5865F2',secondary=ps.secondary||'#24104d',accent=ps.accent||'#c59cff',text=ps.text||'#f6f1ff';
@@ -30,6 +64,7 @@ async function profile(id){
       banner.style.backgroundImage=u.bannerUrl?`url("${String(u.bannerUrl).replace(/"/g,'')}")`:grad;
     }
     const av=$('profile-avatar-view');if(av){av.innerHTML=avatar(u);av.dataset.frame=ps.frame||'none';}
+    if(ps.avatarFx==='pet-cat'||ps.avatarFx==='pet-bird')startAvatarPet(ps.avatarFx);else stopAvatarPet();
     const effectLayer=$('profile-effect-layer');if(effectLayer){
       const effect=u.wfna&&u.settings?.profileEffectEnabled?u.settings.profileEffect||'none':'none';
       effectLayer.className='profile-effect-layer profile-effect-'+effect+(effect!=='none'?' is-active':'');effectLayer.dataset.speed=u.settings?.profileEffectSpeed||'normal';effectLayer.innerHTML=effect!=='none'?'<span></span><span></span><span></span>':'';
@@ -167,6 +202,41 @@ function bind(){ $('store-btn')?.addEventListener('click',store);$('profile-self
   $('report-form')?.addEventListener('submit',e=>{e.preventDefault();const reason=e.target.reason.value.trim();if(!reason)return;submitReport(reason);});
 }
 document.addEventListener('DOMContentLoaded',bind);
+
+// Botão "mortal" no composer: só existe pra um punhado de usuários (lista
+// espelha a checagem feita de verdade no servidor, isso aqui é só pra
+// escondê-lo dos outros — não é a segurança real do recurso).
+const BACKFLIP_ALLOWLIST=['nanowano','waifaier','desh','neutron'];
+function refreshBackflipButton(){
+  const btn=$('backflip-btn');if(!btn)return;
+  const username=window.App?.getState?.()?.currentUser?.username;
+  btn.classList.toggle('hidden',!username||!BACKFLIP_ALLOWLIST.includes(String(username).toLowerCase()));
+}
+function avatarBackflipTargets(userId){
+  const sid=String(userId);
+  const nodes=Array.from(document.querySelectorAll(
+    '[data-message-author-id="'+sid+'"] .message-avatar, [data-member-id="'+sid+'"] .server-member-avatar, [data-user-id="'+sid+'"] .avatar-decorated, [data-user-id="'+sid+'"] .profile-avatar-decorated'
+  ));
+  const me=window.App?.getState?.()?.currentUser;
+  if(me&&String(me.id)===sid){const own=$('current-user-avatar');if(own)nodes.push(own);}
+  if(String(lastProfileId)===sid){const av=$('profile-avatar-view');if(av)nodes.push(av);}
+  return nodes;
+}
+function applyAvatarBackflip(data){
+  const userId=data&&data.userId;if(!userId)return;
+  avatarBackflipTargets(userId).forEach(node=>{
+    if(!node)return;
+    node.classList.remove('avatar-backflip');
+    void node.offsetWidth;
+    node.classList.add('avatar-backflip');
+    setTimeout(()=>node.classList.remove('avatar-backflip'),900);
+  });
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  refreshBackflipButton();
+  setInterval(refreshBackflipButton,1500);
+  $('backflip-btn')?.addEventListener('click',()=>{window.ChatSocket?.triggerBackflip?.();});
+});
 async function adminPanel(){const me=window.App?.getState?.()?.currentUser;if(me?.role!=='admin')return window.App.toast('Acesso administrativo negado.','error');open('modal-admin');const action=async(url,body)=>{try{await api(url,{method:'POST',body:JSON.stringify(body||{})});window.App.toast('Ação aplicada.','success');load()}catch(e){window.App.toast(e.message,'error')}};const effects=[['rainbow','🌈 Rainbow'],['lightning','⚡ Raios'],['rocket','🚀 Foguete'],['confetti','🎊 Confetes'],['shake','📳 Tremor'],['invert','🌓 Inverter'],['matrix','🟩 Matrix'],['fireworks','🎆 Fogos'],['snow','❄️ Neve'],['party','🪩 Festa'],['glitch','👾 Glitch'],['flash','💥 Flash'],['freeze','🧊 Congelar'],['sparkles','✨ Faíscas'],['hearts','💜 Chuva de corações'],['disco','🪩 Disco'],['meteor','☄️ Meteoros'],['pixel','👾 Pixel'],['siren','🚨 Sirene'],['boom','💣 Explosão'],['bubbles','🫧 Bolhas'],['tornado','🌪️ Tornado'],['blackout','🌑 Apagão'],['portal','🌀 Portal'],['stars','🌟 Estrelas'],['wave','🌊 Onda'],['fire','🔥 Inferno'],['ice','🧊 Congelamento'],['vortex','🌀 Vórtice'],['emoji-rain','😎 Chuva de emojis']];async function load(){try{const q=encodeURIComponent($('admin-search').value.trim()),d=await api('/api/admin/users?q='+q);$('admin-users').innerHTML=d.users.map(u=>`<div class="admin-user"><span>${avatar(u)}</span><div><b>${esc(u.displayName||u.username)}</b><small>@${esc(u.username)} · ${(u.points||0).toLocaleString('pt-BR')} pts · ${u.role}${u.wfna?' · WFNA':''}</small></div><div class="admin-actions"><button class="btn btn-small" data-act="p100" data-id="${u.id}">+100</button><button class="btn btn-small" data-act="p1k" data-id="${u.id}">+1K</button><button class="btn btn-small" data-act="p10k" data-id="${u.id}">+10K</button><button class="btn btn-small" data-act="minus" data-id="${u.id}">-500</button><button class="btn btn-small" data-act="setp" data-id="${u.id}">🎯 Pontos</button><button class="btn btn-small" data-act="wfna" data-id="${u.id}">${u.wfna?'🛑 Remover WFNA':'🚀 Dar WFNA'}</button><button class="btn btn-small" data-act="rainbow" data-id="${u.id}">🌈 Modo arco-íris</button><button class="btn btn-small" data-act="scare" data-id="${u.id}">👻 Susto</button>${effects.map(([k,t])=>`<button class="btn btn-small" data-act="fx" data-fx="${k}" data-id="${u.id}">${t}</button>`).join('')}<button class="btn btn-small" data-act="vm5" data-id="${u.id}">🎤 Mute 5m</button><button class="btn btn-small" data-act="vm60" data-id="${u.id}">🎤 Mute 1h</button><button class="btn btn-small" data-act="vmp" data-id="${u.id}">🎤 Mute ∞</button><button class="btn btn-small" data-act="cm5" data-id="${u.id}">💬 Chat 5m</button><button class="btn btn-small" data-act="cm60" data-id="${u.id}">💬 Chat 1h</button><button class="btn btn-small" data-act="cmp" data-id="${u.id}">💬 Chat ∞</button><button class="btn btn-small" data-act="punish" data-id="${u.id}">⚠️ Castigo</button><button class="btn btn-small" data-act="ban10" data-id="${u.id}">🚫 Ban 10m</button><button class="btn btn-small" data-act="ban1d" data-id="${u.id}">🚫 Ban 1d</button><button class="btn btn-small" data-act="banp" data-id="${u.id}">🚫 Ban ∞</button><button class="btn btn-small" data-act="unban" data-id="${u.id}">🔓 Desbanir</button><button class="btn btn-small" data-act="status" data-v="online" data-id="${u.id}">🟢 Online</button><button class="btn btn-small" data-act="status" data-v="away" data-id="${u.id}">🌙 Ausente</button><button class="btn btn-small" data-act="status" data-v="offline" data-id="${u.id}">⚫ Offline</button><button class="btn btn-small" data-act="call" data-id="${u.id}">📵 Derrubar call</button><button class="btn btn-small" data-act="clear" data-id="${u.id}">🧹 Limpar punições</button><button class="btn btn-small" data-act="msgs" data-id="${u.id}">🗑 Limpar mensagens</button><button class="btn btn-small" data-act="shrink" data-id="${u.id}">🐢 Tela encolhendo</button><button class="btn btn-small" data-act="vanish" data-id="${u.id}">🫥 Botões somem</button><button class="btn btn-small" data-act="role" data-id="${u.id}">${u.role==='admin'?'Remover admin':'Promover admin'}</button></div></div>`).join('')||'<div class="empty-state">Nenhum usuário encontrado.</div>';const l=await api('/api/admin/logs');$('admin-logs').innerHTML=l.logs.map(x=>`<div class="admin-log"><b>${esc(x.admin_username||'admin')}</b> → ${esc(x.target_username||'usuário')} · ${esc(x.action)} · ${esc(x.created_at)}</div>`).join('')||'<div class="admin-log">Sem ações.</div>'}catch(e){window.App.toast(e.message,'error')}}$('admin-search-btn').onclick=load;$('admin-search').onkeydown=e=>{if(e.key==='Enter')load()};$('admin-users').onclick=async e=>{const b=e.target.closest('button[data-act]');if(!b)return;const id=b.dataset.id,s='/api/admin/users/'+id;switch(b.dataset.act){case'p100':return action(s+'/points',{delta:100});case'p1k':return action(s+'/points',{delta:1000});case'p10k':return action(s+'/points',{delta:10000});case'minus':return action(s+'/points',{delta:-500});case'setp':{const n=prompt('Quantidade de pontos:','0');if(n!==null)return action(s+'/set-points',{points:Number(n)});break}case'wfna':return action(s+'/wfna',{enabled:!String(b.textContent).includes('Remover')});case'rainbow':return action(s+'/rainbow',{enabled:true,seconds:30});case'scare':return action(s+'/scare');case'fx':return action(s+'/effect',{effect:b.dataset.fx,duration:4});case'vm5':return action(s+'/voice-mute',{minutes:5});case'vm60':return action(s+'/voice-mute',{minutes:60});case'vmp':return action(s+'/voice-mute',{permanent:true});case'cm5':return action(s+'/chat-mute',{minutes:5});case'cm60':return action(s+'/chat-mute',{minutes:60});case'cmp':return action(s+'/chat-mute',{permanent:true});case'punish':return action(s+'/punish',{minutes:30,reason:'Castigo administrativo'});case'ban10':return action(s+'/ban',{minutes:10});case'ban1d':return action(s+'/ban',{minutes:1440});case'banp':return action(s+'/ban',{permanent:true});case'unban':return action(s+'/unban');case'status':return action(s+'/status',{status:b.dataset.v});case'call':return action(s+'/disconnect-call');case'clear':return action(s+'/clear');case'msgs':return action(s+'/clear-messages');case'shrink':return action(s+'/prank',{type:'shrink',duration:60000});case'vanish':return action(s+'/prank',{type:'vanish',duration:45000});case'role':return action(s+'/role',{role:b.textContent.includes('Promover')?'admin':'user'})}};
   async function loadReports(){
     try{
@@ -203,18 +273,54 @@ async function adminPanel(){const me=window.App?.getState?.()?.currentUser;if(me
   });
   $('admin-reports-refresh')?.addEventListener('click',loadReports);
   $('admin-reports-status')?.addEventListener('change',loadReports);
-  const tabUsers=$('admin-tab-users'),tabReports=$('admin-tab-reports'),panelUsers=$('admin-panel-users'),panelReports=$('admin-panel-reports');
+
+  // ------------------------------------------------------------------
+  // Aba "Avisos": manda uma mensagem que aparece pra TODO MUNDO na hora
+  // (ver client/js/announcements.js — é ele quem realmente desenha o
+  // pop-up; aqui só existe o formulário de envio e a pré-visualização).
+  // ------------------------------------------------------------------
+  async function loadCurrentAnnouncement(){
+    const box=$('admin-announcement-current');if(!box)return;
+    try{
+      const d=await api('/api/announcements/current');
+      const a=d.announcement;
+      box.innerHTML=a
+        ?`<p class="admin-announcement-current-label">Último aviso enviado</p><div class="admin-announcement-current-card"><b>${esc(a.title)}</b><span>${esc(a.message)}</span><small>${esc(a.createdAt)}</small></div>`
+        :'<p class="admin-announcement-current-label">Nenhum aviso foi enviado ainda.</p>';
+    }catch(e){box.innerHTML='';}
+  }
+  $('admin-announcement-form')?.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const title=$('admin-announcement-title').value.trim(),message=$('admin-announcement-message').value.trim();
+    if(!title||!message)return;
+    try{
+      await api('/api/announcements',{method:'POST',body:JSON.stringify({title,message})});
+      window.App.toast('Aviso enviado pra todo mundo.','success');
+      $('admin-announcement-form').reset();
+      loadCurrentAnnouncement();
+    }catch(err){window.App.toast(err.message,'error')}
+  });
+  $('admin-announcement-preview-btn')?.addEventListener('click',()=>{
+    const title=$('admin-announcement-title').value.trim()||'Título do aviso',message=$('admin-announcement-message').value.trim()||'Mensagem do aviso.';
+    window.WCAnnouncements?.preview?.({id:'preview',title,message});
+  });
+
+  const tabUsers=$('admin-tab-users'),tabReports=$('admin-tab-reports'),tabAnnouncements=$('admin-tab-announcements'),panelUsers=$('admin-panel-users'),panelReports=$('admin-panel-reports'),panelAnnouncements=$('admin-panel-announcements');
   function showTab(tab){
     tabUsers?.classList.toggle('active',tab==='users');
     tabReports?.classList.toggle('active',tab==='reports');
+    tabAnnouncements?.classList.toggle('active',tab==='announcements');
     panelUsers?.classList.toggle('hidden',tab!=='users');
     panelReports?.classList.toggle('hidden',tab!=='reports');
+    panelAnnouncements?.classList.toggle('hidden',tab!=='announcements');
     if(tab==='reports')loadReports();
+    if(tab==='announcements')loadCurrentAnnouncement();
   }
   if(tabUsers&&!tabUsers.dataset.bound){tabUsers.dataset.bound='1';tabUsers.addEventListener('click',()=>showTab('users'));}
   if(tabReports&&!tabReports.dataset.bound){tabReports.dataset.bound='1';tabReports.addEventListener('click',()=>showTab('reports'));}
+  if(tabAnnouncements&&!tabAnnouncements.dataset.bound){tabAnnouncements.dataset.bound='1';tabAnnouncements.addEventListener('click',()=>showTab('announcements'));}
   showTab('users');
   load();
 }
-window.WCFeatures={profile,store,adminPanel,serverContext,openReportModal};
+window.WCFeatures={profile,store,adminPanel,serverContext,openReportModal,applyAvatarBackflip};
 })();

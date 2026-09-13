@@ -1251,13 +1251,20 @@ body { min-height:100vh; }
 .flappy-overlay span{color:#c9c4dd}
 
 /* --- Banner de atualização do app desktop (ver client/js/desktop-update.js) --- */
-#desktop-update-banner{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:999;display:flex;align-items:center;gap:14px;padding:10px 12px 10px 18px;border-radius:var(--radius-lg);background:var(--glass-bg);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid var(--glass-border);box-shadow:0 12px 34px -10px rgba(0,0,0,.6),0 0 30px -14px var(--glow-violet);color:var(--text-primary);font-size:13px;animation:wcUpdateBannerIn .35s var(--ease-smooth) both}
+#desktop-update-banner{position:fixed;top:max(14px, env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:999;display:flex;align-items:center;gap:14px;padding:10px 12px 10px 18px;border-radius:var(--radius-lg);background:var(--glass-bg);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid var(--glass-border);box-shadow:0 12px 34px -10px rgba(0,0,0,.6),0 0 30px -14px var(--glow-violet);color:var(--text-primary);font-size:13px;animation:wcUpdateBannerIn .35s var(--ease-smooth) both;max-width:calc(100vw - 24px);box-sizing:border-box}
 @keyframes wcUpdateBannerIn{from{opacity:0;transform:translate(-50%,-12px)}to{opacity:1;transform:translate(-50%,0)}}
-#desktop-update-banner button{border:0;border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:600;background:linear-gradient(135deg,var(--accent-primary-start),var(--accent-primary-end));color:#0b0913;cursor:pointer;transition:transform .15s var(--ease-smooth),box-shadow .15s var(--ease-smooth);white-space:nowrap}
+#desktop-update-banner span{min-width:0}
+#desktop-update-banner button{border:0;border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:600;background:linear-gradient(135deg,var(--accent-primary-start),var(--accent-primary-end));color:#0b0913;cursor:pointer;transition:transform .15s var(--ease-smooth),box-shadow .15s var(--ease-smooth);white-space:nowrap;flex:0 0 auto}
 #desktop-update-banner button:hover{transform:translateY(-1px);box-shadow:0 8px 20px -8px var(--glow-violet)}
 #desktop-update-banner button:disabled{opacity:.7;cursor:default;transform:none;box-shadow:none}
 @media (prefers-reduced-motion: reduce){#desktop-update-banner{animation:none}}
-@media (max-width:480px){#desktop-update-banner{left:10px;right:10px;top:10px;transform:none;flex-direction:column;align-items:stretch;text-align:center}#desktop-update-banner button{width:100%}}
+/* Abaixo de 680px (mesmo corte usado no resto do app pra "é celular") a
+   régua vira coluna, cola nas bordas reais da tela (respeitando notch/
+   status bar via env(safe-area-inset-*)) e o botão ocupa a largura toda —
+   antes disso o corte era só em 480px e sem safe-area, por isso o botão
+   ficava parcialmente escondido atrás da barra de status / cortado pra
+   fora da área visível em vários celulares. */
+@media (max-width:680px){#desktop-update-banner{left:max(10px, env(safe-area-inset-left));right:max(10px, env(safe-area-inset-right));top:max(10px, env(safe-area-inset-top));transform:none;flex-direction:column;align-items:stretch;text-align:center;max-width:none;width:auto}#desktop-update-banner button{width:100%}}
 .game-help{margin-top:10px;color:var(--text-muted);font-size:12px;text-align:center}
 
 @media(max-width:700px){.call-stage{height:300px!important;min-height:240px!important}.call-stage:not(.sharing) .call-remote-avatar{left:calc(50% - 55px)!important}.call-stage:not(.sharing) .call-local-avatar{left:calc(50% + 55px)!important}.chat-audio-player{min-width:0}.incoming-dm-notice{left:12px;right:12px;top:12px}}
@@ -1850,6 +1857,14 @@ body { min-width: 0; min-height: 100dvh; overflow: hidden; }
 .server-call-tile-state { color: #9d95b8; font-size: 10px; }
 .server-call-tile-avatar { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; background: radial-gradient(circle, #28213f, #09090e); }
 .server-call-tile-avatar img { width: clamp(58px, 7vw, 96px) !important; height: clamp(58px, 7vw, 96px) !important; border-radius: 50%; object-fit: cover; }
+/* Quem não tem foto de perfil usa avatarMarkup() com uma bolinha com a
+   inicial do nome (.call-avatar-fallback) em vez de <img> — essa classe só
+   tinha estilo dentro de .call-participant-avatar (chamada 1:1), nunca
+   aqui dentro de .server-call-tile-avatar (chamada de servidor/grupo), então
+   pra quem não tinha avatar a "bolinha" saía sem tamanho/círculo nenhum,
+   quase invisível — dando a impressão de retângulo vazio/preto no quadro
+   dela em vez de um avatar de verdade. */
+.server-call-tile-avatar .call-avatar-fallback { width: clamp(58px, 7vw, 96px); height: clamp(58px, 7vw, 96px); border-radius: 50%; display: grid; place-items: center; background: #252140; color: #fff; font-weight: 800; font-size: clamp(20px, 3vw, 34px); }
 .server-call-tile video:not(.hidden) + .server-call-tile-avatar { display: none; }
 .server-call-tile-volume-wrap { position: absolute; right: 8px; bottom: 8px; z-index: 4; display: flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 999px; background: rgba(8,9,14,.78); backdrop-filter: blur(10px); opacity: 0; transform: translateY(4px); transition: opacity .15s ease, transform .15s ease; }
 .server-call-tile:hover .server-call-tile-volume-wrap,
@@ -1858,11 +1873,72 @@ body { min-width: 0; min-height: 100dvh; overflow: hidden; }
 .server-call-tile-volume { width: 70px; accent-color: var(--accent-primary-start, #7c5cff); }
 @media (hover: none) { .server-call-tile-volume-wrap { opacity: 1; transform: none; } }
 
-.mini-call-dock { position: fixed !important; z-index: 10020 !important; right: max(12px, env(safe-area-inset-right)) !important; bottom: max(12px, env(safe-area-inset-bottom)) !important; left: auto !important; top: auto !important; width: fit-content !important; max-width: calc(100vw - 24px) !important; display: flex; align-items: center; gap: 6px; padding: 7px; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: rgba(20,18,30,.94); backdrop-filter: blur(14px); box-shadow: 0 14px 40px rgba(0,0,0,.45); cursor: pointer; }
+/* right/bottom/left/top e max-width AQUI NÃO usam !important de propósito:
+   é a posição de reserva (só entra em ação se, por algum motivo, o
+   #user-bar não for encontrado na hora). O posicionamento normal vem de
+   positionMiniDock() em call.js, que calcula left/bottom/max-width por
+   JS pra grudar o dock bem em cima do cartão do seu usuário (em vez de
+   flutuar solto num canto qualquer da tela) — estilo inline sempre vence
+   uma regra do CSS sem !important, então isso não atrapalha o JS. */
+.mini-call-dock { position: fixed !important; z-index: 10020 !important; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); left: auto; top: auto; width: fit-content; max-width: calc(100vw - 24px); display: flex; align-items: center; gap: 6px; padding: 7px; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: rgba(20,18,30,.94); backdrop-filter: blur(14px); box-shadow: 0 14px 40px rgba(0,0,0,.45); cursor: pointer; }
 .mini-call-dock button { width: 34px; height: 34px; border-radius: 10px; background: #29243c; color: #fff; }
 .mini-call-dock button:hover { background: #3b3356; }
 .mini-call-dock button.danger { background: #9e3342; }
 .mini-call-status { color: #c8c1db; font-size: 11px; font-weight: 700; padding: 0 5px; }
+
+/* =======================================================================
+   Popup flutuante da apresentação de tela (#call-float-popup)
+   ========================================================================
+   O JS (updateFloatPopup em call.js) sempre existiu e sempre calculou
+   certinho quando mostrar isso — só que o elemento nunca tinha HTML nem
+   CSS nenhum, então `$('call-float-popup')` sempre voltava null e a
+   função inteira desistia na primeira linha (`if (!el.floatPopup) return`).
+   Na prática o recurso nunca apareceu pra ninguém. Isso aqui é o visual
+   que faltava: uma janelinha arrastável (ver bindFloatPopupDrag em
+   call.js) que aparece quando você sai da tela da call (troca de canal/DM)
+   enquanto alguém — você mesmo ou outra pessoa — continua apresentando a
+   tela, do jeito que o Discord/Meet fazem com "picture-in-picture".
+   ================================================================ */
+.call-float-popup {
+  position: fixed !important;
+  z-index: 10021 !important;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(84px, env(safe-area-inset-bottom));
+  left: auto;
+  top: auto;
+  width: min(340px, calc(100vw - 24px));
+  border-radius: 14px;
+  overflow: hidden;
+  background: #0b0a11;
+  border: 1px solid rgba(255,255,255,.12);
+  box-shadow: 0 20px 55px rgba(0,0,0,.55);
+  transition: opacity .15s ease, transform .15s ease;
+}
+.call-float-popup.hidden { display: none !important; }
+.call-float-popup.dragging { transition: none; }
+.call-float-handle {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 7px 6px 7px 12px; cursor: grab; background: rgba(20,18,30,.96);
+  border-bottom: 1px solid rgba(255,255,255,.08); user-select: none;
+}
+.call-float-popup.dragging .call-float-handle { cursor: grabbing; }
+.call-float-name { font-size: 12px; font-weight: 700; color: #e9e6f5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.call-float-handle-actions { display: flex; gap: 4px; flex: 0 0 auto; }
+.call-float-icon-btn { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: transparent; color: #cfc9e0; font-size: 13px; }
+.call-float-icon-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
+.call-float-body { position: relative; width: 100%; aspect-ratio: 16/9; background: #050609; display: flex; }
+.call-float-body video { width: 100%; height: 100%; object-fit: contain; background: #050609; }
+.call-float-body video.hidden { display: none; }
+.call-float-popup.split .call-float-body { gap: 2px; }
+.call-float-popup.split .call-float-body video { width: 50%; }
+.call-float-switcher { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; background: rgba(20,18,30,.96); }
+.call-float-switcher.hidden { display: none; }
+.call-float-pill { padding: 5px 10px; border-radius: 999px; background: #241f38; color: #cfc9e0; font-size: 11px; font-weight: 700; }
+.call-float-pill:hover { background: #342c53; }
+.call-float-pill.active { background: var(--accent-primary-start, #7c5cff); color: #fff; }
+@media (max-width: 680px) {
+  .call-float-popup { width: min(260px, calc(100vw - 24px)); bottom: max(76px, env(safe-area-inset-bottom)); }
+}
 
 @media (max-width: 680px) {
   .call-bar { width: calc(100% - 12px); margin: 6px auto 0; border-radius: 14px !important; }
@@ -3792,13 +3868,17 @@ html.has-custom-titlebar #members-panel {
    encolher com "..." em vez de empurrar os botões pra fora da tela.
    ================================================================ */
 @media (max-width: 680px) {
+  /* left/right/bottom/width sem !important pelo mesmo motivo do bloco
+     acima: positionMiniDock() (call.js) manda por JS, sobrescrevendo isso
+     aqui normalmente — o que sobra fixo é só o "não deixa vazar da tela"
+     (overflow/flex-wrap) que já valia antes. */
   .mini-call-dock {
     position: fixed !important;
-    left: 8px !important;
-    right: 8px !important;
-    bottom: max(8px, env(safe-area-inset-bottom)) !important;
-    width: auto !important;
-    max-width: calc(100vw - 16px) !important;
+    left: 8px;
+    right: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    width: auto;
+    max-width: calc(100vw - 16px);
     box-sizing: border-box !important;
     display: flex !important;
     flex-wrap: nowrap !important;
@@ -3953,6 +4033,127 @@ html.has-custom-titlebar #members-panel {
 @media (max-width: 900px) {
   .admin-reports { max-height: 50vh; }
   .report-evidence img, .report-evidence-thumb { width: 70px; height: 70px; }
+}
+
+/* ================================================================
+   Avisos da equipe — aba "Avisos" do painel de admin (ao lado de
+   "Denúncias") e o pop-up de aviso exibido pra todo mundo quando um
+   admin publica um. Ver client/js/announcements.js, client/js/features.js
+   (adminPanel) e server/routes/announcements.js.
+   ================================================================ */
+.admin-announcements-hint { font-size: 13px; color: var(--text-muted); margin: 0 0 16px; max-width: 52ch; }
+
+.admin-announcement-form { display: flex; flex-direction: column; gap: 14px; max-width: 520px; }
+.admin-announcement-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-muted); }
+.admin-announcement-form textarea { min-height: 110px; resize: vertical; }
+
+.admin-announcement-current { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--bg-hover); }
+.admin-announcement-current-label { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 10px; }
+.admin-announcement-current-card { background: #141521; border: 1px solid #ffffff0d; border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; max-width: 520px; }
+.admin-announcement-current-card strong { font-size: 14px; color: var(--text-primary); }
+.admin-announcement-current-card p { margin: 0; font-size: 13px; color: #ccc; white-space: pre-wrap; }
+.admin-announcement-current-card time { font-size: 11px; color: var(--text-muted); }
+.admin-announcement-empty { font-size: 13px; color: var(--text-muted); font-style: italic; }
+
+/* Pop-up exibido pra todo mundo. Cartão com degradê violeta escuro
+   (identidade WifiCord), badge "AVISO", ícone de megafone (SVG, ver
+   client/js/icons.js — sem emoji, conforme pedido). */
+.announcement-overlay {
+  position: fixed; inset: 0; z-index: 100000;
+  display: grid; place-items: center;
+  background: rgba(5, 6, 12, .72);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  padding: 20px;
+  animation: wcOverlayIn .18s ease both;
+}
+.announcement-overlay.hidden { display: none; }
+
+.announcement-card {
+  position: relative;
+  width: min(420px, 100%);
+  padding: 28px 26px 26px;
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(124, 92, 255, .35), transparent 55%),
+    linear-gradient(165deg, #221B3D 0%, #171130 55%, #0F0C22 100%);
+  border: 1px solid rgba(167, 139, 250, .28);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, .55), 0 0 0 1px rgba(255, 255, 255, .03) inset;
+  color: var(--text-primary);
+  animation: wcModalIn .22s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.announcement-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+
+.announcement-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px 5px 9px;
+  border-radius: 999px;
+  background: rgba(124, 92, 255, .18);
+  border: 1px solid rgba(167, 139, 250, .4);
+  color: var(--accent-secondary);
+  font-size: 11px; font-weight: 800; letter-spacing: .09em;
+}
+.announcement-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-cyan); box-shadow: 0 0 8px var(--accent-cyan); }
+
+.announcement-close-btn {
+  width: 30px; height: 30px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  border-radius: 50%; border: 1px solid transparent;
+  background: transparent; color: var(--text-muted);
+  cursor: pointer; transition: background .15s ease, color .15s ease;
+}
+.announcement-close-btn:hover { background: rgba(255, 255, 255, .08); color: var(--text-primary); }
+.announcement-close-btn .icon-svg { width: 16px; height: 16px; }
+
+.announcement-icon {
+  width: 52px; height: 52px; margin: 14px 0 16px;
+  display: grid; place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent-primary-start), var(--accent-primary-end));
+  color: #fff;
+  box-shadow: 0 10px 26px var(--glow-violet);
+}
+.announcement-icon .icon-svg { width: 26px; height: 26px; }
+
+.announcement-heading {
+  margin: 0 0 4px;
+  font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.announcement-heading span { color: var(--accent-secondary); }
+
+.announcement-title {
+  margin: 0 0 10px;
+  font-size: 21px; font-weight: 800; line-height: 1.3;
+  color: var(--text-primary);
+  text-wrap: balance;
+}
+
+.announcement-message {
+  margin: 0 0 24px;
+  font-size: 14.5px; line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+.announcement-ok-btn {
+  width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 13px 18px;
+  border: 0; border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent-primary-start), var(--accent-violet-deep));
+  color: #fff; font-size: 14.5px; font-weight: 700;
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .12s ease;
+  box-shadow: 0 10px 24px var(--glow-violet);
+}
+.announcement-ok-btn:hover { transform: translateY(-1px); box-shadow: 0 14px 30px var(--glow-violet); }
+.announcement-ok-btn:active { transform: translateY(0); }
+.announcement-ok-btn .icon-svg { width: 17px; height: 17px; }
+
+@media (max-width: 480px) {
+  .announcement-card { padding: 24px 20px 22px; border-radius: 16px; }
+  .announcement-title { font-size: 19px; }
 }
 
 /* Avatar interativo: presets "Pirueta", "Brilho ao passar o mouse" e os
