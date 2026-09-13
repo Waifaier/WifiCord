@@ -1642,6 +1642,13 @@
     if (el.remoteScreenAudio) { el.remoteScreenAudio.pause?.(); el.remoteScreenAudio.srcObject = null; }
     el.callBar?.classList.remove('audio-call', 'sharing', 'remote-sharing', 'screen-minimized', 'has-remote', 'has-remote-video', 'call-reconnecting', 'stage-circles', 'stage-grid', 'stage-grid-local-on', 'stage-grid-remote-on');
     el.callBar?.classList.add('hidden');
+    // O mini-dock só sabe se deve aparecer/sumir através do syncContext()
+    // (chamado ao navegar de canal/DM/servidor) — como endCall() não navega
+    // pra lugar nenhum, sem esta linha o dock ficava preso na tela pra
+    // sempre depois de encerrar uma ligação enquanto minimizado (ex.:
+    // desligar pelo próprio botão do mini-dock e não trocar de conversa
+    // depois), mesmo sem nenhuma chamada em andamento.
+    el.miniDock?.classList.add('hidden');
     resetStageImmersive();
     closeCallContextMenu();
     closeModals(); updateButtons();

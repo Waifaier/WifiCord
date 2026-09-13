@@ -34,6 +34,18 @@ contextBridge.exposeInMainWorld('wificordDesktop', {
   notifyIncomingCall() {
     ipcRenderer.send('wificord-incoming-call');
   },
+  // Notificação nativa de mensagem nova (ver client/js/notifications.js) —
+  // funciona mesmo com a janela escondida na bandeja, porque quem mostra a
+  // notificação de verdade é o processo principal, que continua rodando.
+  // `payload` = { title, body, target }; `target` volta inteiro no clique.
+  showNotification(payload) {
+    ipcRenderer.send('wificord-show-notification', payload);
+  },
+  onNotificationClicked(callback) {
+    ipcRenderer.on('wificord-notification-clicked', (_e, target) => {
+      try { callback(target); } catch (_) {}
+    });
+  },
   titlebar: {
     minimize() { ipcRenderer.send('wificord-window-minimize'); },
     toggleMaximize() { ipcRenderer.send('wificord-window-maximize-toggle'); },

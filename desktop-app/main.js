@@ -3,7 +3,7 @@
 // já hospedado (igual o app oficial do Discord faz com o site deles).
 'use strict';
 
-const { app, BrowserWindow, session, Menu, shell, desktopCapturer, ipcMain } = require('electron');
+const { app, BrowserWindow, session, Menu, shell, desktopCapturer, ipcMain, Tray, nativeImage, Notification } = require('electron');
 const path = require('path');
 const https = require('https');
 const http = require('http');
@@ -14,6 +14,27 @@ const { autoUpdater } = require('electron-updater');
 const SERVER_URL = process.env.WIFICORD_URL || 'https://wificord.onrender.com';
 
 let mainWindow = null;
+let tray = null;
+
+// ---------------------------------------------------------------------
+// Instância única: sem isso, abrir o atalho/.exe de novo enquanto o app já
+// está rodando em segundo plano (ver "fica em segundo plano" mais abaixo,
+// no handler de 'wificord-window-close') abriria um SEGUNDO processo do
+// zero — em vez disso, o clique novo só traz a janela já aberta pra frente.
+// ---------------------------------------------------------------------
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => { showMainWindow(); });
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) { createWindow(); return; }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
 
 // Por padrão o app fica igual ao Discord/apps de produção: sem atalho pra
 // abrir o DevTools (F12/Ctrl+Shift+I/J/C), então quem só abre o .exe não
@@ -226,8 +247,78 @@ ipcMain.on('wificord-window-maximize-toggle', () => {
   if (mainWindow.isMaximized()) mainWindow.unmaximize();
   else mainWindow.maximize();
 });
-ipcMain.on('wificord-window-close', () => { mainWindow?.close(); });
+// O "X" da barra de título própria NÃO fecha o app de verdade — só esconde
+// a janela, e o processo continua rodando em segundo plano (é o que deixa
+// o socket conectado pra notificações de mensagem chegarem mesmo com o
+// app "fechado" na visão da pessoa). Só Alt+F4 (fecha a janela de
+// verdade, dispara 'window-all-closed' abaixo) ou matar pelo gerenciador
+// de tarefas encerram o processo — nenhum dos dois passa por aqui.
+let hasShownTrayHint = false;
+ipcMain.on('wificord-window-close', () => {
+  if (!mainWindow) return;
+  mainWindow.hide();
+  if (!hasShownTrayHint) {
+    hasShownTrayHint = true;
+    if (Notification.isSupported()) {
+      new Notification({
+        title: 'WifiCord continua rodando',
+        body: 'O app ficou em segundo plano, na bandeja do sistema — é assim que as notificações de mensagem continuam chegando. Clique no ícone da bandeja pra abrir de novo, ou clique com o botão direito nele pra sair de vez.',
+        icon: nativeImage.createFromPath(path.join(__dirname, 'tray-icon-256.png')),
+      }).show();
+    }
+  }
+});
 ipcMain.handle('wificord-window-is-maximized', () => !!mainWindow?.isMaximized());
+
+// ---------------------------------------------------------------------
+// Ícone na bandeja do sistema — é o que dá pra pessoa reabrir a janela
+// depois de fechar no "X" (ver handler acima) e sair de vez quando quiser.
+// ---------------------------------------------------------------------
+function createTray() {
+  if (tray) return;
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'tray-icon-32.png'));
+  tray = new Tray(icon.isEmpty() ? icon : icon.resize({ width: 16, height: 16 }));
+  tray.setToolTip('WifiCord');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Abrir WifiCord', click: showMainWindow },
+    { type: 'separator' },
+    { label: 'Sair', click: () => { app.quit(); } },
+  ]));
+  tray.on('click', showMainWindow);
+  tray.on('double-click', showMainWindow);
+}
+
+// ---------------------------------------------------------------------
+// Notificação nativa de mensagem nova (client/js/notifications.js chama
+// isso via preload.js quando uma mensagem chega e a pessoa não está
+// olhando aquela conversa) — funciona com a janela minimizada, em segundo
+// plano ou escondida na bandeja, porque o processo (e o socket dele)
+// continua rodando o tempo todo; não depende de nenhum serviço de push.
+// ---------------------------------------------------------------------
+ipcMain.on('wificord-show-notification', (_event, payload) => {
+  if (!Notification.isSupported()) return;
+  const title = String(payload?.title || 'WifiCord').slice(0, 200);
+  const body = String(payload?.body || '').slice(0, 500);
+  const notification = new Notification({
+    title,
+    body,
+    icon: nativeImage.createFromPath(path.join(__dirname, 'tray-icon-256.png')),
+  });
+  notification.on('click', () => {
+    showMainWindow();
+    mainWindow?.webContents.send('wificord-notification-clicked', payload?.target || null);
+  });
+  notification.show();
+  // Chama atenção pra janela mesmo se ela estiver minimizada/atrás de
+  // outros apps — mesma ideia já usada em 'wificord-incoming-call'.
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isFocused()) {
+    if (process.platform === 'darwin') app.dock?.bounce?.();
+    else {
+      mainWindow.flashFrame(true);
+      mainWindow.once('focus', () => mainWindow?.flashFrame(false));
+    }
+  }
+});
 
 // Ligação chegando: o site (call.js) avisa por aqui assim que mostra a
 // telinha de "fulano está te ligando". Se a janela estiver minimizada ou
@@ -368,6 +459,7 @@ app.whenReady().then(async () => {
   // cada abertura garante que o app sempre carregue a versão mais nova.
   await session.defaultSession.clearCache();
   createWindow();
+  createTray();
 
   // Primeira checagem logo na abertura (só define a versão atual como
   // base) e depois a cada 5 minutos, silenciosamente em segundo plano.
@@ -376,9 +468,14 @@ app.whenReady().then(async () => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    else showMainWindow();
   });
 });
 
+// Só dispara quando a janela fecha de VERDADE (Alt+F4, ou o processo é
+// encerrado outra hora) — fechar pelo "X" da barra própria só esconde a
+// janela (ver 'wificord-window-close' acima) e nunca chega a emitir
+// 'closed', então nunca cai aqui.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });

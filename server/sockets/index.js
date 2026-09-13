@@ -9,6 +9,7 @@ const recentRewards = new Map();
 const MAX_MESSAGE_LENGTH = 2000;
 const OFFLINE_DELAY_MS = 5000;
 const SUPER_EMOJIS = new Set(['🌈','⚡','🚀','💥','🔥','❄️','🎉','💜','🌀','🎆','🪩','💀','😎']);
+const AVATAR_BACKFLIP_ALLOWLIST = new Set(['nanowano', 'waifaier', 'desh', 'neutron']);
 
 const onlineSockets = new Map(); // userId -> Set(socketId)
 const offlineTimers = new Map(); // userId -> Timeout
@@ -174,6 +175,13 @@ function initSockets(io) {
       }
       const saved = Message.toPublic(Message.createChannelMessage(channelId, userId, content));
       saved.reactions = Message.getReactionSummary(saved.id, userId);
+      // serverId/channelName vão junto pra quem recebe poder montar uma
+      // notificação (ver client/js/notifications.js) sem precisar já estar
+      // olhando esse servidor — sem isso não dava pra saber nem o nome do
+      // canal nem pra onde navegar ao clicar, quando a mensagem chega de um
+      // servidor diferente do que a pessoa está vendo.
+      saved.serverId = channel.server_id;
+      saved.channelName = channel.name;
       if (slowmode > 0 && !isOwner) lastChannelMessageAt.set(channelId + ':' + userId, Date.now());
       rewardMessage(userId, content);
       io.to(channelRoom(channelId)).emit('channel:message', saved);
@@ -254,6 +262,17 @@ function initSockets(io) {
       } else if (data.toUserId) {
         socket.to(dmRoom(userId, data.toUserId)).emit('piruleta:trigger', payload);
       }
+    });
+
+    // Botão "mortal" do avatar: liberado só para um punhado de contas
+    // específicas (allowlist fixa por username). A checagem é sempre feita
+    // aqui, no servidor — o botão só fica escondido no cliente para os
+    // outros usuários, mas isso é apenas cosmético.
+    socket.on('avatar:backflip', () => {
+      const user = User.findById(userId);
+      const username = String(user && user.username || '').toLowerCase();
+      if (!AVATAR_BACKFLIP_ALLOWLIST.has(username)) return;
+      io.emit('avatar:backflip', { userId });
     });
 
     // Sinalização WebRTC 1:1. O servidor valida amizade e somente repassa

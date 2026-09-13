@@ -23,10 +23,14 @@
   "build": {
     "appId": "com.wificord.desktop",
     "productName": "WifiCord",
+    "icon": "tray-icon-256.png",
     "files": [
       "main.js",
       "preload.js",
       "screen-picker.html",
+      "tray-icon-16.png",
+      "tray-icon-32.png",
+      "tray-icon-256.png",
       "package.json"
     ],
     "directories": {
