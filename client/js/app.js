@@ -46,6 +46,23 @@
     } catch (_) {}
   };
 
+  // Vídeo de mensagem com preload="metadata": o navegador nunca desenha
+  // nenhum quadro sozinho, fica com a tela preta até a pessoa dar play (e
+  // sem nenhum ícone indicando que dá pra tocar, parece imagem quebrada).
+  // Assim que os primeiros dados chegam (preload="auto"), avançamos um
+  // instante ínfimo pra forçar aquele quadro a aparecer, sem iniciar o
+  // áudio/vídeo de verdade.
+  window.__wcForceVideoFrame = function (video) {
+    try {
+      if (video.dataset.framed) return;
+      video.dataset.framed = '1';
+      if (video.readyState >= 2 && video.currentTime === 0) {
+        const t = Math.min(0.2, (video.duration || 1) / 4 || 0.1);
+        video.currentTime = t || 0.1;
+      }
+    } catch (_) {}
+  };
+
   function formatMessageContent(text) {
     const raw=String(text??'');
     if(raw.startsWith('__STICKER__:')){
@@ -66,8 +83,8 @@
         // cartão de arquivo genérico, pra essas mensagens já enviadas
         // passarem a exibir certo também, sem precisar reenviar.
         if(!/^(image|video|audio)\//.test(mime)){ const guessed=guessMimeFromFileName(m.name); if(guessed) mime=guessed; }
-        if(mime.startsWith('image/')) return '<div class="chat-media"><img src="'+url+'" alt="'+name+'" loading="lazy" onerror="window.__mediaLoadError&&window.__mediaLoadError(this)"></div><a class="media-file-link" href="'+url+'" target="_blank" rel="noopener">'+name+'</a>';
-        if(mime.startsWith('video/')) return '<div class="chat-media"><video src="'+url+'" controls preload="metadata" onerror="window.__mediaLoadError&&window.__mediaLoadError(this)"></video></div><a class="media-file-link" href="'+url+'" target="_blank" rel="noopener">'+name+'</a>';
+        if(mime.startsWith('image/')) return '<div class="chat-media"><img src="'+url+'" alt="'+name+'" loading="eager" decoding="async" onerror="window.__mediaLoadError&&window.__mediaLoadError(this)"></div><a class="media-file-link" href="'+url+'" target="_blank" rel="noopener">'+name+'</a>';
+        if(mime.startsWith('video/')) return '<div class="chat-media"><video src="'+url+'" controls playsinline preload="auto" onloadeddata="window.__wcForceVideoFrame&&window.__wcForceVideoFrame(this)" onerror="window.__mediaLoadError&&window.__mediaLoadError(this)"></video></div><a class="media-file-link" href="'+url+'" target="_blank" rel="noopener">'+name+'</a>';
         if(mime.startsWith('audio/')) return '<div class="chat-audio-player"><div class="chat-audio-icon">🎵</div><div class="chat-audio-main"><strong>'+name+'</strong><audio src="'+url+'" controls preload="metadata" onerror="window.__mediaLoadError&&window.__mediaLoadError(this)"></audio></div></div>';
         if(isTextPreviewable(m.mime, m.name)){
           const lang=escapeHtml(langForFile(m.mime,m.name));
