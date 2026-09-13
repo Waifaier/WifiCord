@@ -1168,11 +1168,23 @@
             $('call-live-label')?.classList.add('hidden');
             if (state.remoteCameraStream) {
               el.callBar?.classList.add('has-remote-video', 'has-remote');
-              attachRemoteStream(state.remoteCameraStream);
+              // Se EU ainda estiver apresentando minha própria tela nesse
+              // instante, a câmera dela continua sendo bolinha (não volta
+              // pro palco principal, que ainda é meu enquanto eu apresento).
+              if (state.screenStream) attachRemoteCameraPip(state.remoteCameraStream);
+              else attachRemoteStream(state.remoteCameraStream);
             } else {
               el.callBar?.classList.remove('has-remote-video');
               if (state.callType === 'audio') el.callBar?.classList.add('audio-call');
+              // BUG "fica uma imagem travada da transmissão": #remote-video
+              // mantinha o srcObject antigo (a apresentação que acabou de
+              // parar) porque nada limpava — o <video> simplesmente CONGELA
+              // no último frame recebido em vez de ficar preto sozinho.
+              // Sem câmera nenhuma pra pôr no lugar, limpa o elemento de
+              // verdade (mesma função usada em endCall).
+              cleanupMediaElement(el.remoteVideo);
             }
+            updateCallStageMode();
             updateFloatPopup();
           };
           track.onunmute = activate;
@@ -1200,7 +1212,18 @@
             state.remoteCameraStream = stream;
             el.callBar?.classList.remove('audio-call');
             el.callBar?.classList.add('has-remote-video', 'has-remote');
-            if (state.remoteScreenActive) attachRemoteCameraPip(stream);
+            // BUG "quando eu transmito, some a câmera do outro usuário": esta
+            // decisão só olhava se A OUTRA PESSOA estava apresentando tela
+            // (remoteScreenActive) pra escolher entre bolinha (PIP) e palco
+            // principal — nunca considerava que EU MESMO poderia estar
+            // apresentando. #local-video (minha tela) e #remote-video (a
+            // câmera dela) ocupam o MESMO palco em cima um do outro (ver CSS
+            // .call-bar.sharing), com a minha tela por cima (z-index maior) —
+            // então a câmera dela ia pro palco principal do jeito normal e
+            // ficava simplesmente TAPADA atrás da minha transmissão, mesmo
+            // recebendo o vídeo certinho. isSharingActive() cobre os dois
+            // lados (eu apresentando OU ela apresentando).
+            if (isSharingActive()) attachRemoteCameraPip(stream);
             else attachRemoteStream(stream);
             updateCallStageMode();
           };
@@ -1881,6 +1904,13 @@
 
       el.callBar?.classList.remove('audio-call', 'screen-minimized');
       el.callBar?.classList.add('sharing');
+      // Se a câmera da outra pessoa já estava no palco principal (ela não
+      // estava apresentando), agora que EU comecei a apresentar ela precisa
+      // virar bolinha (PIP) — senão minha transmissão (que ocupa o palco
+      // inteiro por cima, ver CSS .call-bar.sharing) simplesmente tapa a
+      // câmera dela por completo (ela continua chegando normal, só fica
+      // escondida atrás da minha tela). Ver mesmo raciocínio em activateCam.
+      if (!state.groupMode && state.remoteCameraStream) attachRemoteCameraPip(state.remoteCameraStream);
       scheduleStageAutoHide();
       $('call-live-label')?.classList.remove('hidden');
       // Esse selo aparece na tela de QUEM ESTÁ apresentando (a função só é
@@ -1940,6 +1970,16 @@
     }
     ensureLocalCameraPip();
     el.callBar?.classList.remove('sharing', 'screen-minimized');
+    // Espelha o ajuste feito em startScreenShareWithQuality: se a câmera da
+    // outra pessoa estava na bolinha só por causa da MINHA apresentação (ela
+    // mesma não está apresentando nada), agora que parei ela volta pro palco
+    // principal — senão a bolinha ficava presa pra sempre depois de eu parar
+    // de compartilhar, mesmo sem apresentação nenhuma rolando.
+    if (!state.groupMode && !state.remoteScreenActive && state.remoteCameraStream) {
+      detachRemoteCameraPip();
+      attachRemoteStream(state.remoteCameraStream);
+    }
+    updateCallStageMode();
     if (isSharingActive()) scheduleStageAutoHide(); else resetStageImmersive();
     $('call-live-label')?.classList.add('hidden');
     if (state.callType === 'audio' && !el.callBar?.classList.contains('has-remote-video')) el.callBar?.classList.add('audio-call');
@@ -2081,7 +2121,11 @@
       video.muted = true;
       video.style.cursor = 'zoom-in';
       video.addEventListener('click', () => fullscreenVideoElement(video));
-      if (peer.video) { video.srcObject = peer.video; video.classList.remove('hidden'); retryMediaPlay(video); }
+      // peer.video é sempre um MediaStream (criado uma vez em pcCreate), MAS
+      // pode estar VAZIO (0 tracks) quando a pessoa não está nem com câmera
+      // nem com tela ativa — "if (peer.video)" sozinho é sempre verdadeiro
+      // nesse caso e mostrava uma caixa preta vazia em vez do avatar dela.
+      if (peer.video && peer.video.getVideoTracks().length) { video.srcObject = peer.video; video.classList.remove('hidden'); retryMediaPlay(video); }
       else video.classList.add('hidden');
       el.serverCallGrid.appendChild(tile);
     }
@@ -2433,6 +2477,41 @@
     document.addEventListener('fullscreenchange', () => { state.fullscreen = !!document.fullscreenElement; });
     navigator.mediaDevices?.addEventListener?.('devicechange', () => window.Settings?.refreshDevices?.());
   }
+
+  // ---------------------------------------------------------------------
+  // Rede de segurança pro "mini-dock preso na tela sem nenhuma chamada"
+  // reportado no celular: o app vai pra segundo plano durante uma chamada
+  // de verdade, o WebSocket cai nesse meio tempo (comum no Android) e um
+  // 'call:hangup' que chegaria por ele é PERDIDO pra sempre — Socket.IO
+  // não reenvia eventos de quando o socket estava desconectado — então
+  // este lado nunca fica sabendo que a ligação acabou. O backoff de
+  // reconexão (scheduleReconnect/scheduleGroupReconnect) eventualmente
+  // desistiria e encerraria sozinho, mas os temporizadores também ficam
+  // suspensos/atrasados em segundo plano, então isso podia levar muito
+  // tempo pra "curar sozinho" — na prática, o dock ficava preso minutos
+  // (ou até a próxima vez que a pessoa reabrisse o app). Assim que a
+  // pessoa volta a abrir/focar o app, confere na hora se a ligação ainda
+  // está realmente viva; se não estiver, encerra de vez em vez de esperar.
+  // ---------------------------------------------------------------------
+  function healthCheckAfterResume() {
+    if (!state.inCall) return;
+    if (state.groupMode) {
+      if (!state.groupPeers.size) return; // sozinho na call, esperando alguém entrar — normal
+      const anyAlive = [...state.groupPeers.values()].some(p => {
+        const st = p.pc?.connectionState;
+        return st === 'connected' || st === 'connecting' || st === 'new';
+      });
+      if (!anyAlive) endCall(true);
+      return;
+    }
+    const st = state.pc?.connectionState;
+    if (!state.pc || (st !== 'connected' && st !== 'connecting' && st !== 'new')) endCall(true);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') healthCheckAfterResume();
+  });
+  window.addEventListener('pageshow', healthCheckAfterResume);
+  window.addEventListener('focus', healthCheckAfterResume);
 
   function init() { cache(); bind(); bindFloatPopupDrag(); updateButtons(); iceConfigPromise = loadIceConfig(); }
 
