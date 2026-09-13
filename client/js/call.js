@@ -2450,7 +2450,21 @@
     el.miniMic?.addEventListener('click', toggleMic);
     el.miniCam?.addEventListener('click', toggleCam);
     el.miniScreen?.addEventListener('click', screenShare);
-    el.miniHangup?.addEventListener('click', () => endCall(true));
+    el.miniHangup?.addEventListener('click', () => {
+      // DEBUG TEMPORÁRIO — só pra investigar o mini-dock que não some nem
+      // com o botão de desligar (ver conversa). Mostra o estado real na
+      // hora do toque (não muda nada) e avisa se endCall() der erro no meio
+      // do caminho, em vez de falhar quieto. Tirar depois de achar a causa.
+      try {
+        window.App?.toast?.('[debug] inCall=' + state.inCall + ' group=' + state.groupMode + ' pc=' + (state.pc ? state.pc.connectionState : 'null') + ' peers=' + state.groupPeers.size + ' target=' + state.targetUserId, 'info');
+      } catch (_) {}
+      try {
+        endCall(true);
+      } catch (e) {
+        window.App?.toast?.('[debug] endCall() deu erro: ' + (e?.message || e), 'error');
+        console.error('[WifiCord/debug] endCall throw:', e);
+      }
+    });
     el.floatClose?.addEventListener('click', () => {
       state.floatPopupDismissed = true;
       updateFloatPopup();
