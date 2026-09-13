@@ -4317,12 +4317,23 @@ html.has-custom-titlebar #members-panel {
      empate — chamada aparecia em tela cheia mesmo com a classe "hidden"
      presente, mesmo SEM nenhuma chamada ativa de verdade. ":not(.hidden)"
      faz essa regra só valer quando a chamada realmente deve aparecer. */
+  /* ACHADO #2 (mesma causa raiz, forma diferente): mesmo com o bloco
+     acima, o vídeo continuava um risco fino em cima de uma área vazia
+     enorme. Motivo: lá na regra ".call-bar{flex:1 1 auto;...}" (perto do
+     início do arquivo, pensada pra quando a chamada divide espaço com o
+     chat — "in-conversation stage") existe um "max-height:min(48vh,560px)"
+     SEM !important. Como esta regra aqui embaixo nunca tocava em
+     max-height, aquele limite de ~48% da tela continuava valendo mesmo
+     em tela cheia no celular: o .call-bar ficava "pendurado" no topo com
+     no máximo 48vh de altura, e o resto da viewport (os outros ~52%)
+     sobrava vazio atrás dele. "max-height:none" aqui remove esse teto. */
   .call-bar:not(.hidden) {
     position: fixed !important;
     inset: 0 !important;
     top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
     width: 100% !important;
     height: 100dvh !important;
+    max-height: none !important;
     margin: 0 !important;
     border-radius: 0 !important;
     border: 0 !important;
