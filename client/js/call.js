@@ -2542,6 +2542,17 @@
   });
   window.addEventListener('pageshow', healthCheckAfterResume);
   window.addEventListener('focus', healthCheckAfterResume);
+  // Rede de segurança extra: os eventos acima dependem do navegador/WebView
+  // avisar direito quando o app volta a ficar visível — no WebView do app
+  // Android (Capacitor) isso NEM SEMPRE dispara de forma confiável (o app
+  // não é recriado do zero como uma aba de navegador normal, então esses
+  // eventos podem simplesmente não acontecer ao reabrir o app depois de um
+  // tempo em segundo plano). Resultado: o mini-dock ficava preso na tela
+  // MESMO com o resto do código de "cura" já certo, porque a função que
+  // cura nunca era chamada. Rodar a mesma verificação sozinha a cada 12s
+  // (só enquanto realmente em chamada — a função sai na hora se não
+  // estiver) fecha essa lacuna sem depender de nenhum evento do sistema.
+  setInterval(healthCheckAfterResume, 12000);
 
   function init() { cache(); bind(); bindFloatPopupDrag(); updateButtons(); iceConfigPromise = loadIceConfig(); }
 
