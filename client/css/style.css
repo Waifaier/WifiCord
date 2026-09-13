@@ -4280,3 +4280,137 @@ html.has-custom-titlebar #members-panel {
   cursor: zoom-out !important;
 }
 
+/* ================================================================
+   Layout da chamada no celular — reescrito do zero num bloco só.
+   ("quase nada tá utilizável, fica tudo torto, pequeno" — o motivo
+   real: existiam VÁRIAS regras antigas de #call-bar/.call-stage/
+   .call-controls espalhadas pelo arquivo, de eras diferentes, cada
+   uma pensada isoladamente sem saber das outras — o resultado prático
+   dependia só de qual delas por acaso "ganhava" a cascata, não do que
+   fazia sentido. E o problema maior nem era CSS: a chamada dividia a
+   tela com o cabeçalho do chat E a lista de mensagens por trás dela ao
+   mesmo tempo (nada escondia isso durante a chamada), então sobrava
+   pouquíssima altura de verdade pra câmera/apresentação — é POR ISSO
+   que tudo parecia espremido e torto, não por causa só de tamanho de
+   botão. Esse bloco fica no fim do arquivo de propósito: como quase
+   tudo aqui usa !important, "quem vem por último no arquivo" decide o
+   empate de especificidade — é a mesma lição do bug do mini-dock preso
+   (ver comentário lá perto do primeiro @media(max-width:680px)). */
+@media (max-width: 680px) {
+  /* A chamada passa a ocupar a tela inteira (como WhatsApp/Discord no
+     celular) em vez de dividir espaço com o chat por trás — o resto do
+     chat continua intacto, só reaparece quando a chamada termina
+     (#call-bar volta a ganhar a classe "hidden" via endCall()). */
+  #main-panel:has(> #call-bar:not(.hidden)) > #chat-header,
+  #main-panel:has(> #call-bar:not(.hidden)) > #messages-list,
+  #main-panel:has(> #call-bar:not(.hidden)) > #chat-empty-hero,
+  #main-panel:has(> #call-bar:not(.hidden)) > #typing-indicator,
+  #main-panel:has(> #call-bar:not(.hidden)) > #message-form {
+    display: none !important;
+  }
+
+  .call-bar {
+    position: fixed !important;
+    inset: 0 !important;
+    top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+    width: 100% !important;
+    height: 100dvh !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    border: 0 !important;
+    z-index: 5000 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* Menu de contexto (clique/toque longo num participante da chamada)
+     é um elemento à parte, fora de #call-bar — sem isso ficava atrás do
+     overlay em tela cheia acima e nunca aparecia no celular. */
+  .call-context-menu { z-index: 5001 !important; }
+
+  /* A câmera/apresentação agora ocupa TODO o espaço que sobra (o resto
+     da tela menos a barra de controles abaixo) em vez de uma altura
+     fixa pequena (min(...vh, ...px) — que era o principal motivo de
+     ficar tudo minúsculo). flex:1 1 auto deixa o flex column acima
+     calcular isso sozinho, sempre certo pro tamanho real da tela. */
+  .call-stage {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+  }
+
+  .call-stage-topbar {
+    padding: max(10px, env(safe-area-inset-top)) 12px 8px !important;
+  }
+  .call-stage-title strong { font-size: 13px !important; }
+  .call-stage-peer { max-width: 34vw; font-size: 11px !important; }
+
+  /* Botões de verdade tocáveis (48px é o mínimo recomendado pra alvo de
+     toque) e permitidos quebrar linha em vez de cortar/espremer horizontal
+     quando não cabem todos numa linha só. */
+  .call-controls {
+    flex: 0 0 auto !important;
+    flex-wrap: wrap !important;
+    row-gap: 10px !important;
+    column-gap: 10px !important;
+    padding: 12px 12px max(12px, env(safe-area-inset-bottom)) !important;
+  }
+  .call-btn, .call-device-arrow {
+    width: 50px !important;
+    height: 50px !important;
+    font-size: 19px !important;
+  }
+  .call-device-arrow {
+    /* Volta a aparecer (a versão antiga escondia pra "economizar
+       espaço"), só que agora cabe de sobra — e sem ela não dava pra
+       trocar de câmera/microfone pelo celular de jeito nenhum. */
+    display: inline-flex !important;
+    width: 26px !important;
+    min-width: 26px !important;
+    height: 50px !important;
+  }
+  .call-device-menu {
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    max-width: calc(100vw - 24px);
+  }
+
+  /* Câmera pequena (PIP) num tamanho de verdade visível, sem encostar
+     nos controles nem no topo. */
+  .call-stage > #local-video {
+    width: clamp(96px, 30vw, 168px) !important;
+    height: clamp(64px, 20vw, 112px) !important;
+    right: 12px !important;
+    bottom: 12px !important;
+  }
+
+  /* Bolinhas de câmera durante apresentação de tela — um pouco menores
+     no celular (a tela já é pequena, cantos opostos continuam valendo
+     pra nunca sobrepor a apresentação nem uma na outra). */
+  #local-camera-pip, #remote-camera-pip {
+    width: clamp(84px, 26vw, 130px) !important;
+    height: clamp(56px, 17vw, 88px) !important;
+  }
+  #local-camera-pip { right: 12px !important; bottom: 12px !important; }
+  #remote-camera-pip { left: 12px !important; bottom: 12px !important; }
+
+  .call-stage .call-participant-avatar {
+    width: clamp(76px, 22vw, 108px) !important;
+    height: clamp(76px, 22vw, 108px) !important;
+  }
+
+  #server-call-grid {
+    grid-template-columns: 1fr !important;
+    grid-auto-rows: minmax(160px, 1fr) !important;
+    gap: 8px !important;
+    padding: 8px !important;
+  }
+
+  .call-stage-immersive-toggle {
+    bottom: max(8px, env(safe-area-inset-bottom)) !important;
+  }
+}

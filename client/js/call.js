@@ -1845,9 +1845,29 @@
     }
   }
 
+  // Compartilhar tela pelo navegador (getDisplayMedia) simplesmente NÃO
+  // EXISTE em nenhum navegador de celular — não é uma limitação só do app
+  // WifiCord: Chrome Android, Safari iOS, Samsung Internet, Firefox
+  // Android, nenhum deles implementa essa API até hoje (é só coisa de
+  // navegador de computador). Sem essa checagem, tentar chamar uma função
+  // que nem existe (navigator.mediaDevices.getDisplayMedia é undefined)
+  // gerava um erro técnico cru direto do navegador — "getDisplayMedia is
+  // not a function" — que não explicava nada pra quem tava usando o app.
+  // A única forma de ter isso de verdade no celular seria um plugin
+  // nativo Android (usa a API MediaProjection do sistema) — é um projeto
+  // à parte, maior, que ainda não foi construído.
+  function screenShareUnsupportedReason() {
+    if (typeof navigator.mediaDevices?.getDisplayMedia !== 'function') {
+      return 'Compartilhar tela não é possível no celular — nenhum navegador de celular (nem o app, nem Chrome, Safari, etc.) tem esse recurso, só computador. Dá pra fazer isso no celular, mas precisaria de um recurso nativo do Android que o WifiCord ainda não tem.';
+    }
+    return null;
+  }
+
   async function screenShare() {
     if (!state.inCall) return;
     if (state.screenStream) return stopScreen();
+    const unsupported = screenShareUnsupportedReason();
+    if (unsupported) { window.App?.toast(unsupported, 'error'); return; }
     const modal = el.shareModal;
     if (!modal) return startScreenShareWithQuality(720, 'screen', true);
     $('modal-overlay')?.classList.remove('hidden');
@@ -1983,7 +2003,18 @@
       window.Sounds?.play('screen-start');
       track.onended = () => { stopScreen().catch(console.error); };
     } catch (e) {
-      if (!['AbortError', 'NotAllowedError'].includes(e.name)) window.App?.toast('Não foi possível compartilhar a tela: ' + (e.message || 'erro desconhecido'), 'error');
+      if (['AbortError', 'NotAllowedError'].includes(e.name)) return; // a pessoa só cancelou o seletor do navegador
+      // Rede de segurança: se por algum motivo chegou até aqui sem passar
+      // pelo aviso de screenShare() (ex.: suporte "existe" mas rejeita na
+      // hora de chamar de verdade), ainda mostra a mensagem amigável em
+      // vez do erro técnico cru sempre que o motivo for claramente "esse
+      // navegador não suporta" (NotSupportedError/TypeError).
+      const unsupported = screenShareUnsupportedReason();
+      if (unsupported || ['NotSupportedError', 'TypeError'].includes(e.name)) {
+        window.App?.toast(unsupported || 'Compartilhar tela não é suportado neste navegador.', 'error');
+        return;
+      }
+      window.App?.toast('Não foi possível compartilhar a tela: ' + (e.message || 'erro desconhecido'), 'error');
     }
   }
 
