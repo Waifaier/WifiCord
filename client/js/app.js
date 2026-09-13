@@ -39,10 +39,21 @@
       el.dataset.mediaErrorHandled = '1';
       const box = el.closest('.chat-media') || el.closest('.chat-audio-player');
       if (!box) return;
-      const url = el.currentSrc || el.src || '#';
+      const url = el.currentSrc || el.src || '';
       const tag = el.tagName;
       const label = tag === 'VIDEO' ? 'Vídeo indisponível' : tag === 'AUDIO' ? 'Áudio indisponível' : 'Imagem indisponível';
-      box.outerHTML = '<a class="media-file-card media-file-unavailable" href="' + escapeHtml(url) + '" target="_blank" rel="noopener"><span>⚠️</span><strong>' + label + '</strong><small>O arquivo pode ter sido removido do servidor — toque para tentar abrir</small></a>';
+      // src="" num <video>/<img> é interpretado pelo navegador como "recarrega
+      // a PRÓPRIA página atual" — currentSrc então vira a URL da própria
+      // página, e um link "toque pra abrir" apontando pra ela mesma só reabre
+      // o app (no Electron, uma janela nova inteira — ver comentário em
+      // formatMessageContent). Sem link nenhum de verdade pra oferecer, nem
+      // mostra um botão que só vai confundir.
+      const looksLikeThisPage = !url || url === location.href || url.replace(/#.*$/, '') === location.href.replace(/#.*$/, '');
+      if (looksLikeThisPage) {
+        box.outerHTML = '<a class="media-file-card media-file-unavailable" href="javascript:void(0)" onclick="return false"><span>⚠️</span><strong>' + label + '</strong><small>Essa mídia foi enviada sem um link válido — tente reenviar o arquivo</small></a>';
+      } else {
+        box.outerHTML = '<a class="media-file-card media-file-unavailable" href="' + escapeHtml(url) + '" target="_blank" rel="noopener"><span>⚠️</span><strong>' + label + '</strong><small>O arquivo pode ter sido removido do servidor — toque para tentar abrir</small></a>';
+      }
     } catch (_) {}
   };
 
@@ -77,6 +88,18 @@
     if(raw.startsWith('__MEDIA__:')){
       try{
         const m=JSON.parse(raw.slice(10)); let mime=String(m.mime||'application/octet-stream'); const url=escapeHtml(m.url||''); const name=escapeHtml(m.name||'Arquivo');
+        // Se a mensagem chegou sem link nenhum (m.url vazio/ausente), nem
+        // tenta montar <img>/<video src=""> — um <video src=""> vazio é
+        // interpretado pelo navegador como "carregar a PRÓPRIA página atual",
+        // então o onerror disparava (o card de "indisponível" aparecia certo),
+        // mas o link "toque pra abrir" desse card virava a URL da própria
+        // página — no app desktop (Electron) isso literalmente abre uma
+        // SEGUNDA janela do WifiCord (setWindowOpenHandler permite qualquer
+        // link do mesmo domínio, ver desktop-app/main.js), o que parecia
+        // "abriu outro app do nada" sem nenhuma pista do problema real.
+        // Mostrando o aviso direto (sem link nenhum pra clicar) em vez de
+        // deixar o navegador tentar e falhar, cobre esse caso sem confundir.
+        if(!m.url){ return '<a class="media-file-card media-file-unavailable" href="javascript:void(0)" onclick="return false"><span>⚠️</span><strong>Arquivo sem link salvo</strong><small>Essa mídia foi enviada sem um link válido — tente reenviar o arquivo</small></a>'; }
         // Mensagens antigas podem ter sido salvas com um mime genérico (bug
         // já corrigido no upload — ver client/js/media.js). Mesmo assim,
         // tenta adivinhar pelo nome do arquivo antes de desistir e cair pro
