@@ -4309,7 +4309,15 @@ html.has-custom-titlebar #members-panel {
     display: none !important;
   }
 
-  .call-bar {
+  /* ACHADO (mesmo tipo de bug do mini-dock, ver o outro comentário sobre
+     isso perto do primeiro @media(max-width:680px)): ".call-bar{display:
+     flex!important}" sem essa proteção tinha a MESMA especificidade +
+     !important que ".hidden{display:none!important}" (lá no topo do
+     arquivo), e como essa regra vem DEPOIS no arquivo, ela ganhava o
+     empate — chamada aparecia em tela cheia mesmo com a classe "hidden"
+     presente, mesmo SEM nenhuma chamada ativa de verdade. ":not(.hidden)"
+     faz essa regra só valer quando a chamada realmente deve aparecer. */
+  .call-bar:not(.hidden) {
     position: fixed !important;
     inset: 0 !important;
     top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
