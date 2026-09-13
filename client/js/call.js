@@ -1648,6 +1648,10 @@
     if (!video) return;
     try { video.pause(); } catch (_) {}
     video.srcObject = null;
+    // Se esse vídeo estava ampliado (ver fullscreenVideoElement) e a
+    // transmissão dele acabou de verdade, não faz sentido continuar
+    // ocupando a tela inteira com um quadro preto.
+    video.classList.remove('wc-video-zoom');
   }
 
   function endCall(notify) {
@@ -1896,6 +1900,22 @@
       const stream = await navigator.mediaDevices.getDisplayMedia({ video, audio: systemAudio });
       const track = stream.getVideoTracks()[0];
       if (!track) throw new Error('Nenhuma faixa de tela foi fornecida.');
+      // "Transmissão sem som" mesmo com a caixinha "Compartilhar áudio do
+      // sistema" marcada no WifiCord quase sempre é isso: marcar a
+      // caixinha AQUI só faz o navegador oferecer a opção — quem decide
+      // de verdade é a OUTRA caixinha, dentro da própria janela nativa do
+      // navegador que pede "o que você quer compartilhar" (é uma caixinha
+      // dele, separada da nossa, e some sem esse aviso: se a pessoa não
+      // marcar as duas, ou escolher uma janela específica em vez de
+      // "Tela inteira"/"Aba", o navegador simplesmente não devolve
+      // nenhuma faixa de áudio, sem erro nenhum — stream.getAudioTracks()
+      // fica vazio e a apresentação segue muda, sem nenhuma pista do
+      // motivo. Antes disso não era detectado nem avisado; agora avisa na
+      // hora, com o motivo mais provável, em vez de a pessoa achar que é
+      // bug do app.
+      if (systemAudio && !stream.getAudioTracks().length) {
+        window.App?.toast('A apresentação começou, mas sem som: o navegador não liberou áudio. Tenta de novo e marca "Compartilhar áudio" TAMBÉM na janela do navegador que pede o que compartilhar (é uma caixinha separada da do WifiCord) — e escolhe "Tela inteira" ou "Aba", nunca uma janela específica.', 'error');
+      }
       track.contentHint = 'detail';
       state.screenStream = stream;
       state.shareSystemAudio = systemAudio;
@@ -2018,19 +2038,37 @@
     window.Sounds?.play('screen-stop');
   }
 
-  // Deixa a câmera de UMA pessoa específica (a minha, a da outra pessoa
-  // numa 1:1, ou de alguém numa chamada de servidor) em tela cheia — pede
-  // tela cheia no próprio elemento <video>, que é como o navegador já
-  // sabe fazer nativamente, em vez de mexer na .call-bar inteira (isso é
-  // só pra apresentação de tela — ver fullscreen() acima).
-  async function fullscreenVideoElement(videoEl) {
+  // Amplia a câmera de UMA pessoa específica (a minha, a da outra pessoa
+  // numa 1:1, ou de alguém numa chamada de servidor) pra ocupar a tela
+  // inteira ao clicar nela.
+  //
+  // ACHADO ("aparece um player de vídeo, coisa que não era pra acontecer"):
+  // isso antes chamava video.requestFullscreen() — o jeito nativo do
+  // navegador de deixar UM elemento <video> em tela cheia. O problema é
+  // que, pelo menos no Chrome/WebView do Android (e em algumas versões do
+  // Chrome desktop), colocar um <video> em fullscreen NATIVO faz o próprio
+  // navegador desenhar por cima os controles dele de player — play/pause,
+  // barra de progresso, etc — MESMO sem o atributo "controls" no elemento.
+  // Faz sentido pra um vídeo de verdade (com duração, pra pausar/avançar),
+  // mas não faz o menor sentido numa chamada ao vivo (não tem o que
+  // pausar ou avançar) — e não tem CSS que garanta esconder esses
+  // controles em todas as versões (o truque de "::-webkit-media-controls"
+  // só funciona de forma inconsistente e o Chrome vem restringindo isso).
+  // A solução robusta (confirmada como a prática recomendada pra esse
+  // exato problema) é nunca pedir fullscreen NATIVO num <video> — em vez
+  // disso, um "modo ampliado" só nosso: uma classe CSS que faz o próprio
+  // elemento ocupar a tela toda (position:fixed + inset:0), sem acionar
+  // NENHUM comportamento nativo do navegador. Clica de novo (ou aperta
+  // Esc) pra voltar ao tamanho normal.
+  function fullscreenVideoElement(videoEl) {
     if (!videoEl || !videoEl.srcObject) return;
-    try {
-      if (document.fullscreenElement === videoEl) { await document.exitFullscreen(); return; }
-      if (document.fullscreenElement) await document.exitFullscreen();
-      await (videoEl.requestFullscreen ? videoEl.requestFullscreen() : videoEl.webkitRequestFullscreen?.());
-    } catch (_) { window.App?.toast('Tela cheia não está disponível neste navegador.', 'error'); }
+    const already = videoEl.classList.contains('wc-video-zoom');
+    document.querySelectorAll('video.wc-video-zoom').forEach(v => v.classList.remove('wc-video-zoom'));
+    if (!already) videoEl.classList.add('wc-video-zoom');
   }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.querySelectorAll('video.wc-video-zoom').forEach(v => v.classList.remove('wc-video-zoom'));
+  });
 
   async function fullscreen() {
     if (!el.callBar) return;

@@ -4236,3 +4236,47 @@ html.has-custom-titlebar #members-panel {
 .avatar-backflip { display: inline-block; animation: avatarBackflip .8s cubic-bezier(.34,1.56,.64,1); }
 #backflip-btn { font-size: 18px; }
 
+/* ================================================================
+   "Modo ampliado" dos vídeos de chamada (câmera, bolinha de câmera
+   durante apresentação, vídeo de participante em chamada de grupo) —
+   ver fullscreenVideoElement() em call.js pro porquê disso existir em
+   vez de usar video.requestFullscreen() nativo (resumo: o navegador
+   desenha controles de player — play/pause/barra de progresso — por
+   cima de um <video> em fullscreen nativo, mesmo sem o atributo
+   "controls", o que não faz sentido numa chamada ao vivo).
+   #remote-video/#local-video/etc já têm várias regras de posição
+   !important espalhadas pelo arquivo (cada uma pra um contexto
+   diferente: chamada normal, apresentando, grupo...) — combinar ID +
+   classe aqui (em vez de só ".wc-video-zoom") garante especificidade
+   MAIOR que qualquer uma delas, então essa regra sempre ganha
+   enquanto a classe estiver no elemento, não importa a ordem no
+   arquivo (foi exatamente a falta disso que causou o bug do mini-dock
+   preso no celular — ver comentário lá perto de @media(max-width:680px)). */
+#remote-video.wc-video-zoom,
+#local-video.wc-video-zoom,
+#remote-camera-pip.wc-video-zoom,
+#local-camera-pip.wc-video-zoom,
+.server-call-tile video.wc-video-zoom {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  max-height: none !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  transform: none !important;
+  object-fit: contain !important;
+  background: #000 !important;
+  z-index: 1000000 !important;
+  cursor: zoom-out !important;
+}
+
