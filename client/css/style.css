@@ -3891,8 +3891,20 @@ html.has-custom-titlebar #members-panel {
   /* left/right/bottom/width sem !important pelo mesmo motivo do bloco
      acima: positionMiniDock() (call.js) manda por JS, sobrescrevendo isso
      aqui normalmente — o que sobra fixo é só o "não deixa vazar da tela"
-     (overflow/flex-wrap) que já valia antes. */
-  .mini-call-dock {
+     (overflow/flex-wrap) que já valia antes.
+
+     ACHADO (bug do mini-dock preso na tela no celular, mesmo sem estar
+     em chamada): esse "display: flex !important" valia SEMPRE, mesmo
+     quando o elemento tinha a classe "hidden" — porque ".hidden{display:
+     none!important}" (bem no topo do arquivo) tem a MESMA especificidade
+     (uma classe) e o MESMO !important, e em caso de empate quem vem
+     DEPOIS no arquivo ganha. Como este bloco fica bem mais abaixo, ele
+     sempre vencia e o dock nunca sumia — não importava se endCall()
+     tinha rodado certinho e adicionado "hidden" (e ele sempre rodava
+     certo, foi confirmado no debug). ":not(.hidden)" faz essa regra só
+     valer quando o dock realmente deve aparecer, deixando ".hidden"
+     funcionar normalmente quando a chamada termina. */
+  .mini-call-dock:not(.hidden) {
     position: fixed !important;
     left: 8px;
     right: 8px;

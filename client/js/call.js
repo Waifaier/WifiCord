@@ -2450,30 +2450,7 @@
     el.miniMic?.addEventListener('click', toggleMic);
     el.miniCam?.addEventListener('click', toggleCam);
     el.miniScreen?.addEventListener('click', screenShare);
-    el.miniHangup?.addEventListener('click', () => {
-      // DEBUG TEMPORÁRIO (parte 2) — a primeira rodada já provou que
-      // state.inCall estava false (o estado já sabia que não tinha
-      // chamada nenhuma), então o problema não é o estado, é a TELA não
-      // acompanhar o estado. Essa rodada verifica se existe algum
-      // '#mini-call-dock' duplicado na página (um segundo elemento que o
-      // JS nunca ficou sabendo que existe, então nunca esconde) e se a
-      // referência que o app guardou (el.miniDock) é realmente o mesmo
-      // elemento que está na tela agora.
-      try {
-        const all = document.querySelectorAll('[id="mini-call-dock"]');
-        const live = document.getElementById('mini-call-dock');
-        window.App?.toast?.('[debug] inCall=' + state.inCall + ' docks-na-pagina=' + all.length + ' el.miniDock-existe=' + !!el.miniDock + ' mesmo-elemento=' + (el.miniDock === live) + ' classe-atual="' + (el.miniDock ? el.miniDock.className : 'N/A') + '"', 'info');
-        console.log('[WifiCord/debug] mini-dock nodes:', all, 'el.miniDock:', el.miniDock, 'live lookup:', live);
-      } catch (e) {
-        window.App?.toast?.('[debug] erro no diagnóstico: ' + (e?.message || e), 'error');
-      }
-      try {
-        endCall(true);
-      } catch (e) {
-        window.App?.toast?.('[debug] endCall() deu erro: ' + (e?.message || e), 'error');
-        console.error('[WifiCord/debug] endCall throw:', e);
-      }
-    });
+    el.miniHangup?.addEventListener('click', () => endCall(true));
     el.floatClose?.addEventListener('click', () => {
       state.floatPopupDismissed = true;
       updateFloatPopup();
