@@ -13,6 +13,45 @@ const { UPLOAD_DIR } = require('../storage');
 
 const router = express.Router();
 
+// ---------------------------------------------------------------------
+// Trava conhecida do ffmpeg-static/ffprobe-static em vários provedores de
+// hospedagem (Render incluso): o binário baixado durante a instalação às
+// vezes chega no servidor SEM permissão de execução (o "chmod +x" que o
+// pacote tenta fazer no install não sobrevive ao jeito como a plataforma
+// empacota/cacheia o build) — e aí toda tentativa de rodar o ffmpeg falha
+// com EACCES/ENOENT, silenciosamente (o upload continua "funcionando",
+// só que sempre com o arquivo original sem conversão nenhuma). Isso é
+// exatamente o tipo de bug que passa despercebido: forçar a permissão de
+// novo aqui, toda vez que o servidor sobe, fecha essa lacuna sem custo
+// nenhum (chmod é instantâneo) e sem depender de nada externo.
+for (const bin of [ffmpegPath, ffprobePath]) {
+  try {
+    fs.chmodSync(bin, 0o755);
+  } catch (err) {
+    console.error('[media] não consegui garantir permissão de execução em', bin, '-', err.message);
+  }
+}
+
+// Log único na subida do servidor: confirma logo de cara (sem precisar
+// esperar alguém enviar um arquivo) se o ffmpeg/ffprobe estão realmente
+// prontos pra rodar neste ambiente. Se aparecer "OK" aqui e mesmo assim
+// os vídeos continuarem quebrados, o problema está em outro lugar; se
+// aparecer erro aqui, o problema é isso e não a lógica de conversão.
+execFile(ffmpegPath, ['-version'], { timeout: 10000 }, (err, stdout) => {
+  if (err) {
+    console.error('[media] ffmpeg NÃO está executável neste servidor — conversão de vídeo vai falhar e manter os arquivos originais (quebrados). Erro:', err.message);
+  } else {
+    console.log('[media] ffmpeg OK:', String(stdout).split('\n')[0]);
+  }
+});
+execFile(ffprobePath, ['-version'], { timeout: 10000 }, (err, stdout) => {
+  if (err) {
+    console.error('[media] ffprobe NÃO está executável neste servidor — detecção de codec vai falhar. Erro:', err.message);
+  } else {
+    console.log('[media] ffprobe OK:', String(stdout).split('\n')[0]);
+  }
+});
+
 // Era 4GB — enorme demais pro servidor gratuito (512MB de RAM/container).
 // Mesmo o upload sendo gravado direto no disco em stream (nunca carrega o
 // arquivo inteiro na memória do processo Node — ver req.pipe(stream)
@@ -337,6 +376,12 @@ router.post('/upload', requireAuth, async (req, res) => {
         // arquivo original — melhor a pessoa conseguir baixar o arquivo
         // do que o upload inteiro falhar por causa da conversão.
         let finalMime = mime;
+        // Só pra deixar bem claro no log o que aconteceu com CADA upload
+        // (antes só logava em caso de erro — um sucesso ficava mudo, o
+        // que tornava impossível confirmar pelos logs do Render se a
+        // conversão estava rodando de verdade ou nem estava sendo
+        // tentada).
+        let conversionOutcome = 'não precisou converter';
 
         if (mime === 'image/heic' || mime === 'image/heif') {
           const jpgPath = dest.replace(/\.[^.]+$/, '.jpg');
@@ -346,7 +391,9 @@ router.post('/upload', requireAuth, async (req, res) => {
             finalPath = jpgPath;
             finalMime = 'image/jpeg';
             finalFilename = filename.replace(/\.[^.]+$/, '.jpg');
+            conversionOutcome = 'HEIC/HEIF -> JPEG ok';
           } catch (convErr) {
+            conversionOutcome = 'FALHOU (HEIC/HEIF -> JPEG): ' + convErr.message;
             console.error('Falha ao converter HEIC/HEIF, mantendo arquivo original:', convErr);
           }
         } else if (mime.startsWith('video/')) {
@@ -360,8 +407,10 @@ router.post('/upload', requireAuth, async (req, res) => {
               finalPath = finishedMp4Path;
               finalMime = 'video/mp4';
               finalFilename = filename.replace(/\.[^.]+$/, '.mp4');
+              conversionOutcome = 'vídeo -> H.264 ok';
             }
           } catch (transErr) {
+            conversionOutcome = 'FALHOU (vídeo -> H.264): ' + transErr.message;
             console.error('Falha ao converter vídeo, mantendo arquivo original:', transErr);
           }
         }
@@ -375,6 +424,8 @@ router.post('/upload', requireAuth, async (req, res) => {
           req.session.userId, name, finalFilename, finalMime, stat.size, url
         );
         const row = db.prepare('SELECT * FROM media_files WHERE id = ?').get(info.lastInsertRowid);
+
+        console.log(`[media] upload #${row.id} (${name}): ${mime} recebido, ${conversionOutcome} -> servido como ${finalMime}`);
 
         responded = true;
 
