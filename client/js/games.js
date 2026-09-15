@@ -45,7 +45,36 @@ function paletteAt(t){
 function hexToRgb(h){h=h.replace('#','');return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
 function rgbaFrom(rgbStr,alpha){const m=/rgb\((\d+),(\d+),(\d+)\)/.exec(rgbStr);if(!m)return rgbStr;return `rgba(${m[1]},${m[2]},${m[3]},${alpha})`;}
 
-function open(){document.getElementById('modal-overlay')?.classList.remove('hidden');document.querySelectorAll('.modal').forEach(m=>m.classList.add('hidden'));$('modal-games')?.classList.remove('hidden');refreshStatus();}
+// --- Hub "Jogos": grade de cards -> abre um jogo -> "Voltar" volta pro hub.
+// stopFlappy()/closeMeiaLuaFrame() são chamados tanto ao trocar de card
+// quanto (via MutationObserver, lá embaixo em bind()) sempre que o modal
+// inteiro fecha, não importa COMO fechou (botão Fechar, clicar fora, Esc,
+// abrir outro modal por cima) — sem isso, fechar o modal clicando fora
+// dele (closeModals() em app.js, que não passa pelo clique local aqui)
+// deixava o iframe do Meia-Lua rodando escondido, com o microfone
+// possivelmente ainda ligado se a pessoa estivesse numa chamada de voz.
+function stopFlappy(){running=false;cancelAnimationFrame(raf);window.Sounds?.stopLoop?.();}
+function closeMeiaLuaFrame(){const f=$('meialua-frame');if(f&&f.getAttribute('src'))f.setAttribute('src','about:blank');}
+function showHub(){
+  stopFlappy();closeMeiaLuaFrame();
+  $('games-hub')?.classList.remove('hidden');
+  $('game-panel-flappy')?.classList.add('hidden');
+  $('game-panel-meialua')?.classList.add('hidden');
+}
+function openCard(name){
+  $('games-hub')?.classList.add('hidden');
+  $('game-panel-flappy')?.classList.toggle('hidden',name!=='flappy-cubes');
+  $('game-panel-meialua')?.classList.toggle('hidden',name!=='meia-lua');
+  if(name==='flappy-cubes'){
+    refreshStatus();
+  }else if(name==='meia-lua'){
+    // src só é preenchido na hora de abrir (evita carregar o jogo inteiro
+    // à toa) — closeMeiaLuaFrame() limpa de volta pra 'about:blank' ao sair.
+    const f=$('meialua-frame');
+    if(f&&(!f.getAttribute('src')||f.getAttribute('src')==='about:blank'))f.setAttribute('src','/jogos/meia-lua/');
+  }
+}
+function open(){document.getElementById('modal-overlay')?.classList.remove('hidden');document.querySelectorAll('.modal').forEach(m=>m.classList.add('hidden'));$('modal-games')?.classList.remove('hidden');showHub();}
 async function api(url,opt={}){opt=Object.assign({},opt,{credentials:'same-origin'});opt.headers=Object.assign({'Content-Type':'application/json'},opt.headers||{});const r=await fetch(url,opt);const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Erro no minigame.');return d;}
 async function refreshStatus(){try{const d=await api('/api/games/status');updateHud();const c=$('game-cooldown');if(!c)return;if(d.available){c.textContent='Disponível';c.classList.remove('locked');$('flappy-start').disabled=false;}else{c.textContent='Indisponível';c.classList.add('locked');$('flappy-start').disabled=true;}}catch(e){$('game-cooldown').textContent='Indisponível';}}
 function updateHud(){$('game-score').textContent=score;$('game-best').textContent=best;}
@@ -204,10 +233,28 @@ function bind(){
   canvas=$('flappy-canvas');if(!canvas)return;ctx=canvas.getContext('2d');
   initScenery();draw(0);
   canvas.addEventListener('pointerdown',flap);
-  window.addEventListener('keydown',e=>{if(e.code==='Space'&&$('modal-games')&&!$('modal-games').classList.contains('hidden')){e.preventDefault();if(!running)start();else flap();}});
+  // Espaço só controla o Flappy Cubes quando o PAINEL dele está visível —
+  // antes valia pro modal inteiro, o que também capturaria espaço
+  // digitado (ex.: num campo de busca) enquanto o hub ou o Meia-Lua
+  // estivessem abertos dentro do mesmo modal.
+  window.addEventListener('keydown',e=>{if(e.code==='Space'&&$('game-panel-flappy')&&!$('game-panel-flappy').classList.contains('hidden')){e.preventDefault();if(!running)start();else flap();}});
   $('flappy-start')?.addEventListener('click',start);
   $('games-btn')?.addEventListener('click',open);
-  $('modal-games')?.addEventListener('click',e=>{if(e.target.matches('[data-close-modal]')){document.getElementById('modal-overlay')?.classList.add('hidden');$('modal-games')?.classList.add('hidden');running=false;cancelAnimationFrame(raf);window.Sounds?.stopLoop?.();}});
+  $('modal-games')?.addEventListener('click',e=>{
+    const card=e.target.closest('[data-open-game]');
+    if(card){openCard(card.dataset.openGame);return;}
+    if(e.target.closest('[data-back-to-games]')){showHub();return;}
+    if(e.target.matches('[data-close-modal]')){document.getElementById('modal-overlay')?.classList.add('hidden');$('modal-games')?.classList.add('hidden');showHub();}
+  });
+  // Rede de segurança: cobre TODO jeito de fechar o modal-games que não
+  // passa pelo clique local acima (clicar fora dele, Esc, abrir outro
+  // modal por cima — tudo isso chama um closeModals() genérico em
+  // app.js). Sem isso o iframe do Meia-Lua continuava rodando escondido.
+  const modalGames=$('modal-games');
+  if(modalGames&&window.MutationObserver){
+    new MutationObserver(()=>{if(modalGames.classList.contains('hidden')){stopFlappy();closeMeiaLuaFrame();}})
+      .observe(modalGames,{attributes:true,attributeFilter:['class']});
+  }
   updateHud();
 }
 document.addEventListener('DOMContentLoaded',bind);

@@ -199,7 +199,7 @@
         <div id="user-more-menu" class="user-bar-more-menu hidden">
           <button type="button" id="admin-btn" class="btn btn-icon hidden" title="Painel administrativo">🛡️</button>
           <button type="button" id="store-btn" class="btn btn-icon" title="Loja e pontos">🛍️</button>
-          <button type="button" id="games-btn" class="btn btn-icon" title="Minigames">🎮</button>
+          <button type="button" id="games-btn" class="btn btn-icon" title="Jogos">🎮</button>
         </div>
       </div>
       <button type="button" id="settings-btn" class="btn btn-icon" title="Configurações">⚙️</button>
@@ -713,12 +713,45 @@
   </div>
 
 <div id="modal-games" class="modal modal-games hidden">
-    <div class="games-header"><div><h3>🎮 Minigames</h3><p>Jogue para ganhar pontos. Jogue quantas vezes quiser e acumule pontos.</p></div><span id="game-cooldown" class="game-cooldown">Disponível</span></div>
-    <div class="game-tabs"><button class="game-tab active" data-game="flappy-cubes">🟪 Flappy Cubes</button></div>
-    <div class="game-hud"><span>🏆 Pontos: <b id="game-score">0</b></span><span>⭐ Melhor: <b id="game-best">0</b></span><span>🎁 Recompensa: <b id="game-reward">até 500</b></span></div>
-    <div class="flappy-wrap"><canvas id="flappy-canvas" width="760" height="430"></canvas><div id="flappy-overlay" class="flappy-overlay"><strong>Flappy Cubes</strong><span>Pressione Espaço, clique ou toque para voar.</span><button id="flappy-start" class="btn btn-primary">Jogar</button></div></div>
-    <div class="game-help">Evite os canos. Cada ponto vale pontos na loja. Sem limite de partidas.</div>
-    <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Fechar</button></div>
+    <!-- HUB: grade com os jogos disponíveis. É o que aparece sempre que o
+         modal abre (ver open() em games.js) — "← Voltar para Jogos" nos
+         painéis abaixo volta pra cá. -->
+    <div id="games-hub">
+      <div class="games-header"><div><h3>🎮 Jogos</h3><p>Escolha um jogo para jogar.</p></div></div>
+      <div class="games-grid">
+        <button type="button" class="game-card" data-open-game="flappy-cubes">
+          <span class="game-card-cover game-card-cover-flappy" aria-hidden="true">🟪</span>
+          <span class="game-card-body"><b>Flappy Cubes</b><small>Arcade rápido. Cada ponto vale pontos na loja.</small></span>
+        </button>
+        <button type="button" class="game-card" data-open-game="meia-lua">
+          <span class="game-card-cover game-card-cover-meialua" aria-hidden="true"></span>
+          <span class="game-card-body"><b>Meia-Lua: Turno da Noite</b><small>RPG multiplayer de terror. Crie uma sala e chame a galera.</small></span>
+        </button>
+      </div>
+      <div class="modal-actions"><button class="btn btn-ghost" data-close-modal>Fechar</button></div>
+    </div>
+
+    <!-- FLAPPY CUBES -->
+    <div id="game-panel-flappy" class="game-panel hidden">
+      <div class="games-header"><button type="button" class="btn btn-ghost btn-small" data-back-to-games>← Voltar para Jogos</button><span id="game-cooldown" class="game-cooldown">Disponível</span></div>
+      <div class="game-hud"><span>🏆 Pontos: <b id="game-score">0</b></span><span>⭐ Melhor: <b id="game-best">0</b></span><span>🎁 Recompensa: <b id="game-reward">até 500</b></span></div>
+      <div class="flappy-wrap"><canvas id="flappy-canvas" width="760" height="430"></canvas><div id="flappy-overlay" class="flappy-overlay"><strong>Flappy Cubes</strong><span>Pressione Espaço, clique ou toque para voar.</span><button id="flappy-start" class="btn btn-primary">Jogar</button></div></div>
+      <div class="game-help">Evite os canos. Cada ponto vale pontos na loja. Sem limite de partidas.</div>
+    </div>
+
+    <!-- MEIA-LUA: TURNO DA NOITE — roda embutido via iframe same-origin,
+         servido pelo próprio WifiCord em /jogos/meia-lua/ (ver
+         server/integration.js do jogo). O login é automático pela sessão
+         do WifiCord (sem tela de convidado/senha) — ver client/js/main.js
+         do jogo. O src só é preenchido quando o card é aberto (evita
+         carregar o jogo inteiro sem necessidade) e é limpo ao voltar/
+         fechar, o que desconecta o socket e para o áudio. -->
+    <div id="game-panel-meialua" class="game-panel hidden">
+      <div class="games-header"><button type="button" class="btn btn-ghost btn-small" data-back-to-games>← Voltar para Jogos</button></div>
+      <div class="meialua-frame-wrap">
+        <iframe id="meialua-frame" title="Meia-Lua: Turno da Noite" allow="microphone; autoplay; fullscreen; gamepad" tabindex="-1"></iframe>
+      </div>
+    </div>
   </div>
 
   <div id="modal-admin" class="modal modal-admin hidden">

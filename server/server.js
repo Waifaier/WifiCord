@@ -17,7 +17,7 @@ async function bootstrap() {
   const session = require('express-session');
   const SqliteSessionStore = require('./session/SqliteSessionStore');
   const compression = require('./middleware/compress');
-  const { UPLOAD_DIR } = require('./storage');
+  const { SQLITE_PATH, UPLOAD_DIR } = require('./storage');
   const http = require('http');
   const { Server: SocketIOServer } = require('socket.io');
 
@@ -160,6 +160,28 @@ async function bootstrap() {
   app.use('/api/push', pushRouter);
   app.use('/api/moderation', moderationRouter);
   app.use('/api/announcements', announcementsRouter);
+
+  // -------------------------------------------------------------------
+  // Jogos > Meia-Lua: Turno da Noite — roda dentro deste MESMO processo e
+  // porta (obrigatório pro plano atual do Render), num namespace Socket.IO
+  // separado (/meia-lua) e API própria (/api/meia-lua). O jogo em si é
+  // ESM ("type":"module" só dentro de games/meia-lua/ — o resto do
+  // WifiCord continua CommonJS igual sempre foi), então é carregado com
+  // import() dinâmico em vez de require(); ver games/meia-lua/server/
+  // integration.js pros detalhes de como ele se encaixa no app/io daqui.
+  // Banco totalmente separado do chat.db, mas na mesma pasta (Persistent
+  // Disk do Render já cobre os dois automaticamente).
+  const meiaLuaDbPath = path.join(path.dirname(SQLITE_PATH), 'meia-lua.sqlite');
+  const { mountMeiaLua } = await import('../games/meia-lua/server/integration.js');
+  const meiaLua = await mountMeiaLua({ app, io, dbPath: meiaLuaDbPath });
+  // A ponte de login único (/api/meia-lua/session, usa a sessão do
+  // WifiCord) precisa ser montada ANTES do router do próprio jogo — os
+  // dois ficam no mesmo prefixo /api/meia-lua, e o router do jogo termina
+  // com um catch-all 404 que nunca repassa adiante pro Express tentar o
+  // próximo (ver o comentário sobre isso em integration.js).
+  const { createMeiaLuaBridgeRouter } = require('./routes/meiaLua');
+  app.use('/api/meia-lua', createMeiaLuaBridgeRouter({ accounts: meiaLua.accounts }));
+  app.use('/api/meia-lua', meiaLua.apiRouter);
 
   // Usado pelo app desktop pra detectar quando uma nova versão foi
   // publicada (ver desktop-app/main.js). Sem cache nenhum de propósito.

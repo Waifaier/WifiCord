@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#07060a" />
+  <meta name="description" content="Meia-Lua: Turno da Noite — RPG multiplayer de terror em uma pizzaria abandonada." />
+  <title>Meia-Lua: Turno da Noite</title>
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- ================= LOGIN ================= -->
+    <section class="screen" id="scr-auth">
+      <div class="panel narrow">
+        <div class="logo">
+          <div class="logo-moon"></div>
+          <h1 class="glitch" data-text="MEIA-LUA">MEIA-LUA</h1>
+          <p class="subtitle">TURNO DA NOITE</p>
+        </div>
+        <!-- O Meia-Lua só roda embutido dentro do WifiCord: o login é feito
+             pela sessão do WifiCord automaticamente (ver boot() em main.js
+             e server/routes/meiaLua.js no WifiCord) — não existem mais
+             telas de convidado/login/criar conta aqui dentro. Esta tela só
+             aparece enquanto conecta, ou se der algo errado (sessão
+             inválida, conta banida, sem internet). -->
+        <p class="hint" id="embed-status">Conectando com a sua conta do WifiCord…</p>
+        <p class="error" id="auth-error"></p>
+        <button class="btn primary" id="btn-embed-retry" type="button" hidden>Tentar de novo</button>
+      </div>
+    </section>
+
+    <!-- ================= MENU ================= -->
+    <section class="screen" id="scr-menu">
+      <div class="menu-layout">
+        <div class="logo big">
+          <div class="logo-moon"></div>
+          <h1 class="glitch" data-text="MEIA-LUA">MEIA-LUA</h1>
+          <p class="subtitle">TURNO DA NOITE</p>
+        </div>
+        <div class="menu-card">
+          <div class="player-chip" id="menu-player"></div>
+          <nav class="menu-buttons">
+            <button class="btn primary" data-go="play">▶ Jogar</button>
+            <button class="btn" data-go="create">＋ Criar sala</button>
+            <button class="btn" data-go="join"># Entrar em sala</button>
+            <button class="btn" data-go="profile">☻ Perfil</button>
+            <button class="btn" data-go="inventory">▤ Inventário &amp; Loja</button>
+            <button class="btn" data-go="settings">⚙ Configurações</button>
+            <button class="btn" data-go="credits">✦ Créditos</button>
+          </nav>
+        </div>
+      </div>
+      <p class="footer-note">Use fones de ouvido. Os animatrônicos ouvem você.</p>
+    </section>
+
+    <!-- ================= JOGAR ================= -->
+    <section class="screen" id="scr-play">
+      <div class="panel">
+        <h2>Jogar</h2>
+        <div class="grid-2">
+          <button class="big-choice" data-go="create"><b>Multiplayer · Criar sala</b><span>Gere um código e chame seus amigos.</span></button>
+          <button class="big-choice" data-go="join"><b>Multiplayer · Entrar</b><span>Digite o código ou escolha uma sala pública.</span></button>
+          <button class="big-choice" id="btn-solo"><b>Solo</b><span>Sala privada só sua. Começa na hora.</span></button>
+          <button class="big-choice" data-go="inventory"><b>Preparar-se</b><span>Compre equipamentos antes do turno.</span></button>
+        </div>
+        <button class="btn ghost back" data-go="menu">← Voltar</button>
+      </div>
+    </section>
+
+    <!-- ================= CRIAR SALA ================= -->
+    <section class="screen" id="scr-create">
+      <form class="panel narrow" id="form-create">
+        <h2>Criar sala</h2>
+        <label>Noite
+          <select name="night" id="create-night"></select>
+        </label>
+        <label>Limite de jogadores
+          <select name="maxPlayers" id="create-max"></select>
+        </label>
+        <label>Dificuldade
+          <select name="difficulty" id="create-diff"></select>
+        </label>
+        <p class="hint" id="create-diff-desc"></p>
+        <label class="check"><input type="checkbox" name="isPublic" /> Sala pública (aparece na lista)</label>
+        <button class="btn primary" type="submit">Criar</button>
+        <p class="error" id="create-error"></p>
+        <button class="btn ghost back" type="button" data-go="menu">← Voltar</button>
+      </form>
+    </section>
+
+    <!-- ================= ENTRAR ================= -->
+    <section class="screen" id="scr-join">
+      <div class="panel narrow">
+        <h2>Entrar em sala</h2>
+        <form id="form-join" class="row">
+          <input name="code" id="join-code" placeholder="NOITE-0000" maxlength="10" autocomplete="off" autocapitalize="characters" />
+          <button class="btn primary" type="submit">Entrar</button>
+        </form>
+        <p class="error" id="join-error"></p>
+        <h3>Salas públicas <button class="btn tiny" id="btn-refresh-rooms">↻</button></h3>
+        <ul class="room-list" id="public-rooms"><li class="muted">Carregando…</li></ul>
+        <button class="btn ghost back" data-go="menu">← Voltar</button>
+      </div>
+    </section>
+
+    <!-- ================= LOBBY ================= -->
+    <section class="screen" id="scr-lobby">
+      <div class="lobby">
+        <div class="panel lobby-main">
+          <div class="lobby-head">
+            <div>
+              <p class="muted small">CÓDIGO DA SALA</p>
+              <div class="room-code" id="lobby-code">-----</div>
+            </div>
+            <button class="btn tiny" id="btn-copy-code">Copiar</button>
+          </div>
+          <div class="lobby-config">
+            <label>Noite <select id="lobby-night"></select></label>
+            <label>Jogadores <select id="lobby-max"></select></label>
+            <label>Dificuldade <select id="lobby-diff"></select></label>
+            <label class="check"><input type="checkbox" id="lobby-public" /> Pública</label>
+          </div>
+          <p class="night-intro" id="lobby-night-intro"></p>
+          <ul class="member-list" id="lobby-members"></ul>
+          <div class="row wrap">
+            <button class="btn primary" id="btn-ready">Estou pronto</button>
+            <button class="btn primary" id="btn-start">▶ Iniciar partida</button>
+            <button class="btn" id="btn-voice-lobby">🎙 Voz: off</button>
+            <button class="btn ghost" id="btn-leave-room">Sair da sala</button>
+          </div>
+          <p class="error" id="lobby-error"></p>
+        </div>
+        <div class="panel chat-panel">
+          <h3>Chat</h3>
+          <div class="chat-log" id="lobby-chat"></div>
+          <form class="row" id="lobby-chat-form">
+            <input maxlength="200" placeholder="Mensagem…" autocomplete="off" />
+            <button class="btn" type="submit">Enviar</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PERFIL ================= -->
+    <section class="screen" id="scr-profile">
+      <div class="panel wide">
+        <h2>Perfil</h2>
+        <div class="profile-grid">
+          <div>
+            <div class="profile-card" id="profile-card"></div>
+            <form class="row" id="form-rename">
+              <input name="name" maxlength="16" placeholder="Novo nome" />
+              <button class="btn" type="submit">Renomear</button>
+            </form>
+            <form id="form-claim" class="claim" hidden>
+              <p class="small">Proteja seu progresso de convidado com usuário e senha:</p>
+              <div class="row wrap">
+                <input name="username" placeholder="usuário" maxlength="20" autocomplete="username" />
+                <input name="password" type="password" placeholder="senha" maxlength="100" autocomplete="new-password" />
+                <button class="btn" type="submit">Salvar conta</button>
+              </div>
+            </form>
+            <p class="error" id="profile-error"></p>
+          </div>
+          <div>
+            <h3>Atributos <span class="pill" id="attr-points"></span></h3>
+            <ul class="attr-list" id="attr-list"></ul>
+          </div>
+          <div>
+            <h3>Estatísticas</h3>
+            <ul class="stat-list" id="stat-list"></ul>
+            <h3>Noites</h3>
+            <ul class="night-list" id="night-list"></ul>
+            <h3>Ranking</h3>
+            <ol class="stat-list" id="leaderboard"></ol>
+          </div>
+        </div>
+        <button class="btn ghost back" data-go="menu">← Voltar</button>
+      </div>
+    </section>
+
+    <!-- ================= INVENTÁRIO ================= -->
+    <section class="screen" id="scr-inventory">
+      <div class="panel wide">
+        <h2>Inventário <span class="pill money" id="inv-money"></span></h2>
+        <div class="tabs" data-tabs="inv">
+          <button class="tab active" data-tab="bag">Mochila</button>
+          <button class="tab" data-tab="shop">Loja da Madrugada</button>
+        </div>
+        <div class="tab-page active" data-page="bag">
+          <div class="equip-slots" id="equip-slots"></div>
+          <div class="item-grid" id="bag-items"></div>
+        </div>
+        <div class="tab-page" data-page="shop">
+          <div class="item-grid" id="shop-items"></div>
+        </div>
+        <p class="error" id="inv-error"></p>
+        <button class="btn ghost back" data-go="menu">← Voltar</button>
+      </div>
+    </section>
+
+    <!-- ================= CONFIGURAÇÕES ================= -->
+    <section class="screen" id="scr-settings">
+      <div class="panel narrow">
+        <h2>Configurações</h2>
+        <div id="settings-form" class="settings"></div>
+        <h3>Controles</h3>
+        <ul class="keys">
+          <li><kbd>W A S D</kbd> mover · <kbd>Shift</kbd> correr · <kbd>Espaço</kbd> andar agachado / prender a respiração</li>
+          <li><kbd>E</kbd> interagir · <kbd>F</kbd> lanterna</li>
+          <li><kbd>TAB</kbd> inventário · <kbd>M</kbd> mapa · <kbd>C</kbd> câmeras</li>
+          <li><kbd>1-5</kbd> usar item · <kbd>Enter</kbd> chat · <kbd>V</kbd> falar (push-to-talk)</li>
+          <li><kbd>J</kbd> checklist da noite · <kbd>ESC</kbd> menu</li>
+        </ul>
+        <button class="btn ghost back" data-go="back">← Voltar</button>
+      </div>
+    </section>
+
+    <!-- ================= CRÉDITOS ================= -->
+    <section class="screen" id="scr-credits">
+      <div class="panel narrow credits">
+        <h2>Créditos</h2>
+        <p><b>Meia-Lua: Turno da Noite</b></p>
+        <p>Jogo original de terror/RPG cooperativo inspirado no gênero "sobreviva à noite".</p>
+        <p>Personagens, mapa, história, arte e sons são originais: todos os gráficos são desenhados via Canvas e todos os sons são sintetizados em tempo real com Web Audio (sem arquivos de terceiros).</p>
+        <p>Tecnologias: HTML5 · CSS3 · JavaScript · Node.js · Express · Socket.IO · SQLite · WebRTC.</p>
+        <p>Fontes: VT323 e Share Tech Mono (Google Fonts, licença OFL).</p>
+        <p class="muted">Nenhum ativo de franquias existentes foi utilizado.</p>
+        <button class="btn ghost back" data-go="menu">← Voltar</button>
+      </div>
+    </section>
+
+    <!-- ================= JOGO ================= -->
+    <section class="screen" id="scr-game">
+      <canvas id="game-canvas"></canvas>
+      <canvas id="fx-canvas"></canvas>
+      <div id="hud">
+        <div class="hud-tl">
+          <div class="bar-row"><span>HP</span><div class="bar hp"><i id="hud-hp"></i></div><em id="hud-hp-t"></em></div>
+          <div class="bar-row"><span>ST</span><div class="bar st"><i id="hud-st"></i></div></div>
+          <div class="bar-row"><span>MEDO</span><div class="bar fear"><i id="hud-fear"></i></div></div>
+          <div class="bar-row"><span>🔦</span><div class="bar bat"><i id="hud-bat"></i></div></div>
+          <div class="xp-row"><b id="hud-level">Nv 1</b><div class="bar xp"><i id="hud-xp"></i></div><em id="hud-money">$0</em></div>
+        </div>
+        <div class="hud-tc">
+          <div class="clock" id="hud-clock">12:00 AM</div>
+          <div class="night-name" id="hud-night">NOITE 1</div>
+          <div class="power"><span>ENERGIA</span><div class="bar power-bar"><i id="hud-power"></i></div><em id="hud-power-t">100%</em><span class="usage" id="hud-usage"></span></div>
+          <div class="respawns" id="hud-respawns"></div>
+        </div>
+        <div class="hud-tr">
+          <div class="quests" id="hud-quests"></div>
+          <ul class="team" id="hud-team"></ul>
+        </div>
+        <div class="toasts" id="toasts"></div>
+        <div class="eye" id="hud-eye" hidden>
+          <svg viewBox="0 0 100 50" aria-hidden="true"><path class="eye-shape" d="M4 25 Q50 -8 96 25 Q50 58 4 25 Z"/><circle class="eye-iris" cx="50" cy="25" r="13"/><circle class="eye-pupil" cx="50" cy="25" r="5"/></svg>
+        </div>
+        <div class="watcher" id="hud-watcher" hidden></div>
+        <div class="objective" id="hud-objective" hidden><span class="arrow" id="obj-arrow">➤</span><div><b id="obj-text"></b><em id="obj-dist"></em></div></div>
+        <div class="breath" id="hud-breath" hidden><div class="bar"><i id="hud-breath-bar"></i></div><span id="hud-breath-t"></span></div>
+        <div class="prompt" id="hud-prompt" hidden></div>
+        <div class="action-bar" id="hud-action" hidden><div><i></i></div><span></span></div>
+        <div class="hotbar" id="hud-hotbar"></div>
+        <div class="heard" id="hud-heard"></div>
+        <div class="chat-hud" id="chat-hud">
+          <div class="chat-log" id="game-chat"></div>
+          <form id="game-chat-form" hidden><input maxlength="200" placeholder="Enter para enviar · Esc para fechar" autocomplete="off" /></form>
+        </div>
+        <div class="hud-buttons">
+          <button class="hbtn" id="hb-check" title="Checklist (J)">📋</button>
+          <button class="hbtn" id="hb-voice" title="Voz">🎙</button>
+          <button class="hbtn" id="hb-menu" title="Menu (ESC)">☰</button>
+        </div>
+        <div class="status-center" id="status-center" hidden></div>
+      </div>
+
+      <!-- controles touch -->
+      <div id="touch" hidden>
+        <div class="joy" id="joy"><div class="joy-knob" id="joy-knob"></div></div>
+        <div class="tbuttons">
+          <button class="tbtn big" data-t="interact">E</button>
+          <button class="tbtn" data-t="sprint">🏃</button>
+          <button class="tbtn" data-t="sneak">🤫</button>
+          <button class="tbtn" data-t="flash">🔦</button>
+          <button class="tbtn" data-t="cams">📷</button>
+          <button class="tbtn" data-t="inv">🎒</button>
+          <button class="tbtn" data-t="map">🗺</button>
+          <button class="tbtn" data-t="chat">💬</button>
+        </div>
+      </div>
+
+      <!-- câmeras -->
+      <div class="overlay cams" id="ov-cams" hidden>
+        <div class="cam-ui">
+          <div class="cam-top"><span class="rec">● REC</span> <b id="cam-name">CAM</b> <span id="cam-time"></span></div>
+          <div class="cam-status" id="cam-status"></div>
+          <div class="cam-side">
+            <div class="cam-grid" id="cam-buttons"></div>
+            <div class="cam-doors" id="cam-doors"></div>
+            <button class="btn" id="btn-close-cams">Fechar [C]</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- mapa -->
+      <div class="overlay map" id="ov-map" hidden>
+        <canvas id="map-canvas"></canvas>
+        <button class="btn close-ov" data-close="map">Fechar [M]</button>
+      </div>
+
+      <!-- inventário em jogo -->
+      <div class="overlay inv" id="ov-inv" hidden>
+        <div class="panel wide">
+          <h2>Mochila</h2>
+          <div class="ingame-inv">
+            <div class="equip-slots" id="g-equip"></div>
+            <div class="item-grid" id="g-items"></div>
+            <div class="attr-mini" id="g-attrs"></div>
+          </div>
+          <button class="btn close-ov" data-close="inv">Fechar [TAB]</button>
+        </div>
+      </div>
+
+      <!-- pausa -->
+      <div class="overlay pause" id="ov-pause" hidden>
+        <div class="panel narrow">
+          <h2>Pausa</h2>
+          <p class="muted small">O jogo continua rodando para todos.</p>
+          <button class="btn primary" data-close="pause">Continuar</button>
+          <button class="btn" id="btn-pause-settings">Configurações</button>
+          <button class="btn danger" id="btn-leave-match">Abandonar partida</button>
+        </div>
+      </div>
+
+      <!-- checklist -->
+      <div class="overlay check" id="ov-check" hidden>
+        <div class="panel wide checklist">
+          <h2>Anotações do vigia</h2>
+          <div class="check-grid">
+            <section><h3>O que eu preciso fazer</h3><ul id="check-quests"></ul></section>
+            <section><h3>Coisas pra lembrar</h3><ul id="check-basics"></ul>
+              <h3>O que tem aqui dentro comigo</h3><ul id="check-anims" class="anim-list"></ul></section>
+          </div>
+          <button class="btn close-ov" data-close="check">Fechar [J]</button>
+        </div>
+      </div>
+
+      <!-- lore -->
+      <div class="overlay lore" id="ov-lore" hidden>
+        <div class="panel narrow paper">
+          <h3 id="lore-title"></h3>
+          <p id="lore-text"></p>
+          <button class="btn" data-close="lore">Fechar</button>
+        </div>
+      </div>
+
+      <!-- intro / morte -->
+      <div class="overlay intro" id="ov-intro" hidden>
+        <div class="intro-box">
+          <h2 id="intro-title"></h2>
+          <p id="intro-text"></p>
+          <p class="muted small" id="intro-anims"></p>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ================= RESULTADOS ================= -->
+    <section class="screen" id="scr-results">
+      <div class="panel wide results">
+        <h1 id="res-title">06:00 AM</h1>
+        <p id="res-sub"></p>
+        <div class="grid-2">
+          <div><h3>Minhas anotações</h3><ul class="quest-summary" id="res-quests"></ul></div>
+          <div><h3>Equipe</h3><table class="res-table"><thead><tr><th>Vigia</th><th>XP</th><th>$</th><th>Nível</th><th>Mortes</th></tr></thead><tbody id="res-players"></tbody></table></div>
+        </div>
+        <div class="row wrap center">
+          <button class="btn primary" id="btn-res-lobby">Voltar ao lobby</button>
+          <button class="btn" data-go="profile">Gastar pontos</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="crt-scanlines"></div>
+    <div class="crt-vignette"></div>
+    <div class="crt-noise"></div>
+    <div id="modal" class="modal" hidden><div class="panel narrow"><p id="modal-text"></p><button class="btn" id="modal-ok">OK</button></div></div>
+    <div id="conn-banner" hidden>Reconectando ao servidor…</div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

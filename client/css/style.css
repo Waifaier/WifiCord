@@ -4433,3 +4433,80 @@ html.has-custom-titlebar #members-panel {
     bottom: max(8px, env(safe-area-inset-bottom)) !important;
   }
 }
+
+/* ================================================================
+   Aba "Jogos" — hub com cards (Flappy Cubes + Meia-Lua: Turno da Noite)
+   dentro de #modal-games. Todas as classes/ids abaixo são novas (nada aqui
+   reaproveita um nome já usado em outro lugar do arquivo), então não entra
+   na mesma armadilha de empate de especificidade que os blocos de call
+   acima — mesmo assim isso fica no fim do arquivo por consistência com o
+   resto do arquivo (ver comentários lá em cima sobre a ordem importar pra
+   !important). ver client/js/games.js pra troca hub <-> painel de jogo.
+   ================================================================ */
+#modal-games { display: flex; flex-direction: column; }
+#games-hub { display: flex; flex-direction: column; min-height: 0; }
+.game-panel { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+
+.games-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin: 16px 0;
+}
+.game-card {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid rgba(255, 255, 255, .08);
+  cursor: pointer;
+  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.game-card:hover, .game-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(124, 92, 255, .4);
+  box-shadow: 0 14px 34px -14px var(--glow-violet, rgba(124, 92, 255, .5));
+}
+.game-card-cover {
+  height: 132px;
+  display: grid;
+  place-items: center;
+  font-size: 44px;
+  background: radial-gradient(circle at 30% 20%, rgba(124, 92, 255, .28), transparent 60%), #14111f;
+}
+.game-card-cover-flappy { background: radial-gradient(circle at 30% 20%, rgba(124, 92, 255, .28), transparent 60%), linear-gradient(160deg, #241a45, #0b0913); }
+.game-card-cover-meialua {
+  background:
+    radial-gradient(circle at 50% 30%, rgba(124, 92, 255, .22), transparent 65%),
+    linear-gradient(180deg, #1a1424, #07060a);
+  background-image:
+    linear-gradient(180deg, rgba(7,6,10,0) 45%, rgba(7,6,10,.92) 100%),
+    url('/jogos/meia-lua/assets/sprites/face_gregorio.png');
+  background-repeat: no-repeat;
+  background-position: center 18px, center 14px;
+  background-size: auto, 96px 96px;
+  image-rendering: pixelated;
+}
+.game-card-body { padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.game-card-body b { font-size: 14px; }
+.game-card-body small { color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+
+.meialua-frame-wrap {
+  flex: 1 1 auto;
+  min-height: min(70vh, 640px);
+  margin-top: 12px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(124, 92, 255, .28);
+  background: #050308;
+  box-shadow: 0 20px 50px -12px #000a, 0 0 0 1px rgba(255, 255, 255, .04) inset;
+}
+#meialua-frame { display: block; width: 100%; height: 100%; border: 0; background: #050308; }
+
+@media (max-width: 680px) {
+  .modal-games { height: 100dvh !important; max-height: 100dvh !important; border-radius: 0 !important; }
+  .games-grid { grid-template-columns: 1fr; }
+  .meialua-frame-wrap { min-height: 0; }
+}
