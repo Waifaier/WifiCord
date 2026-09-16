@@ -426,3 +426,45 @@ body.touch .objective { top: calc(150px + var(--safe-t)); }
 .watcher { position: absolute; width: 180px; height: 180px; margin: -90px 0 0 -90px; border-radius: 50%; background: radial-gradient(circle, rgba(255,20,10,.55), rgba(255,0,0,0) 65%); pointer-events: none; mix-blend-mode: screen; }
 body.touch .eye { bottom: calc(62px + var(--safe-b)); }
 @media (max-width: 700px) { .eye { width: 60px; height: 30px; } }
+
+/* ---------- HUD: celular deitado (paisagem baixa) ----------
+   Os offsets grandes de body.touch (pensados pra tela vertical, com
+   o joystick/botões ocupando boa parte da altura) fazem os painéis
+   colidirem quando a tela é baixa (celular em paisagem). Aqui a
+   largura sobra mas a altura é curta, então tudo fica mais compacto
+   e organizado em faixas: topo (vida/relógio/missões), meio (jogo)
+   e uma pilha central embaixo (aviso/ação/hotbar), com os botões de
+   toque original (joystick e tbuttons) sem serem mexidos. */
+@media (max-height: 460px) {
+  #hud { font-size: 11px; }
+  .hud-tl { top: calc(6px + var(--safe-t)); left: 6px; width: 164px; padding: 5px 7px; gap: 2px; }
+  .bar-row, .xp-row { grid-template-columns: 30px 1fr auto; gap: 4px; }
+  .bar-row span { font-size: 9px; }
+  .bar { height: 6px; }
+  .hud-tc { top: calc(4px + var(--safe-t)); }
+  .clock { font-size: 1.4rem; }
+  .night-name { display: none; }
+  .power { margin-top: 2px; font-size: 9px; }
+  /* top maior que o resto do HUD pra não ficar embaixo do botão "Sair
+     da tela cheia" do WifiCord, que fica por cima do jogo nesse canto */
+  .hud-tr { top: calc(34px + var(--safe-t)); right: 6px; width: min(46vw, 190px); gap: 4px; }
+  .quests { padding: 4px 6px; max-height: 26vh; overflow: hidden; }
+  .quests h4 { font-size: .9rem; margin-bottom: 2px; }
+  .quests .q { font-size: 10px; margin: 1px 0; }
+  .team { max-height: 13vh; overflow: hidden; gap: 2px; }
+  .team li { padding: 2px 6px; font-size: 10px; }
+  .toasts { top: calc(56px + var(--safe-t)); }
+  .objective, body.touch .objective { top: calc(60px + var(--safe-t)); padding: 3px 8px; }
+  .objective b { font-size: 10px; }
+  .objective em { display: none; }
+  .hotbar { bottom: calc(6px + var(--safe-b)); gap: 4px; }
+  .hotbar button { width: 42px; height: 42px; font-size: 1.1rem; }
+  body.touch .hotbar { bottom: calc(6px + var(--safe-b)); }
+  .eye, body.touch .eye { bottom: calc(54px + var(--safe-b)); width: 54px; height: 27px; }
+  .prompt, body.touch .prompt { bottom: calc(92px + var(--safe-b)); font-size: 11px; max-width: 70vw; white-space: normal; }
+  .action-bar, body.touch .action-bar { bottom: calc(122px + var(--safe-b)); width: 160px; }
+  .chat-hud, body.touch .chat-hud { left: 6px; bottom: auto; top: calc(90px + var(--safe-t)); width: min(190px, 30vw); }
+  .chat-hud .chat-log, body.touch .chat-hud .chat-log { max-height: 40px; font-size: 9px; }
+  .hud-buttons, body.touch .hud-buttons { top: auto; bottom: calc(6px + var(--safe-b)); right: 6px; }
+  .hbtn { width: 34px; height: 34px; font-size: .9rem; }
+}

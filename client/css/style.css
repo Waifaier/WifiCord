@@ -4542,6 +4542,11 @@ html.has-custom-titlebar #members-panel {
   transition: opacity .15s ease;
 }
 .meialua-fullscreen-btn:hover, .meialua-fullscreen-btn:focus-visible { opacity: 1; }
+@media (max-height: 460px) {
+  /* celular deitado: botão bem compacto pra não brigar com o HUD do
+     jogo (painel de missões), que já dá espaço pra essa altura. */
+  .meialua-fullscreen-btn { top: 6px; right: 6px; padding: 3px 8px; font-size: 10px; border-radius: 6px; }
+}
 
 .meialua-frame-wrap:fullscreen {
   border: 0;
