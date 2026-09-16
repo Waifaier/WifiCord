@@ -1,4 +1,4 @@
-name: Build e publicar APK Android
+﻿name: Build e publicar APK Android
 
 # Roda quando algo muda dentro de mobile/ (a casca Android) ou quando você
 # dispara manualmente pela aba "Actions" do GitHub. Mudanças só no site
@@ -35,6 +35,13 @@ jobs:
 
       - name: Configurar o SDK do Android
         uses: android-actions/setup-android@v3
+        with:
+          # O pacote legado "tools" não existe mais no repositório da
+          # Google (removido faz anos, virou "cmdline-tools") — o padrão
+          # dessa action tenta instalar "tools platform-tools" e quebra
+          # com "Failed to find package 'tools'". O runner do GitHub já
+          # vem com o SDK pré-instalado; só precisamos do platform-tools.
+          packages: "platform-tools"
 
       - name: Configurar Node
         uses: actions/setup-node@v4
