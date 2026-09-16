@@ -70,6 +70,30 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id);
 CREATE INDEX IF NOT EXISTS idx_messages_dm ON messages(from_user_id, to_user_id);
+-- Até quando cada pessoa já leu cada canal (guarda o id da última mensagem
+-- vista). É o que permite calcular menção/não-lida ainda persistindo depois
+-- de um F5, reconexão ou o app mobile ficar fechado — antes disso os
+-- indicadores viviam só na memória da aba e zeravam a cada recarregamento.
+CREATE TABLE IF NOT EXISTS channel_reads (
+  user_id INTEGER NOT NULL,
+  channel_id INTEGER NOT NULL,
+  last_read_message_id INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, channel_id),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(channel_id) REFERENCES channels(id) ON DELETE CASCADE
+);
+-- Quem foi @mencionado em cada mensagem, gravado na hora do envio. Sem
+-- isso não dava pra recalcular a contagem de menções não lidas depois que
+-- a pessoa reconecta — só existia o evento ao vivo "mention:new".
+CREATE TABLE IF NOT EXISTS message_mentions (
+  message_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  PRIMARY KEY (message_id, user_id),
+  FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_message_mentions_user ON message_mentions(user_id);
 CREATE TABLE IF NOT EXISTS user_inventory (
   user_id INTEGER NOT NULL,
   item_id TEXT NOT NULL,

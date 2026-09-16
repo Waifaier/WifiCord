@@ -2069,6 +2069,19 @@ body { min-width: 0; min-height: 100dvh; overflow: hidden; }
   border-color: rgba(124, 92, 255, .45);
   box-shadow: 0 0 0 1px rgba(124, 92, 255, .25);
 }
+
+/* Mensagem que me menciona: destaque na mensagem inteira (igual ao Discord),
+   não só no pedacinho "@fulano" dentro dela — antes só o texto do @ ficava
+   amarelo, o resto da mensagem passava despercebido na rolagem do chat. */
+.message-item.mentions-me {
+  background: rgba(251, 191, 36, .09);
+  border-radius: 10px;
+  box-shadow: inset 2px 0 0 rgba(251, 191, 36, .55);
+}
+.message-item.mentions-me .message-content {
+  border-color: rgba(251, 191, 36, .4);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, .22);
+}
 .message-pinned-tag {
   display: inline-flex;
   align-items: center;
@@ -2090,6 +2103,75 @@ body { min-width: 0; min-height: 100dvh; overflow: hidden; }
 }
 .message-pin-btn { transition: opacity .12s ease, background .12s ease, color .12s ease, transform .12s ease; }
 .message-item.pinned .message-pin-btn { transform: rotate(-25deg); }
+
+/* Barra fixa de "tem mensagem fixada" acima do chat (ver index.html,
+   #pinned-bar) — some quando o canal não tem nenhuma fixada. */
+.pinned-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: rgba(124, 92, 255, .1);
+  border-bottom: 1px solid rgba(124, 92, 255, .22);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.pinned-bar:hover { background: rgba(124, 92, 255, .16); }
+.pinned-bar.hidden { display: none; }
+.pinned-bar-icon { flex: 0 0 auto; font-size: 13px; }
+.pinned-bar-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--text-secondary, #c8c3d6);
+}
+.pinned-bar-text strong { color: var(--text-primary, #eee); font-weight: 700; }
+.pinned-bar-viewall {
+  flex: 0 0 auto;
+  background: rgba(124, 92, 255, .18);
+  color: var(--accent-secondary, #7C5CFF);
+  border: none;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pinned-bar-viewall:hover { background: rgba(124, 92, 255, .3); }
+
+/* Lista dentro do modal "Mensagens fixadas" (ver openPinnedMessagesModal
+   em client/js/app.js). */
+.pinned-messages-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; }
+.pinned-message-item {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-elevated, #201c2e);
+  border: 1px solid rgba(255, 255, 255, .06);
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease;
+}
+.pinned-message-item:hover { background: rgba(124, 92, 255, .1); border-color: rgba(124, 92, 255, .3); }
+.pinned-message-author {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--text-primary, #eee);
+  margin-bottom: 3px;
+}
+.pinned-message-author .message-time { font-weight: 500; color: var(--text-muted, #9a95ab); font-size: 11px; }
+.pinned-message-content {
+  font-size: 13px;
+  color: var(--text-secondary, #c8c3d6);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
 
 /* Reações com pequena entrada suave */
 .message-reactions .message-reaction {
@@ -4188,39 +4270,101 @@ html.has-custom-titlebar #members-panel {
   .announcement-title { font-size: 19px; }
 }
 
-/* Avatar interativo: presets "Pirueta", "Brilho ao passar o mouse" e os
-   companheiros (gatinho/passarinho) que seguem o mouse dentro do cartão de
-   perfil. Reaproveita as classes .profile-avatar-decorated já existentes. */
+/* ================================================================
+   Avatar interativo — presets "Pirueta", "Brilho ao passar o mouse" e
+   os companheiros (gatinho/passarinho). Pixel art original desenhada
+   à mão (client/assets/avatarfx-*.png — gatinho/passarinho: sprite
+   sheet de 6 frames num "loaf" bem expressivo, com respiro, rabo/asa
+   balançando, piscada e um coraçãozinho/notinha de vez em quando;
+   brilho: burst de 7 frames com anel de choque se expandindo) — nada
+   de emoji solto. Cada preset anima por steps() trocando de frame,
+   com image-rendering:pixelated pra manter os pixels nítidos em
+   qualquer escala. Reaproveita as classes .profile-avatar-decorated
+   já existentes (cartão de perfil, lista de amigos, mensagens,
+   membros do servidor...); os blocos #wc-preview-avatar-wrap logo
+   abaixo espelham o mesmo efeito pro preview ao vivo no editor de
+   perfil. */
 @keyframes avatarPirouette { to { transform: rotate(360deg); } }
 .profile-avatar-decorated.avatar-fx-pirouette img,
 .profile-avatar-decorated.avatar-fx-pirouette > span { animation: avatarPirouette 2.6s linear infinite; }
 
-@keyframes avatarHoverBurst {
-  0% { transform: scale(.4) rotate(0deg); opacity: 0; }
-  40% { opacity: 1; }
-  100% { transform: scale(1.6) rotate(30deg); opacity: 0; }
+/* Poeira de pixels girando junto da pirueta — mesma sprite sheet do
+   brilho ao passar o mouse, só que em loop contínuo e bem discreta. */
+@keyframes avatarPirouetteDustSpin { to { transform: rotate(-360deg); } }
+@keyframes avatarPirouetteDustFrames { to { background-position: -672px 0; } }
+.profile-avatar-decorated.avatar-fx-pirouette::after {
+  content: ''; position: absolute; inset: 0; margin: auto; width: 96px; height: 96px; z-index: 4; pointer-events: none;
+  background-image: url('../assets/avatarfx-sparkle.png'); background-repeat: no-repeat;
+  background-position: 0 0; background-size: 672px 96px; image-rendering: pixelated;
+  opacity: .6; mix-blend-mode: screen;
+  animation: avatarPirouetteDustSpin 2.6s linear infinite, avatarPirouetteDustFrames 1.6s steps(7) infinite;
 }
+
+/* .profile-avatar-decorated normalmente corta tudo que passa da borda
+   (overflow:hidden, ver a regra .avatar-wrap,...,.profile-avatar-decorated
+   mais acima) pra manter a foto redondinha. Isso cortaria o brilho/poeira
+   de pixels bem no meio do cartão de perfil, que é justamente onde esses
+   efeitos deveriam aparecer — então libera overflow só quando um desses
+   dois presets está ativo (maior especificidade que a regra genérica,
+   então ganha independente da ordem no arquivo). */
+.profile-avatar-decorated.avatar-fx-hover-burst,
+.profile-avatar-decorated.avatar-fx-pirouette { overflow: visible; }
 .profile-avatar-decorated.avatar-fx-hover-burst { cursor: pointer; }
 .profile-avatar-decorated.avatar-fx-hover-burst::after {
-  content: '✨ ✨ ✨'; position: absolute; inset: -16px; z-index: 5;
-  display: grid; place-items: center; font-size: 15px; opacity: 0; pointer-events: none;
+  content: ''; position: absolute; inset: 0; margin: auto; z-index: 5;
+  width: 96px; height: 96px; pointer-events: none; opacity: 0;
+  background-image: url('../assets/avatarfx-sparkle.png'); background-repeat: no-repeat;
+  background-position: 0 0; background-size: 672px 96px; image-rendering: pixelated;
 }
-.profile-avatar-decorated.avatar-fx-hover-burst:hover::after { opacity: 1; animation: avatarHoverBurst .6s ease-out; }
+.profile-avatar-decorated.avatar-fx-hover-burst:hover::after {
+  opacity: 1; animation: avatarSparkleFrames .9s steps(7) forwards;
+}
+@keyframes avatarSparkleFrames { to { background-position: -672px 0; } }
 
+/* Companheiros (gatinho/passarinho): sprite de 6 frames em loop
+   (respiro/bounce, rabo ou asa se mexendo, piscada, e um coraçãozinho
+   ou notinha musical de vez em quando pra dar personalidade de
+   verdade). startAvatarPet() (client/js/features.js) só troca a
+   classe is-cat/is-bird — a posição continua vindo do requestAnimationFrame
+   que segue o mouse, então o "bounce" do sprite some por cima disso. */
 .wc-avatar-pet {
-  position: absolute; top: 0; left: 0; font-size: 26px; pointer-events: none;
-  z-index: 6; filter: drop-shadow(0 3px 6px #000a); will-change: transform;
+  position: absolute; top: 0; left: 0; width: 72px; height: 72px; pointer-events: none;
+  z-index: 6; filter: drop-shadow(0 4px 5px #000b); will-change: transform;
+  background-repeat: no-repeat; image-rendering: pixelated;
+}
+@keyframes avatarPetCatFrames { to { background-position: -432px 0; } }
+@keyframes avatarPetBirdFrames { to { background-position: -432px 0; } }
+.wc-avatar-pet.is-cat {
+  background-image: url('../assets/avatarfx-cat.png'); background-size: 432px 72px;
+  animation: avatarPetCatFrames 2.1s steps(6) infinite;
+}
+.wc-avatar-pet.is-bird {
+  background-image: url('../assets/avatarfx-bird.png'); background-size: 432px 72px;
+  animation: avatarPetBirdFrames .85s steps(6) infinite;
 }
 
-/* Preview ao vivo no editor de perfil (aba de personalização). */
+/* Preview ao vivo no editor de perfil (aba de personalização) — mesmos
+   efeitos, mesmas sprite sheets, só trocando o seletor pro wrapper do
+   preview em vez de .profile-avatar-decorated. */
 #wc-preview-avatar-wrap[data-avatarfx="pirouette"] .wc-preview-avatar img,
 #wc-preview-avatar-wrap[data-avatarfx="pirouette"] .wc-preview-avatar span { animation: avatarPirouette 2.6s linear infinite; }
+#wc-preview-avatar-wrap[data-avatarfx="pirouette"]::after {
+  content: ''; position: absolute; inset: 0; margin: auto; width: 96px; height: 96px; z-index: 4; pointer-events: none;
+  background-image: url('../assets/avatarfx-sparkle.png'); background-repeat: no-repeat;
+  background-position: 0 0; background-size: 672px 96px; image-rendering: pixelated;
+  opacity: .6; mix-blend-mode: screen;
+  animation: avatarPirouetteDustSpin 2.6s linear infinite, avatarPirouetteDustFrames 1.6s steps(7) infinite;
+}
 #wc-preview-avatar-wrap[data-avatarfx="hover-burst"] { cursor: pointer; }
 #wc-preview-avatar-wrap[data-avatarfx="hover-burst"]::after {
-  content: '✨ ✨ ✨'; position: absolute; inset: -16px; z-index: 5;
-  display: grid; place-items: center; font-size: 15px; opacity: 0; pointer-events: none;
+  content: ''; position: absolute; inset: 0; margin: auto; z-index: 5;
+  width: 96px; height: 96px; pointer-events: none; opacity: 0;
+  background-image: url('../assets/avatarfx-sparkle.png'); background-repeat: no-repeat;
+  background-position: 0 0; background-size: 672px 96px; image-rendering: pixelated;
 }
-#wc-preview-avatar-wrap[data-avatarfx="hover-burst"]:hover::after { opacity: 1; animation: avatarHoverBurst .6s ease-out; }
+#wc-preview-avatar-wrap[data-avatarfx="hover-burst"]:hover::after {
+  opacity: 1; animation: avatarSparkleFrames .9s steps(7) forwards;
+}
 
 /* Botão "mortal": só aparece para a allowlist (ver features.js) e faz a
    própria foto de perfil de quem clicou dar um mortal, visível pra todos. */

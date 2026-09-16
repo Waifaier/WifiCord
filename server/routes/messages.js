@@ -34,6 +34,12 @@ router.get('/dm/:userId', requireAuth, (req, res) => {
   res.json({ messages });
 });
 
+// Indicadores de servidor (menção + não lida) prontos pra popular a tela
+// assim que o app carrega/reconecta — ver Message.getUnreadSummaryForUser.
+router.get('/unread-summary', requireAuth, (req, res) => {
+  res.json(Message.getUnreadSummaryForUser(req.session.userId));
+});
+
 router.get('/channel/:channelId/pinned', requireAuth, (req, res) => {
   const channelId = parsePositiveInt(req.params.channelId);
   if (!channelId) return res.status(400).json({ error: 'ID inválido.' });

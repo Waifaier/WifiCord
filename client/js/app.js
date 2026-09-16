@@ -372,6 +372,9 @@
       messageSearchClose: $('message-search-close'),
       pinnedMessagesBtn: $('pinned-messages-btn'),
       pinnedMessagesList: $('pinned-messages-list'),
+      pinnedBar: $('pinned-bar'),
+      pinnedBarText: $('pinned-bar-text'),
+      pinnedBarViewAll: $('pinned-bar-view-all'),
       mobileMembersBtn: $('mobile-members-btn'),
       membersPanelClose: $('members-panel-close'),
       mobileNavBackdrop: $('mobile-nav-backdrop'),
@@ -698,6 +701,22 @@
     setTimeout(()=>o.classList.remove('show'),1600);
   }
 
+  // Mesma regra de @usuario usada em formatMessageContent, só que pra saber
+  // (sem montar HTML) se ESTA mensagem me menciona — usado pra destacar a
+  // mensagem inteira no chat, não só o pedacinho "@fulano" dentro dela.
+  function messageMentionsSelf(raw) {
+    const myUsername = state.currentUser && state.currentUser.username ? String(state.currentUser.username).toLowerCase() : '';
+    if (!myUsername) return false;
+    const content = String(raw || '');
+    if (content.startsWith('__MEDIA__:') || content.startsWith('__STICKER__:') || content.startsWith('__SUPER__:')) return false;
+    const re = /(^|[\s(])@([a-zA-Z0-9_]{3,32})\b/g;
+    let m;
+    while ((m = re.exec(content))) {
+      if (m[2].toLowerCase() === myUsername) return true;
+    }
+    return false;
+  }
+
   function reactionHtml(msg) {
     const reactions=Array.isArray(msg.reactions)?msg.reactions:[];
     return '<div class="message-reactions">'+reactions.map(r=>'<button type="button" class="message-reaction'+(r.reacted?' reacted':'')+'" data-reaction-emoji="'+escapeHtml(r.emoji)+'" data-reaction-message="'+escapeHtml(msg.id)+'" title="Reagir com '+escapeHtml(r.emoji)+'">'+escapeHtml(r.emoji)+' <span>'+Number(r.count||0)+'</span></button>').join('')+'</div>';
@@ -717,8 +736,9 @@
     const pinBtn = state.activeChannelId
       ? '<button type="button" class="message-pin-btn" data-pin-message="' + escapeHtml(msg.id) + '" title="' + (msg.pinnedAt ? 'Desafixar mensagem' : 'Fixar mensagem') + '" aria-label="Fixar mensagem">' + (window.WCIcons ? window.WCIcons.pin : '📌') + '</button>'
       : '';
+    const mentionsMe = !own && messageMentionsSelf(msg.content);
     return (
-      '<li class="message-item' + (own ? ' own' : '') + (msg.pinnedAt ? ' pinned' : '') + '" data-message-id="' + escapeHtml(msg.id) + '" data-message-author-id="' + escapeHtml(author.id) + '">' +
+      '<li class="message-item' + (own ? ' own' : '') + (msg.pinnedAt ? ' pinned' : '') + (mentionsMe ? ' mentions-me' : '') + '" data-message-id="' + escapeHtml(msg.id) + '" data-message-author-id="' + escapeHtml(author.id) + '">' +
       '<div class="message-avatar">' +
       avatarHtml(profileUser || author) +
       '</div>' +
@@ -932,19 +952,56 @@
       );
     }).join('');
     el.pinnedMessagesList.querySelectorAll('[data-jump-to-message]').forEach(function (node) {
-      node.addEventListener('click', function () {
-        const id = node.getAttribute('data-jump-to-message');
-        closeModals();
-        const target = el.messagesList && el.messagesList.querySelector('[data-message-id="' + CSS.escape(String(id)) + '"]');
-        if (target) {
-          target.scrollIntoView({ block: 'center', behavior: 'smooth' });
-          target.classList.add('search-current');
-          setTimeout(function () { target.classList.remove('search-current'); }, 1600);
-        } else {
-          toast('Mensagem fixada não está no histórico carregado.', 'error');
-        }
-      });
+      node.addEventListener('click', function () { jumpToMessage(node.getAttribute('data-jump-to-message'), { closeModal: true }); });
     });
+  }
+
+  // Rola até a mensagem (se já estiver carregada no histórico visível) e
+  // pisca uma borda nela por um instante, pra ficar óbvio qual é. Usada
+  // tanto pela lista completa de fixadas quanto pela barra fixa no topo.
+  function jumpToMessage(id, options) {
+    options = options || {};
+    if (options.closeModal) closeModals();
+    const target = el.messagesList && el.messagesList.querySelector('[data-message-id="' + CSS.escape(String(id)) + '"]');
+    if (target) {
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      target.classList.add('search-current');
+      setTimeout(function () { target.classList.remove('search-current'); }, 1600);
+    } else {
+      toast('Mensagem fixada não está no histórico carregado.', 'error');
+    }
+  }
+
+  // Barra fixa acima do chat avisando que o canal tem mensagem(ns)
+  // fixada(s) — clicar nela vai direto pra mais recente (ver index.html,
+  // #pinned-bar). Chamada ao abrir um canal e sempre que uma mensagem é
+  // fixada/desafixada nele.
+  async function refreshPinnedBar() {
+    if (!el.pinnedBar) return;
+    const channelId = state.activeChannelId;
+    if (!channelId) { el.pinnedBar.classList.add('hidden'); return; }
+    try {
+      const data = await api('/api/messages/channel/' + encodeURIComponent(channelId) + '/pinned');
+      // A pessoa pode ter trocado de canal enquanto isso carregava — não
+      // pisa na barra de um canal diferente do que está aberto agora.
+      if (String(state.activeChannelId) !== String(channelId)) return;
+      const messages = (data && data.messages) || [];
+      if (!messages.length) {
+        el.pinnedBar.classList.add('hidden');
+        return;
+      }
+      const latest = messages[0]; // listPinnedForChannel já ordena por pinned_at DESC
+      el.pinnedBar.setAttribute('data-jump-to-message', latest.id);
+      const preview = escapeHtml(messagePreviewText(latest));
+      if (el.pinnedBarText) {
+        el.pinnedBarText.innerHTML = messages.length > 1
+          ? '<strong>' + messages.length + ' mensagens fixadas</strong> — mais recente: ' + preview
+          : '<strong>Mensagem fixada</strong> — ' + preview;
+      }
+      el.pinnedBar.classList.remove('hidden');
+    } catch (_) {
+      el.pinnedBar.classList.add('hidden');
+    }
   }
 
   function togglePinMessage(messageId, pinned) {
@@ -978,6 +1035,7 @@
   function handleMessagePinChanged(data) {
     if (!data || !data.messageId) return;
     applyPinStateToDom(data.messageId, data.pinnedAt);
+    refreshPinnedBar();
   }
 
   // ---------------------------------------------------------------------
@@ -1474,6 +1532,12 @@
 
       renderFriends();
       renderFriendRequests();
+      // Antes disso os indicadores de menção/não lida só nasciam de eventos
+      // ao vivo (mention:new/server:activity) — quem tinha sido mencionado
+      // enquanto estava offline, ou só dava F5, nunca via a bolinha/selo no
+      // servidor. Busca o que já ficou persistido (ver
+      // Message.getUnreadSummaryForUser) ANTES do primeiro renderServers().
+      await refreshUnreadSummary();
       renderServers();
       // Entra na sala de cada servidor para receber indicador de atividade/
       // menção mesmo em servidores que não estão abertos no momento.
@@ -1481,6 +1545,21 @@
       showDMPanel();
     } catch (err) {
       toast(err.message || 'Erro ao carregar dados iniciais.', 'error');
+    }
+  }
+
+  // Recarrega os indicadores persistidos de menção/não lida. Chamada no
+  // boot e de novo a cada reconexão do socket (client/js/socket.js): uma
+  // queda de conexão pode ter deixado passar um evento "mention:new" ao
+  // vivo, e isso preenche a lacuna com o que ficou gravado no servidor.
+  async function refreshUnreadSummary() {
+    try {
+      const data = await api('/api/messages/unread-summary');
+      state.mentionCounts = new Map(Object.entries((data && data.mentionCounts) || {}).map(function (e) { return [String(e[0]), Number(e[1])]; }));
+      state.unreadServerIds = new Set(((data && data.unreadServerIds) || []).map(String));
+      renderServers();
+    } catch (_) {
+      // Sem sorte agora — o próximo evento ao vivo ou a próxima reconexão tenta de novo.
     }
   }
 
@@ -1546,6 +1625,7 @@
     const channel = channelById(channelId);
     if (el.chatTitle) el.chatTitle.textContent = '# ' + (channel ? channel.name : ''); if(el.chatPeerAvatar){el.chatPeerAvatar.classList.add('hidden');el.chatPeerAvatar.innerHTML='';}
     renderChannels();
+    el.pinnedBar?.classList.add('hidden');
 
     window.ChatSocket.joinChannel(channelId);
 
@@ -1560,6 +1640,8 @@
       }
       return;
     }
+
+    refreshPinnedBar();
 
     try {
       const data = await api('/api/messages/channel/' + encodeURIComponent(channelId));
@@ -1579,6 +1661,7 @@
     setLoading(el.messagesList, 'Carregando mensagens...');
     clearTypingIndicator();
     setChatEnabled(true);
+    el.pinnedBar?.classList.add('hidden'); // fixados só existem em canal de servidor
 
     const friend = friendById(userId);
     if (el.chatTitle) el.chatTitle.textContent = friend ? (friend.displayName || friend.username) : 'Conversa'; if(el.chatPeerAvatar){el.chatPeerAvatar.innerHTML=friend?avatarHtml(friend):'';el.chatPeerAvatar.classList.toggle('hidden',!friend);}
@@ -2394,6 +2477,8 @@
     if (el.messageSearchPrev) el.messageSearchPrev.addEventListener('click', searchPrev);
 
     if (el.pinnedMessagesBtn) el.pinnedMessagesBtn.addEventListener('click', openPinnedMessagesModal);
+    if (el.pinnedBarViewAll) el.pinnedBarViewAll.addEventListener('click', function (e) { e.stopPropagation(); openPinnedMessagesModal(); });
+    if (el.pinnedBar) el.pinnedBar.addEventListener('click', function () { jumpToMessage(el.pinnedBar.getAttribute('data-jump-to-message')); });
     if (el.deleteDMBtn) el.deleteDMBtn.addEventListener('click', clearActiveDM);
 
     const inviteCopyBtn = $('invite-copy-btn');
@@ -2704,6 +2789,7 @@
     markChannelRead: markChannelRead,
     markServerRead: markServerRead,
     handleServerActivity: handleServerActivity,
+    refreshUnreadSummary: refreshUnreadSummary,
     handleMention: handleMention,
     handleServerCallPresence: handleServerCallPresence,
     handleIncomingMessage: handleIncomingMessage,

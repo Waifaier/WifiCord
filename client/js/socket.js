@@ -33,6 +33,10 @@
 
       this.socket.on('reconnect', function () {
         if (window.App && window.App.refreshFriendsRealtime) window.App.refreshFriendsRealtime();
+        // Uma queda de conexão pode ter deixado passar um "mention:new" ou
+        // "server:activity" ao vivo — busca de novo o que ficou persistido
+        // no servidor pra não perder o indicador.
+        window.App?.refreshUnreadSummary?.();
       });
 
       this.socket.on('channel:message', function (msg) {

@@ -49,6 +49,48 @@ const Message = {
     return Message.findById(id);
   },
 
+  // Grava quem foi @mencionado nesta mensagem (ids já resolvidos e
+  // filtrados — ver extractMentionedUserIds em server/sockets/index.js).
+  // É o registro persistente que permite recalcular menções não lidas
+  // depois de reconectar, além do evento "mention:new" ao vivo.
+  addMentions(messageId, userIds) {
+    if (!Array.isArray(userIds) || !userIds.length) return;
+    const stmt = db.prepare('INSERT OR IGNORE INTO message_mentions (message_id, user_id) VALUES (?, ?)');
+    for (const uid of userIds) stmt.run(messageId, uid);
+  },
+
+  // Indicadores de servidor (badge de menção + bolinha de não lida) prontos
+  // pra popular a tela assim que a pessoa loga/reconecta, sem depender de
+  // ter estado com a aba aberta no momento exato em que a mensagem chegou.
+  // "Não lida" considera só canais públicos (sem checar permissão de canal
+  // privado aqui — mantém a query simples); menção sempre conta, porque só
+  // existe registro em message_mentions pra quem já era membro do servidor
+  // na hora do envio (ver extractMentionedUserIds).
+  getUnreadSummaryForUser(userId) {
+    const mentionRows = db.prepare(`
+      SELECT c.server_id AS serverId, COUNT(*) AS cnt
+      FROM message_mentions mm
+      JOIN messages m ON m.id = mm.message_id
+      JOIN channels c ON c.id = m.channel_id
+      LEFT JOIN channel_reads cr ON cr.channel_id = c.id AND cr.user_id = mm.user_id
+      WHERE mm.user_id = ? AND m.id > COALESCE(cr.last_read_message_id, 0)
+      GROUP BY c.server_id
+    `).all(userId);
+
+    const unreadRows = db.prepare(`
+      SELECT DISTINCT c.server_id AS serverId
+      FROM messages m
+      JOIN channels c ON c.id = m.channel_id
+      JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = ?
+      LEFT JOIN channel_reads cr ON cr.channel_id = c.id AND cr.user_id = ?
+      WHERE c.is_private = 0 AND m.from_user_id != ? AND m.id > COALESCE(cr.last_read_message_id, 0)
+    `).all(userId, userId, userId);
+
+    const mentionCounts = {};
+    for (const r of mentionRows) mentionCounts[String(r.serverId)] = Number(r.cnt);
+    return { mentionCounts, unreadServerIds: unreadRows.map((r) => String(r.serverId)) };
+  },
+
   setPinned(id, pinned, byUserId) {
     if (pinned) db.prepare("UPDATE messages SET pinned_at=datetime('now'), pinned_by=? WHERE id=?").run(byUserId, id);
     else db.prepare('UPDATE messages SET pinned_at=NULL, pinned_by=NULL WHERE id=?').run(id);

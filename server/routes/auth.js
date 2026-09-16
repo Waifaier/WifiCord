@@ -21,7 +21,8 @@ function cleanProfileCustomization(input) {
     nameColorMode:['solid','gradient'], nameEffect:['none','neon','glow','shimmer','rainbow','gold','ice','holographic','glitch'],
     nameAnimation:['none','shimmer','pulse','flow','glitch'], nameWeight:['600','700','800'],
     frame:['none','neon','galactic','chrome','holographic'], decoration:['none','stars','orbit','spark','cyber'],
-    badge:['none','star','fire','rocket','crown'], nameplate:['none','minimal','neon','cyber','galaxy','chrome']
+    badge:['none','star','fire','rocket','crown'], nameplate:['none','minimal','neon','cyber','galaxy','chrome'],
+    avatarFx:['none','pirouette','hover-burst','pet-cat','pet-bird']
   };
   for (const [k, values] of Object.entries(enums)) {
     const v = String(src[k] ?? '');

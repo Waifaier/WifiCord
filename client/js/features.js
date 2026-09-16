@@ -34,8 +34,9 @@ function startAvatarPet(kind){
   stopAvatarPet();
   const card=$('profile-card');if(!card)return;
   const el=document.createElement('div');
-  el.className='wc-avatar-pet';
-  el.textContent=kind==='pet-bird'?'🐦':'🐱';
+  // Sprite pixel-art animado (ver client/css/style.css .wc-avatar-pet.is-cat/.is-bird
+  // e client/assets/avatarfx-cat.png/avatarfx-bird.png) — nada de emoji aqui.
+  el.className='wc-avatar-pet '+(kind==='pet-bird'?'is-bird':'is-cat');
   card.appendChild(el);
   const st={card,el,x:60,y:60,tx:60,ty:60,onMove:null,raf:null};
   st.onMove=ev=>{const r=card.getBoundingClientRect();st.tx=ev.clientX-r.left;st.ty=ev.clientY-r.top;};

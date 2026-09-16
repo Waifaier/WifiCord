@@ -4,6 +4,7 @@ const ServerModel = require('../models/Server');
 const Friendship = require('../models/Friendship');
 const Message = require('../models/Message');
 const User = require('../models/User');
+const ChannelRead = require('../models/ChannelRead');
 const recentRewards = new Map();
 
 const MAX_MESSAGE_LENGTH = 2000;
@@ -125,6 +126,12 @@ function initSockets(io) {
       const channel = channelId && Channel.findById(channelId);
       if (!channel || !ServerModel.isMember(channel.server_id, userId) || !Channel.canView(channel,userId)) return;
       socket.join(channelRoom(channelId));
+      // A pessoa está abrindo este canal agora: marca como lido até a
+      // mensagem mais recente, pra sumir o indicador de não lida/menção do
+      // servidor (e continuar sumido depois de reconectar/recarregar — ver
+      // Message.getUnreadSummaryForUser).
+      const latest = db.prepare('SELECT MAX(id) AS id FROM messages WHERE channel_id=?').get(channelId);
+      if (latest && latest.id) ChannelRead.markRead(userId, channelId, latest.id);
     });
 
     socket.on('dm:join', (data) => {
@@ -186,7 +193,12 @@ function initSockets(io) {
       rewardMessage(userId, content);
       io.to(channelRoom(channelId)).emit('channel:message', saved);
       io.to(serverRoom(channel.server_id)).emit('server:activity', { serverId: channel.server_id, channelId, authorId: userId });
-      extractMentionedUserIds(content, channel.server_id, userId).forEach(function (mentionedId) {
+      // O autor já viu a própria mensagem — evita que ela conte como "não
+      // lida" pra ele mesmo quando reconectar noutro dispositivo/aba.
+      ChannelRead.markRead(userId, channelId, saved.id);
+      const mentionedIds = extractMentionedUserIds(content, channel.server_id, userId);
+      Message.addMentions(saved.id, mentionedIds);
+      mentionedIds.forEach(function (mentionedId) {
         io.to(userRoom(mentionedId)).emit('mention:new', { serverId: channel.server_id, channelId, messageId: saved.id, fromUserId: userId });
       });
       callback({ message: saved });

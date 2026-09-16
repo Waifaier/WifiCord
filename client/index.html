@@ -237,6 +237,7 @@
         <button type="button" id="start-voice-call-btn" class="btn-icon" title="Chamada de voz">📞</button>
         <button type="button" id="start-video-call-btn" class="btn-icon" title="Chamada de vídeo">🎥</button>
         <button type="button" id="chat-wallpaper-btn" class="btn-icon" title="Papel de parede da conversa">🖼️</button>
+        <button type="button" id="pinned-messages-btn" class="btn-icon" title="Mensagens fixadas">📌</button>
         <button type="button" id="delete-dm-btn" class="btn-icon hidden" title="Apagar conversa">🗑️</button>
       </div>
     </header>
@@ -283,6 +284,17 @@
       <label class="call-volume-row hidden" id="call-context-screen-volume-row">Volume da transmissão <span id="call-context-screen-volume-value">100%</span><input type="range" id="call-context-screen-volume-range" min="0" max="100" value="100"></label>
       <button type="button" id="call-context-mute-toggle" class="btn btn-ghost call-context-menu-btn">Silenciar pessoa</button>
       <button type="button" id="call-context-screen-mute-toggle" class="btn btn-ghost call-context-menu-btn hidden">Silenciar transmissão</button>
+    </div>
+
+    <!-- Barra fixa acima do chat quando o canal tem mensagem(ns) fixada(s) —
+         antes disso só existia o selo "📌 Fixada" na própria mensagem, que
+         some da vista assim que a pessoa rola o chat. Clicar na barra leva
+         direto pra mensagem mais recente fixada; "Ver todas" abre a lista
+         completa (modal-pinned-messages, abaixo). -->
+    <div id="pinned-bar" class="pinned-bar hidden" data-jump-to-message="" title="Ir para a mensagem fixada">
+      <span class="pinned-bar-icon">📌</span>
+      <span id="pinned-bar-text" class="pinned-bar-text"></span>
+      <button type="button" id="pinned-bar-view-all" class="pinned-bar-viewall">Ver todas</button>
     </div>
 
     <ul id="messages-list" class="messages-list"></ul>
@@ -353,6 +365,14 @@
         <button type="submit" class="btn btn-primary">Entrar</button>
       </div>
     </form>
+  </div>
+
+  <div id="modal-pinned-messages" class="modal hidden">
+    <h3>📌 Mensagens fixadas</h3>
+    <div id="pinned-messages-list" class="pinned-messages-list"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-close-modal>Fechar</button>
+    </div>
   </div>
 
   <div id="modal-create-channel" class="modal hidden">
