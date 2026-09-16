@@ -33,15 +33,14 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Configurar o SDK do Android
-        uses: android-actions/setup-android@v3
-        with:
-          # O pacote legado "tools" não existe mais no repositório da
-          # Google (removido faz anos, virou "cmdline-tools") — o padrão
-          # dessa action tenta instalar "tools platform-tools" e quebra
-          # com "Failed to find package 'tools'". O runner do GitHub já
-          # vem com o SDK pré-instalado; só precisamos do platform-tools.
-          packages: "platform-tools"
+      # Removido o passo "android-actions/setup-android@v3" — essa action
+      # (nas versões 3 e anteriores) sempre tenta instalar o pacote legado
+      # "tools", removido do repositório da Google há anos, e quebra com
+      # "Failed to find package 'tools'" mesmo configurando `packages:`
+      # (esse input só existe a partir da v4). O runner ubuntu-latest do
+      # GitHub já vem com o Android SDK pré-instalado e as variáveis de
+      # ambiente (ANDROID_HOME/ANDROID_SDK_ROOT) já configuradas, então o
+      # Gradle acha o SDK sozinho sem precisar dessa action.
 
       - name: Configurar Node
         uses: actions/setup-node@v4
