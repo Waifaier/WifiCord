@@ -12,6 +12,8 @@ export const ANIM_TYPES = {
     doorTime: 1.8, home: { x: 37.5, y: 16.5 },
     patrol: ['cozinha', 'banheiros', 'corredor_leste', 'salao', 'palco'],
     idle: [4, 9], chaseLimit: 4.5, tiredTime: 4,
+    campPunish: true, // evento: quem fica parado no mesmo lugar por muito
+    // tempo vira alvo preferido da próxima ronda dela (ver startPatrol()).
   },
   lume: {
     speed: 2.25, chase: 3.85, sight: 5.5, fov: 140, hearing: 6, damage: 26,
@@ -24,6 +26,9 @@ export const ANIM_TYPES = {
     doorTime: 0.4, home: { x: 64.5, y: 33.5 },
     patrol: ['cozinha', 'salao', 'corredor_leste', 'corredor_oeste', 'corredor_norte', 'porao', 'deposito', 'escritorio', 'seguranca'],
     idle: [3, 8], bashDoors: true,
+    blackoutStalker: true, // evento: quando a energia acaba, ele para de
+    // rondar normal e vem caçando por audição (ver Animatronic.startBlackoutHunt) —
+    // só dá pra ver os olhos brilhando dele no escuro até a luz voltar.
   },
   maestro: {
     speed: 1.35, chase: 2.9, sight: 12, fov: 360, hearing: 18, damage: 75,

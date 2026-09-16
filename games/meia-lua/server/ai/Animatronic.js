@@ -9,7 +9,7 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 export class Animatronic {
-  constructor(type, match) {
+  constructor(type, match, activationAt) {
     this.id = nextId++;
     this.type = type;
     this.def = ANIM_TYPES[type];
@@ -38,9 +38,17 @@ export class Animatronic {
     this.senseCd = Math.random() * 0.2;
     this.moving = false;
     this.stepAcc = 0;
-    // "Ligando": ficam desligados no palco nos primeiros segundos da noite
+    this.blackoutHunt = false;
+    this.blackoutTrackCd = 0;
+    // "Ligando": ficam desligados no palco até a hora combinada (ver
+    // Match.js, que escalona cada um deles pra uma hora diferente da
+    // noite em vez de todo mundo começar a andar quase junto). Se por
+    // algum motivo não vier uma hora pronta, cai no sorteio antigo (só
+    // pros primeiros segundos) como rede de segurança.
     const baseAggr = (match.cfg?.aggression || 1) + (match.diff?.aggr || 0);
-    this.bootUntil = this.def.trap || this.def.dormant ? 0 : rnd(16, 30) / (0.7 + 0.3 * baseAggr);
+    this.bootUntil = this.def.trap || this.def.dormant
+      ? 0
+      : (activationAt != null ? activationAt : rnd(16, 30) / (0.7 + 0.3 * baseAggr));
     if (this.def.trap) {
       const spot = pick(this.def.spots.filter((sp) => match.areaAccessible(areaAt(sp.x, sp.y)?.id)));
       if (spot) { this.x = spot.x; this.y = spot.y; }
@@ -92,6 +100,40 @@ export class Animatronic {
     if (this.state === 'DORMANT') this.setState('PATROL');
   }
 
+  // ---------- evento do apagão (Gregório) ----------
+  // Chamado pelo Match quando a energia acaba. Ele para de rondar normal
+  // e passa a "ouvir" o jogador mais próximo através das paredes — não
+  // precisa mais enxergar de verdade, então só dá pra notar os olhos
+  // vermelhos dele brilhando no escuro (o cliente já desenha isso sozinho
+  // quando ele tá perto mas fora do campo de visão claro — ver S.eyes em
+  // render.js). Esconder-se ainda funciona (updateChase trata isso).
+  startBlackoutHunt() {
+    if (this.blackoutHunt || this.state === 'DISABLED') return;
+    const target = this.pickNearestPlayer();
+    if (!target) return;
+    this.blackoutHunt = true;
+    this.blackoutTrackCd = 0;
+    this.targetId = target.id;
+    this.lastSeen = { x: target.x, y: target.y };
+    this.setState('CHASE');
+  }
+
+  endBlackoutHunt() {
+    if (!this.blackoutHunt) return;
+    this.blackoutHunt = false;
+    if (this.state === 'CHASE') this.setState('SEARCH', rnd(4, 7));
+  }
+
+  pickNearestPlayer() {
+    let best = null, bestD = Infinity;
+    for (const p of this.match.alivePlayers()) {
+      if (p.hidden) continue;
+      const d = Math.hypot(p.x - this.x, p.y - this.y);
+      if (d < bestD) { best = p; bestD = d; }
+    }
+    return best;
+  }
+
   speedNow() {
     const m = 0.9 + 0.1 * this.aggression;
     let s = this.def.speed * m;
@@ -101,6 +143,10 @@ export class Animatronic {
     if (this.match.time < this.tiredUntil) s *= 0.5;
     if (this.match.time < this.rollUntil) s *= 1.35;
     if (this.match.blackout) s *= 1.1;
+    // Evento do Tonho: ele fica ousado quando ninguém tá de olho nas
+    // câmeras faz tempo (é o oposto do congelar-quando-observado dele).
+    if (this.def.shyOnCamera && this.state !== 'CHASE'
+      && this.match.time - this.match.lastCamCheckAt > 18) s *= 1.18;
     return s;
   }
 
@@ -115,8 +161,12 @@ export class Animatronic {
     if (flash) sight *= 1.25;
     let fov = this.def.fov;
     if (this.def.lightSeeker) {
-      if (flash) { sight = this.def.lightSight; fov = 360; }
-      else if (!lit) sight = 2.5;
+      if (flash) {
+        sight = this.def.lightSight; fov = 360;
+        // Evento da Lume: lanterna acesa direto por muito tempo vira uma
+        // obsessão pra ela — passa a enxergar de bem mais longe.
+        if (this.match.time - (p.flashOnSince || 0) > 12) sight *= 1.6;
+      } else if (!lit) sight = 2.5;
     }
     if (d > sight) return false;
     if (d > 1.6 && fov < 360) {
@@ -159,7 +209,10 @@ export class Animatronic {
     const m = this.match;
     if (this.state === 'DISABLED' || this.state === 'DORMANT') { this.moving = false; return; }
     if (this.def.trap) { this.updateTrap(dt); return; }
-    if (m.time < this.bootUntil) { this.moving = false; this.dir += dt * 0.2; return; }
+    // O apagão do Gregório pula a espera de "ligar": se a energia acabar
+    // antes da hora dele, o susto vale mais que a escala — ele já entra
+    // caçando por audição em vez de ficar parado esperando o relógio.
+    if (m.time < this.bootUntil && !this.blackoutHunt) { this.moving = false; this.dir += dt * 0.2; return; }
     this.stateTime += dt;
     this.attackCd -= dt;
     this.alertCd -= dt;
@@ -210,6 +263,20 @@ export class Animatronic {
     if (this.def.shyOnCamera && this.state !== 'CHASE' && m.isWatchedOnCamera(this.x, this.y)) {
       this.moving = false;
       return;
+    }
+
+    // Evento do apagão (Gregório): enquanto durar, ele atualiza a posição
+    // "ouvida" do alvo direto (sem precisar de linha de visão), com uma
+    // pequena folga pra não ficar oniscente — dá pra despistar se esconder.
+    if (this.blackoutHunt && m.blackout) {
+      this.blackoutTrackCd -= dt;
+      if (this.blackoutTrackCd <= 0) {
+        this.blackoutTrackCd = 1.6;
+        const t = m.players.get(this.targetId);
+        if (t && t.alive && !t.hidden) this.lastSeen = { x: t.x, y: t.y };
+      }
+    } else if (this.blackoutHunt && !m.blackout) {
+      this.endBlackoutHunt();
     }
 
     switch (this.state) {
@@ -298,9 +365,15 @@ export class Animatronic {
     const m = this.match;
     let areaId;
     const players = [...m.alivePlayers()];
+    // Evento da Marola: quem fica parado no mesmo lugar por muito tempo
+    // (acampando) vira o alvo preferido da próxima ronda dela — ela é
+    // lenta, mas se ninguém se mexe, mais cedo ou mais tarde ela chega.
+    const camper = this.def.campPunish
+      ? players.find((p) => m.time - (p.stillSince || 0) > 25 && Math.hypot(p.x - this.x, p.y - this.y) < 16)
+      : null;
     // comportamento influenciado pelos jogadores: às vezes vai para a área onde há alguém
-    if (players.length && Math.random() < 0.22 + 0.1 * this.aggression) {
-      let target = pick(players);
+    if (camper || (players.length && Math.random() < 0.22 + 0.1 * this.aggression)) {
+      let target = camper || pick(players);
       if (this.def.lightSeeker) {
         const lit = players.filter((p) => p.flash && p.battery > 0);
         if (lit.length) target = pick(lit);
@@ -309,7 +382,18 @@ export class Animatronic {
       if (a && this.def.patrol.includes(a.id)) areaId = a.id;
     }
     if (!areaId) areaId = pick(this.def.patrol);
-    const pt = randomFloorInArea(areaId);
+    let pt = randomFloorInArea(areaId);
+    if (camper && areaId === areaAt(camper.x, camper.y)?.id) {
+      // A área às vezes é grande (palco, salão...) e um ponto uniforme
+      // nela pode cair longe demais de quem acampou pra "castigo" fazer
+      // sentido — sorteia mais de um ponto e fica com o mais pertinho.
+      let bestD = Math.hypot(pt.x - camper.x, pt.y - camper.y);
+      for (let i = 0; i < 5; i++) {
+        const cand = randomFloorInArea(areaId);
+        const d = Math.hypot(cand.x - camper.x, cand.y - camper.y);
+        if (d < bestD) { pt = cand; bestD = d; }
+      }
+    }
     this.setState('PATROL', 40);
     if (!this.goTo(pt.x, pt.y)) this.setState('IDLE', 1.5);
   }

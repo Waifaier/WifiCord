@@ -9,7 +9,7 @@ import { ITEMS } from '../../shared/items.js';
 import { NIGHTS, FINAL_NIGHT, LORE, ANIMATRONIC_INFO, DIFFICULTIES, DEFAULT_DIFFICULTY } from '../../shared/nights.js';
 import { effectiveAttrs, derivedStats, applyXp, xpToNext, POINTS_PER_LEVEL } from '../../shared/rpg.js';
 import { Animatronic } from '../ai/Animatronic.js';
-import { STATE_CODE, TYPE_LIST } from '../ai/types.js';
+import { STATE_CODE, TYPE_LIST, ANIM_TYPES } from '../ai/types.js';
 import { rollLoot } from './loot.js';
 import { fala } from '../../shared/falas.js';
 import { saveMatchProgress } from '../database/accounts.js';
@@ -53,6 +53,7 @@ export class Match {
     this.maestroDown = false;
     this.phoneUntil = 0;
     this.noises = [];
+    this.lastCamCheckAt = 0; // evento do Tonho (ver Animatronic.speedNow)
     this.nextEventAt = rnd(...this.cfg.eventInterval) * 0.6 * this.diff.events;
     this.lastEventType = null;
     this.eventLog = [];
@@ -96,8 +97,33 @@ export class Match {
     this.players = new Map();
     participants.forEach((pt, i) => this.players.set(pt.account.id, this.makePlayer(pt, i)));
 
-    // Animatrônicos
-    this.anims = this.cfg.animatronics.map((t) => new Animatronic(t, this));
+    // Animatrônicos — ativação escalonada ao longo da noite: cada "caçador"
+    // (não é armadilha nem começa dormente) liga numa hora diferente, na
+    // ordem em que aparece na lista da noite, em vez de todos começarem a
+    // andar quase junto nos primeiros segundos como era antes. Numa noite
+    // com 4, por exemplo, eles vêm à tona por volta de 1h, 2h20, 3h40 e
+    // 4h50 (com uma folga aleatória em cada um) — dá pra sentir a virada
+    // de clima crescendo em vez de já começar tudo de uma vez.
+    const hunterTypes = this.cfg.animatronics.filter((t) => !ANIM_TYPES[t].trap && !ANIM_TYPES[t].dormant);
+    const hourLen = this.duration / 6;
+    const spacing = Math.min(1.3, 4 / Math.max(1, hunterTypes.length - 1));
+    const activationAt = {};
+    // Faixa permitida em proporção da duração da noite (calibrada p/ os
+    // 20s..315s de uma noite padrão de 360s) — usar proporção em vez de
+    // segundos fixos evita que o teto (duration-45) fique menor que o piso
+    // (20) em noites curtas, o que colapsava todo mundo pro mesmo instante.
+    const activationLo = this.duration * (20 / 360);
+    const activationHi = this.duration * (315 / 360);
+    // A folga aleatória também escala com o tamanho da "hora" do jogo —
+    // numa noite padrão (hourLen=60s) isso é o rnd(-15,25) original; numa
+    // noite mais curta (config/testes), a folga encolhe junto pra não
+    // engolir o espaçamento entre um animatrônico e o outro.
+    hunterTypes.forEach((t, i) => {
+      const targetHour = 1 + i * spacing;
+      const secs = targetHour * hourLen + rnd(-hourLen * 0.25, hourLen * (25 / 60));
+      activationAt[t] = Math.max(activationLo, Math.min(activationHi, secs));
+    });
+    this.anims = this.cfg.animatronics.map((t) => new Animatronic(t, this, activationAt[t]));
 
     this.interval = setInterval(() => this.tick(), TICK_MS);
   }
@@ -123,6 +149,7 @@ export class Match {
       online: true, offlineSince: 0, saved: false,
       noiseCd: 0, breathCd: 0, sprinting: false, moved: false, sneaking: false, breath: 100, holdBreath: false, threat: null,
       hints: [], hintCd: 0, color: i,
+      stillSince: 0, flashOnSince: 0, // eventos da Marola (acampar) e da Lume (lanterna acesa demais)
     };
     this.recalcStats(p, true);
     return p;
@@ -247,6 +274,10 @@ export class Match {
         continue;
       }
       if (!p.sprinting) p.stamina = Math.min(p.derived.maxStamina, p.stamina + (p.moved ? 7 : 13) * dt);
+
+      // eventos da Marola (acampar) e do Tonho (câmeras sem vigilância)
+      if (p.moved) p.stillSince = this.time;
+      if (p.cam) this.lastCamCheckAt = this.time;
 
       // lanterna
       if (p.flash) {
@@ -476,6 +507,10 @@ export class Match {
     for (const p of this.players.values()) if (p.cam) p.cam = null;
     this.broadcast('fx', { type: 'blackout' });
     this.system(fala('rApagao'));
+    // Evento do Gregório: o apagão é a deixa dele — para de rondar normal
+    // e vem caçando por audição até a luz voltar (ver Animatronic.startBlackoutHunt).
+    const greg = this.anims.find((a) => a.def.blackoutStalker);
+    if (greg) greg.startBlackoutHunt();
   }
 
   restorePower(amount) {
@@ -484,6 +519,7 @@ export class Match {
       this.blackout = false;
       this.lightsOn = true;
       this.broadcast('fx', { type: 'powerRestored' });
+      for (const a of this.anims) if (a.blackoutHunt) a.endBlackoutHunt();
     }
   }
 
@@ -631,6 +667,7 @@ export class Match {
     if (!p.equipment.lanterna) { this.notify(p, fala('semLanterna')); return; }
     if (!p.flash && p.battery <= 0) { this.notify(p, fala('semBateria'), 'warn'); return; }
     p.flash = !p.flash;
+    if (p.flash) p.flashOnSince = this.time; // evento da Lume (ver Animatronic.canSee)
     this.sendTo(p, 'fx', { type: 'sfx', s: 'click', x: r2(p.x), y: r2(p.y) });
   }
 
