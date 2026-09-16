@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "190331930931",
+    "project_id": "wificord-fa63b",
+    "storage_bucket": "wificord-fa63b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:190331930931:android:bf38c1edc551caf8bad646",
+        "android_client_info": {
+          "package_name": "com.wificord.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAvhYvLgTEkyVtn0sPr0mF6JfTFGKVINpU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
