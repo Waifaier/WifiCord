@@ -167,7 +167,14 @@ form.tab-page.active { display: flex; flex-direction: column; }
 
 /* ---------- lobby ---------- */
 .lobby { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; width: 100%; max-width: 1100px; }
-@media (max-width: 800px) { .lobby { grid-template-columns: 1fr; } }
+/* Só empilha em coluna única no modo retrato (celular em pé, altura sobra e
+   a largura não). Sem o "min-height" aqui embaixo, essa regra também
+   disparava no celular DEITADO (largura ~700-800px só que altura baixa),
+   o que forçava o chat pra baixo do painel principal e estourava a tela
+   inteira de altura — exatamente o "preciso descer pra ver tudo" que
+   apareceu no lobby. Em paisagem baixa (ver bloco @media (max-height:460px)
+   mais abaixo) o grid de 2 colunas é mantido, só fica mais compacto. */
+@media (max-width: 800px) and (min-height: 461px) { .lobby { grid-template-columns: 1fr; } }
 .lobby-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; }
 .room-code { font-family: var(--pixel); font-size: clamp(2.6rem, 9vw, 4rem); color: #ffd48a; letter-spacing: 4px; text-shadow: 0 0 14px rgba(231,176,74,.35); line-height: 1; }
 .lobby-config { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
@@ -217,6 +224,66 @@ form.tab-page.active { display: flex; flex-direction: column; }
 .keys { padding-left: 18px; color: var(--muted); font-size: .88rem; line-height: 1.9; }
 kbd { background: #1a1520; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; padding: 0 5px; color: var(--text); font-family: var(--font); }
 .credits p { color: var(--text); }
+
+/* ---------- celular deitado / tela baixa: lobby, config, perfil, inventário ----------
+   Precisa vir DEPOIS das regras base acima (.lobby, .chat-log, .profile-grid,
+   .settings, .keys etc.) pra realmente sobrescrever — um @media com a mesma
+   especificidade só vence se aparecer depois no arquivo, a condição bater
+   não é suficiente. (Foi exatamente esse bug que fazia o chat do lobby
+   ignorar o max-height aqui embaixo quando essas regras estavam coladas
+   junto do bloco do menu, lá em cima, ANTES da .chat-log base.) */
+@media (max-height: 460px) {
+  /* --- lobby: mantém as 2 colunas (largura sobra), só encolhe --- */
+  .lobby { gap: 8px; }
+  .lobby-head { gap: 6px; }
+  .room-code { font-size: clamp(1.6rem, 6vw, 2.4rem); }
+  .lobby-config { gap: 6px; }
+  .lobby-config label { margin: 3px 0; }
+  .night-intro { min-height: 0; font-size: .82rem; margin: 4px 0; }
+  /* Lista de jogadores e chat rolam dentro do próprio espaço em vez de
+     empurrar a tela inteira pra baixo — mesma ideia já usada em
+     .quests/.team no HUD (ver bloco HUD mais abaixo). */
+  .member-list { max-height: 15vh; overflow-y: auto; gap: 4px; }
+  .member-list li { padding: 6px 10px; font-size: .85rem; }
+  .lobby-main .row.wrap { gap: 6px; margin-top: 6px; }
+  .lobby-main .row.wrap .btn { padding: 7px 12px; font-size: .8rem; }
+  .chat-panel { min-height: 0; }
+  .chat-panel h3 { margin: 0 0 4px; font-size: 1.1rem; }
+  .chat-log { min-height: 60px; max-height: 20vh; }
+
+  /* --- configurações: 2 colunas pra não precisar rolar --- */
+  #scr-settings .panel { max-width: 780px; padding: 10px 14px; }
+  #scr-settings h2 { font-size: 1.15rem; margin-bottom: 4px; }
+  #scr-settings h3 { font-size: .95rem; margin: 2px 0 1px; }
+  #settings-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; align-items: center; align-content: start; font-size: .8rem; }
+  #settings-form label { margin: 0; flex-wrap: nowrap; white-space: nowrap; min-height: 22px; }
+  #settings-form label.check { grid-column: span 1; }
+  #settings-form input[type=range] { width: 100px; height: 14px; margin: 0; }
+  #settings-form select { padding: 1px 5px; font-size: .76rem; }
+  #settings-form > .btn { grid-column: 1 / -1; justify-self: start; margin: 2px 0; padding: 3px 10px; font-size: .74rem; }
+  .keys { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 22px; font-size: .68rem; line-height: 1.15; padding-left: 14px; margin: 1px 0; list-style-position: outside; }
+  .back { margin-top: 4px; }
+
+  /* --- perfil / inventário: encolhe grids e limita listas longas --- */
+  .panel.wide { max-width: 98vw; }
+  /* O perfil tem 3 blocos (dados/atributos/estatísticas) — o "auto-fit" de
+     antes deixava só 2 caberem lado a lado e o 3º ia pra uma linha nova
+     embaixo, dobrando a altura da tela toda. Em paisagem baixa a largura
+     sobra, então força as 3 colunas na mesma linha. */
+  .profile-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .profile-card { padding: 8px; }
+  .profile-card .name { font-size: 1.3rem; }
+  .stat-list, .night-list { max-height: 13vh; overflow-y: auto; }
+  .attr-list { max-height: 22vh; overflow-y: auto; gap: 4px; }
+  .attr-list li { padding: 5px 8px; }
+  .attr-list .val { font-size: 1.1rem; }
+  .item-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); max-height: 26vh; overflow-y: auto; gap: 6px; }
+  .equip-slots { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); margin-bottom: 6px; gap: 6px; }
+  h3 { margin: 6px 0 3px; font-size: 1.05rem; }
+
+  /* --- créditos: texto mais compacto --- */
+  .credits p { margin: 6px 0; font-size: .82rem; line-height: 1.35; }
+}
 
 /* ---------- jogo / HUD ---------- */
 #game-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
