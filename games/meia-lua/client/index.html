@@ -233,6 +233,10 @@
         <p>Tecnologias: HTML5 · CSS3 · JavaScript · Node.js · Express · Socket.IO · SQLite · WebRTC.</p>
         <p>Fontes: VT323 e Share Tech Mono (Google Fonts, licença OFL).</p>
         <p class="muted">Nenhum ativo de franquias existentes foi utilizado.</p>
+        <div id="credits-memories" hidden>
+          <p class="muted">Lembranças</p>
+          <button class="btn ghost" id="btn-replay-lucas">Reviver: Feliz Aniversário, Lucas</button>
+        </div>
         <button class="btn ghost back" data-go="menu">← Voltar</button>
       </div>
     </section>
@@ -380,6 +384,20 @@
         </div>
       </div>
 
+    </section>
+
+    <!-- ================= MINIGAME (lembrança) ================= -->
+    <section class="screen" id="scr-minigame">
+      <div class="mg-wrap">
+        <canvas id="mg-canvas"></canvas>
+        <div class="mg-caption" id="mg-caption" hidden></div>
+        <div class="mg-dialogue" id="mg-dialogue" hidden>
+          <b id="mg-speaker"></b>
+          <p id="mg-text"></p>
+          <span class="mg-continue">▸ clique / E</span>
+        </div>
+        <button class="btn ghost mg-skip" id="mg-skip">Pular ▸</button>
+      </div>
     </section>
 
     <!-- ================= RESULTADOS ================= -->

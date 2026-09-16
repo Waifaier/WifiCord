@@ -6,6 +6,7 @@ import { audio } from './audio.js';
 import { Input } from './input.js';
 import { VoiceChat } from './voice.js';
 import { Game } from './game.js';
+import { Minigame, SCENES, hasSeenMinigame } from './minigame.js';
 // Caminhos absolutos porque o jogo é servido a partir de /jogos/meia-lua/
 // dentro do WifiCord (ver server/integration.js no WifiCord).
 import { ITEMS, EQUIP_SLOTS, SLOT_NAMES, SHOP_ITEMS } from '/jogos/meia-lua/shared/items.js';
@@ -137,6 +138,11 @@ class App {
     // Não existe mais tela de convidado/login/registro nem botão de "sair
     // da conta" aqui dentro — quem loga é o WifiCord (ver boot() acima).
 
+    // minigame (lembrança em flashback — ver minigame.js)
+    $('#mg-skip').addEventListener('click', () => this.mg?.skip());
+    $('#mg-dialogue').addEventListener('click', () => this.mg?.advanceDialogue());
+    $('#btn-replay-lucas').addEventListener('click', () => this.playMinigame('lucas', () => showScreen('credits', { push: false })));
+
     // criar sala
     $('#form-create').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -239,6 +245,7 @@ class App {
     if (id === 'profile') this.loadProfile().then(() => this.renderProfile()).catch((e) => toast(e.message, 'warn'));
     if (id === 'inventory') this.loadProfile().then(() => this.renderInventory()).catch((e) => toast(e.message, 'warn'));
     if (id === 'menu') this.loadProfile().catch(() => {});
+    if (id === 'credits') $('#credits-memories').hidden = !hasSeenMinigame('lucas');
     if (id !== 'game') audio.stopAll();
   }
 
@@ -332,10 +339,36 @@ class App {
     $('#res-players').replaceChildren(...res.players.map((p) => el('tr', {},
       el('td', { text: p.name }), el('td', { text: `+${p.xpGained}` }), el('td', { text: `+${p.moneyGained}` }),
       el('td', { text: `${p.level}${p.levelsGained ? ` (+${p.levelsGained}⭐)` : ''}` }), el('td', { text: p.deaths }))));
-    setTimeout(() => showScreen('results', { push: false }), res.result === 'defeat' ? 1200 : 300);
+    // Minigame de lembrança (Fase 1: "Feliz Aniversário, Lucas") — dispara
+    // uma vez, só na transição pra Noite 3, antes da tela de resultados.
+    const showResultsNow = () => showScreen('results', { push: false });
+    const triggerMinigame = win && res.nextNight === 3 && !hasSeenMinigame('lucas') ? 'lucas' : null;
+    setTimeout(() => {
+      if (triggerMinigame) this.playMinigame(triggerMinigame, showResultsNow);
+      else showResultsNow();
+    }, res.result === 'defeat' ? 1200 : 300);
     audio.unlock();
     audio.play(win ? 'levelup' : 'blackout', { vol: 0.8 });
     this.loadProfile().catch(() => {});
+  }
+
+  // ============================================================ minigame
+  playMinigame(sceneId, onDone) {
+    const scene = SCENES[sceneId];
+    if (!scene) { onDone?.(); return; }
+    showScreen('minigame', { push: false });
+    const canvas = $('#mg-canvas');
+    this.mg = new Minigame(canvas);
+    const capEl = $('#mg-caption');
+    const dlgEl = $('#mg-dialogue');
+    this.mg.start(scene, {
+      onCaption: (text) => { capEl.hidden = !text; capEl.textContent = text || ''; },
+      onDialogue: (d) => {
+        dlgEl.hidden = !d;
+        if (d) { $('#mg-speaker').textContent = d.speaker || ''; $('#mg-speaker').hidden = !d.speaker; $('#mg-text').textContent = d.text; }
+      },
+      onDone: () => { this.mg = null; onDone?.(); },
+    });
   }
 
   // ================================================================ perfil

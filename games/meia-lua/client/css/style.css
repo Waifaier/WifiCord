@@ -377,6 +377,18 @@ kbd { background: #1a1520; border: 1px solid var(--line); border-bottom-width: 2
 #show-blackout { position: absolute; inset: 0; z-index: 96; background: #000; opacity: 0; pointer-events: none; transition: opacity .9s ease; }
 #show-blackout.active { opacity: 1; transition: opacity .15s ease; }
 #hud-clock.glitching { color: #ff5577; text-shadow: 0 0 8px #ff3355; animation: shake .1s infinite; }
+
+/* ---------- minigame (lembrança em flashback) ---------- */
+.mg-wrap { position: relative; width: 100%; max-width: 960px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+#mg-canvas { width: 100%; aspect-ratio: 16/9; image-rendering: pixelated; background: #0b0710; border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 0 40px rgba(0,0,0,.6); }
+.mg-caption { position: absolute; left: 50%; top: 8%; transform: translateX(-50%); font-family: var(--pixel); font-size: 1.3rem; letter-spacing: 1px; color: #f3e6c8; text-align: center; text-shadow: 0 0 10px #000, 0 0 20px #000; pointer-events: none; max-width: 90%; }
+.mg-dialogue { position: absolute; left: 50%; bottom: 9%; transform: translateX(-50%); width: min(90%, 640px); background: rgba(10,6,14,.88); border: 1px solid var(--line); border-radius: 4px; padding: 10px 14px; cursor: pointer; }
+.mg-dialogue b { color: var(--accent); font-size: 12px; display: block; margin-bottom: 3px; }
+.mg-dialogue p { margin: 0; font-size: 13px; color: #f3e6c8; }
+.mg-continue { display: block; text-align: right; font-size: 10px; color: var(--muted); margin-top: 4px; opacity: .8; }
+.mg-skip { position: absolute; top: -6px; right: 0; font-size: 11px; padding: 5px 10px; opacity: .7; }
+.mg-skip:hover { opacity: 1; }
+@media (max-width: 700px) { .mg-caption { font-size: 1rem; top: 6%; } .mg-dialogue p { font-size: 12px; } }
 @media (prefers-reduced-motion: reduce) {
   .show-beam, .show-flash, .show-text { animation: none; }
   #show-overlay.active { opacity: .9; }
