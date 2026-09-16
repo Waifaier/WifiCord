@@ -748,8 +748,13 @@
          fechar, o que desconecta o socket e para o áudio. -->
     <div id="game-panel-meialua" class="game-panel hidden">
       <div class="games-header"><button type="button" class="btn btn-ghost btn-small" data-back-to-games>← Voltar para Jogos</button></div>
-      <div class="meialua-frame-wrap">
+      <div class="meialua-frame-wrap" id="meialua-frame-wrap">
         <iframe id="meialua-frame" title="Meia-Lua: Turno da Noite" allow="microphone; autoplay; fullscreen; gamepad" tabindex="-1"></iframe>
+        <!-- Fica DENTRO do elemento que vira tela cheia (não em .games-header,
+             que é irmão dele) — em :fullscreen o navegador só desenha o
+             elemento escolhido e quem está dentro dele (efeito "top layer"),
+             então um botão de fora simplesmente some/some fica inacessível. -->
+        <button type="button" id="meialua-fullscreen-btn" class="meialua-fullscreen-btn" title="Tela cheia">⛶ Tela cheia</button>
       </div>
     </div>
   </div>

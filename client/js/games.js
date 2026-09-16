@@ -54,7 +54,27 @@ function rgbaFrom(rgbStr,alpha){const m=/rgb\((\d+),(\d+),(\d+)\)/.exec(rgbStr);
 // deixava o iframe do Meia-Lua rodando escondido, com o microfone
 // possivelmente ainda ligado se a pessoa estivesse numa chamada de voz.
 function stopFlappy(){running=false;cancelAnimationFrame(raf);window.Sounds?.stopLoop?.();}
-function closeMeiaLuaFrame(){const f=$('meialua-frame');if(f&&f.getAttribute('src'))f.setAttribute('src','about:blank');}
+function closeMeiaLuaFrame(){
+  const f=$('meialua-frame');if(f&&f.getAttribute('src'))f.setAttribute('src','about:blank');
+  // Sai da tela cheia junto (senão a pessoa "volta pra Jogos" e o
+  // navegador fica preso em tela cheia mostrando o hub em vez do jogo).
+  if(document.fullscreenElement&&document.fullscreenElement===$('meialua-frame-wrap'))document.exitFullscreen?.().catch(()=>{});
+}
+// --- Tela cheia do painel do Meia-Lua: usa a Fullscreen API do navegador
+// no WRAP do iframe (não no iframe em si), então o cabeçalho continua
+// escondido igual já estava e o jogo só ganha mais espaço de tela. O
+// atributo allow="fullscreen" do iframe (ver index.html) deixa o conteúdo
+// de dentro dele participar do fullscreen também, se precisar.
+function updateMeiaLuaFullscreenBtn(){
+  const btn=$('meialua-fullscreen-btn');if(!btn)return;
+  const active=document.fullscreenElement===$('meialua-frame-wrap');
+  btn.textContent=active?'⤢ Sair da tela cheia':'⛶ Tela cheia';
+}
+function toggleMeiaLuaFullscreen(){
+  const wrap=$('meialua-frame-wrap');if(!wrap)return;
+  if(document.fullscreenElement===wrap){document.exitFullscreen?.().catch(()=>{});}
+  else{wrap.requestFullscreen?.().catch(()=>{window.App?.toast?.('Não foi possível abrir em tela cheia.','error');});}
+}
 function showHub(){
   stopFlappy();closeMeiaLuaFrame();
   $('games-hub')?.classList.remove('hidden');
@@ -240,6 +260,8 @@ function bind(){
   window.addEventListener('keydown',e=>{if(e.code==='Space'&&$('game-panel-flappy')&&!$('game-panel-flappy').classList.contains('hidden')){e.preventDefault();if(!running)start();else flap();}});
   $('flappy-start')?.addEventListener('click',start);
   $('games-btn')?.addEventListener('click',open);
+  $('meialua-fullscreen-btn')?.addEventListener('click',toggleMeiaLuaFullscreen);
+  document.addEventListener('fullscreenchange',updateMeiaLuaFullscreenBtn);
   $('modal-games')?.addEventListener('click',e=>{
     const card=e.target.closest('[data-open-game]');
     if(card){openCard(card.dataset.openGame);return;}

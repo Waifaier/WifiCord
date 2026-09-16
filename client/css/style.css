@@ -4519,6 +4519,37 @@ html.has-custom-titlebar #members-panel {
 }
 #meialua-frame { position: absolute; inset: 0; display: block; width: 100%; height: 100%; border: 0; background: #050308; }
 
+/* Botão "Tela cheia" (client/js/games.js chama requestFullscreen() no
+   próprio .meialua-frame-wrap) — fica sobreposto no canto do iframe (não
+   no cabeçalho, que é irmão do wrap: em :fullscreen o navegador só
+   desenha o elemento escolhido e quem está DENTRO dele, então um botão
+   de fora ficaria com o clique bloqueado pelo próprio iframe por cima). */
+.meialua-fullscreen-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  background: rgba(10, 8, 16, .65);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  cursor: pointer;
+  opacity: .75;
+  transition: opacity .15s ease;
+}
+.meialua-fullscreen-btn:hover, .meialua-fullscreen-btn:focus-visible { opacity: 1; }
+
+.meialua-frame-wrap:fullscreen {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  min-height: 0;
+}
+
 @media (max-width: 680px) {
   .modal-games { height: 100dvh !important; max-height: 100dvh !important; border-radius: 0 !important; }
   .games-grid { grid-template-columns: 1fr; }
