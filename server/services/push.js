@@ -38,11 +38,9 @@ function getMessaging() {
 // notificação de verdade é o WifiCordFirebaseMessagingService.kt no
 // Android, que decide o formato pelo campo "type"), e limpa tokens que o
 // Firebase já não reconhece mais (desinstalou o app, trocou de aparelho etc.).
-async function sendPush(toUserId, data, errorLabel) {
+async function sendToTokens(tokens, data, errorLabel) {
   const app = getMessaging();
-  if (!app) return;
-  const tokens = PushToken.listForUser(toUserId);
-  if (!tokens.length) return;
+  if (!app || !tokens.length) return;
   const admin = require('firebase-admin');
   try {
     const res = await admin.messaging().sendEachForMulticast({
@@ -59,6 +57,11 @@ async function sendPush(toUserId, data, errorLabel) {
   } catch (err) {
     console.error(`Erro ao enviar push de ${errorLabel}:`, err.message);
   }
+}
+
+async function sendPush(toUserId, data, errorLabel) {
+  const tokens = PushToken.listForUser(toUserId);
+  await sendToTokens(tokens, data, errorLabel);
 }
 
 async function sendIncomingCallPush(toUserId, { fromUserId, fromName, fromAvatar, callType }) {
@@ -89,4 +92,16 @@ async function sendMessagePush(toUserId, { fromUserId, fromName, fromAvatar, pre
   }, 'mensagem');
 }
 
-module.exports = { sendIncomingCallPush, sendMessagePush };
+// Aviso da administração (ver server/routes/announcements.js) — vai pra
+// TODO MUNDO que já registrou um token, ao contrário de ligação/mensagem
+// que são direcionadas a uma pessoa só.
+async function sendAnnouncementPush({ title, message }) {
+  const tokens = PushToken.allTokens();
+  await sendToTokens(tokens, {
+    type: 'announcement',
+    title: String(title || 'Aviso do WifiCord').slice(0, 120),
+    message: String(message || '').slice(0, 800),
+  }, 'aviso');
+}
+
+module.exports = { sendIncomingCallPush, sendMessagePush, sendAnnouncementPush };

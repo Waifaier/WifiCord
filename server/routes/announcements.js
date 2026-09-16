@@ -2,6 +2,7 @@ const express = require('express');
 const { requireAuth } = require('./auth');
 const User = require('../models/User');
 const Announcement = require('../models/Announcement');
+const { sendAnnouncementPush } = require('../services/push');
 const router = express.Router();
 
 // GET fica fora do middleware de admin de propósito: QUALQUER usuário
@@ -21,6 +22,10 @@ router.post('/', requireAuth, (req, res) => {
   if (!title || !message) return res.status(400).json({ error: 'Preencha o título e a mensagem do aviso.' });
   const announcement = Announcement.create({ title, message, createdBy: req.session.userId });
   req.app.get('io')?.emit('admin:announcement', { announcement });
+  // Quem não está com o site/app aberto no momento também recebe — via
+  // notificação push (ver server/services/push.js; vira no-op silencioso
+  // se o Firebase não estiver configurado).
+  sendAnnouncementPush({ title, message });
   res.json({ announcement });
 });
 

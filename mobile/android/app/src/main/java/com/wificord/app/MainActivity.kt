@@ -1,4 +1,4 @@
-package com.wificord.app
+﻿package com.wificord.app
 
 import android.Manifest
 import android.app.AlertDialog
@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.getcapacitor.BridgeActivity
+import com.wificord.app.push.WifiCordFirebaseMessagingService
 import com.wificord.app.updater.UpdateCheckWorker
 import com.wificord.app.updater.UpdateManager
 import kotlinx.coroutines.launch
@@ -19,7 +20,11 @@ import kotlinx.coroutines.launch
 class MainActivity : BridgeActivity() {
 
     private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* tanto faz o resultado — se negar, o app funciona igual, só não avisa em 2º plano */ }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            // Tanto faz conceder ou negar — a permissão só controla se a
+            // notificação PODE aparecer, não afeta registrar o token.
+            WifiCordFirebaseMessagingService.syncTokenWithServer(applicationContext)
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,6 +32,16 @@ class MainActivity : BridgeActivity() {
         requestNotificationPermissionIfNeeded()
         UpdateCheckWorker.schedulePeriodic(applicationContext)
         checkForUpdateInForeground()
+        WifiCordFirebaseMessagingService.syncTokenWithServer(applicationContext)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Cobre o caso mais comum de token nunca registrado: a pessoa abriu
+        // o app pela primeira vez (onCreate rodou sem sessão ainda), fez
+        // login, e só volta a passar por aqui quando reabre o app depois —
+        // é nesse reabrir que finalmente existe cookie de sessão.
+        WifiCordFirebaseMessagingService.syncTokenWithServer(applicationContext)
     }
 
     private fun requestNotificationPermissionIfNeeded() {

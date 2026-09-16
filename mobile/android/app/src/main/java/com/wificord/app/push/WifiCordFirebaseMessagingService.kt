@@ -1,16 +1,20 @@
-package com.wificord.app.push
+﻿package com.wificord.app.push
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.webkit.CookieManager
 import androidx.core.app.NotificationCompat
+import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.wificord.app.MainActivity
@@ -25,69 +29,133 @@ import java.net.URL
 
 /**
  * Recebe as notificações push (Firebase Cloud Messaging) que o servidor
- * manda quando chega uma ligação e a pessoa não está com nenhum socket
- * conectado no momento (app fechado ou tela bloqueada). Isso roda mesmo
- * com o app totalmente fechado — é o sistema Android que acorda esse
- * serviço, sem precisar do app estar aberto.
+ * manda quando chega uma ligação, mensagem ou aviso e a pessoa não está com
+ * nenhum socket conectado no momento (app fechado ou tela bloqueada). Isso
+ * roda mesmo com o app totalmente fechado — é o sistema Android que acorda
+ * esse serviço, sem precisar do app estar aberto.
  *
  * Só funciona de verdade depois que mobile/android/app/google-services.json
- * for adicionado ao projeto (ver LEIA-ME de push) — sem ele, o Firebase
- * nunca entrega nada aqui, mas o app continua funcionando normal.
+ * for adicionado ao projeto E a variável FIREBASE_SERVICE_ACCOUNT_JSON
+ * estiver configurada no servidor (ver LEIA-ME de push) — sem isso, o app
+ * continua funcionando normal, só sem essas notificações.
  */
 class WifiCordFirebaseMessagingService : FirebaseMessagingService() {
 
     companion object {
         private const val SERVER_BASE_URL = "https://wificord.onrender.com"
-        private const val CHANNEL_ID = "wificord_incoming_calls"
+        private const val CHANNEL_ID_CALLS = "wificord_incoming_calls"
+        private const val CHANNEL_ID_MESSAGES = "wificord_messages"
+        private const val CHANNEL_ID_ANNOUNCEMENTS = "wificord_announcements"
         private val http = OkHttpClient()
+
+        /**
+         * Pega o token FCM atual e garante que o servidor tem ele
+         * registrado. Chamado em vários momentos (abrir o app, voltar pro
+         * primeiro plano, ligar o celular) porque o único gatilho antigo
+         * (onNewToken, que só dispara na instalação ou numa raríssima
+         * renovação) não cobre o caso mais comum: o token já existir mas a
+         * pessoa só ter logado DEPOIS, quando aquele primeiro envio já
+         * tinha sido descartado silenciosamente por falta de cookie de
+         * sessão.
+         */
+        fun syncTokenWithServer(context: Context) {
+            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+                registerTokenWithRetry(context.applicationContext, token, 0)
+            }
+        }
+
+        private fun registerTokenWithRetry(context: Context, token: String, attempt: Int) {
+            val cookie = CookieManager.getInstance().getCookie(SERVER_BASE_URL)
+            if (cookie.isNullOrBlank()) {
+                // Ainda não logou (ex: acabou de abrir o app pela primeira
+                // vez) — tenta de novo por até 1 minuto, tempo mais que
+                // suficiente pra alguém terminar de fazer login.
+                if (attempt < 6) {
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        registerTokenWithRetry(context, token, attempt + 1)
+                    }, 10_000L)
+                }
+                return
+            }
+            postToServer(context, cookie, "/api/push/register", "{\"token\":\"${escape(token)}\",\"platform\":\"android\"}")
+        }
+
+        private fun postToServer(context: Context, cookie: String, path: String, jsonBody: String) {
+            val body = jsonBody.toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url(SERVER_BASE_URL + path)
+                .addHeader("Cookie", cookie)
+                .post(body)
+                .build()
+            http.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) { /* silencioso — tenta de novo no próximo evento */ }
+                override fun onResponse(call: Call, response: okhttp3.Response) { response.close() }
+            })
+        }
+
+        private fun escape(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"")
     }
 
-    // Token novo (primeira instalação ou renovação periódica do FCM) —
-    // manda pro servidor guardar, associado à conta logada nessa WebView.
+    // Token novo (primeira instalação ou renovação periódica do FCM).
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        postToServer("/api/push/register", "{\"token\":\"${escape(token)}\",\"platform\":\"android\"}")
+        syncTokenWithServer(applicationContext)
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
         val data = message.data
-        if (data["type"] != "incoming_call") return
-
-        val fromUserId = data["fromUserId"] ?: return
-        val fromName = data["fromName"]?.takeIf { it.isNotBlank() } ?: "Alguém"
-        val fromAvatar = data["fromAvatar"] ?: ""
-        val callType = data["callType"] ?: "video"
-
-        showIncomingCallNotification(fromUserId, fromName, fromAvatar, callType)
+        when (data["type"]) {
+            "incoming_call" -> {
+                val fromUserId = data["fromUserId"] ?: return
+                val fromName = data["fromName"]?.takeIf { it.isNotBlank() } ?: "Alguém"
+                val fromAvatar = data["fromAvatar"] ?: ""
+                val callType = data["callType"] ?: "video"
+                showIncomingCallNotification(fromUserId, fromName, fromAvatar, callType)
+            }
+            "new_message" -> {
+                val fromName = data["fromName"]?.takeIf { it.isNotBlank() } ?: "Alguém"
+                val preview = data["preview"] ?: ""
+                val channelName = data["channelName"]?.takeIf { it.isNotBlank() }
+                val notificationKey = data["fromUserId"] ?: data["channelId"] ?: "msg"
+                showMessageNotification(notificationKey, fromName, preview, channelName)
+            }
+            "announcement" -> {
+                val title = data["title"]?.takeIf { it.isNotBlank() } ?: "Aviso do WifiCord"
+                val body = data["message"] ?: ""
+                showAnnouncementNotification(title, body)
+            }
+        }
     }
 
-    private fun showIncomingCallNotification(fromUserId: String, fromName: String, fromAvatarUrl: String, callType: String) {
-        ensureChannel()
-
-        val notificationId = fromUserId.hashCode()
-
-        // Toque na notificação (ou no corpo dela) = abre o app normal. Ao
-        // reconectar, o servidor reenvia a mesma oferta de chamada
-        // pendente pro socket — a telinha de "fulano ligando" já existente
-        // no app cuida do resto, sem precisar de nada especial aqui.
-        val openAppIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+    private fun openAppPendingIntent(notificationId: Int): PendingIntent {
+        val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         } ?: Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        val piFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        val openAppPending = PendingIntent.getActivity(this, notificationId, openAppIntent, piFlags)
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        return PendingIntent.getActivity(this, notificationId, intent, flags)
+    }
+
+    private fun showIncomingCallNotification(fromUserId: String, fromName: String, fromAvatarUrl: String, callType: String) {
+        ensureCallChannel()
+
+        val notificationId = fromUserId.hashCode()
+        val openAppPending = openAppPendingIntent(notificationId)
 
         val rejectIntent = Intent(this, CallRejectReceiver::class.java).apply {
             putExtra("fromUserId", fromUserId)
             putExtra("notificationId", notificationId)
         }
-        val rejectPending = PendingIntent.getBroadcast(this, notificationId, rejectIntent, piFlags)
+        val rejectPending = PendingIntent.getBroadcast(
+            this, notificationId, rejectIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         val avatarBitmap = fromAvatarUrl.takeIf { it.isNotBlank() }?.let { downloadBitmap(it) }
 
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID_CALLS)
             .setSmallIcon(applicationInfo.icon)
             .setContentTitle("$fromName está ligando")
             .setContentText(if (callType == "audio") "Chamada de voz" else "Chamada de vídeo")
@@ -106,19 +174,72 @@ class WifiCordFirebaseMessagingService : FirebaseMessagingService() {
         getSystemService(NotificationManager::class.java)?.notify(notificationId, builder.build())
     }
 
-    private fun ensureChannel() {
+    private fun showMessageNotification(key: String, fromName: String, preview: String, channelName: String?) {
+        ensureMessageChannel()
+        val notificationId = ("msg-$key").hashCode()
+        val openAppPending = openAppPendingIntent(notificationId)
+        val title = if (channelName != null) "$fromName em #$channelName" else fromName
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID_MESSAGES)
+            .setSmallIcon(applicationInfo.icon)
+            .setContentTitle(title)
+            .setContentText(preview)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(preview))
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(openAppPending)
+        getSystemService(NotificationManager::class.java)?.notify(notificationId, builder.build())
+    }
+
+    private fun showAnnouncementNotification(title: String, body: String) {
+        ensureAnnouncementChannel()
+        val notificationId = ("announcement-" + System.currentTimeMillis()).hashCode()
+        val openAppPending = openAppPendingIntent(notificationId)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID_ANNOUNCEMENTS)
+            .setSmallIcon(applicationInfo.icon)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setContentIntent(openAppPending)
+        getSystemService(NotificationManager::class.java)?.notify(notificationId, builder.build())
+    }
+
+    private fun ensureCallChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(NotificationManager::class.java) ?: return
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
+        if (manager.getNotificationChannel(CHANNEL_ID_CALLS) != null) return
         val ringtone = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
         val audioAttrs = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
-        val channel = NotificationChannel(CHANNEL_ID, "Ligações recebidas", NotificationManager.IMPORTANCE_HIGH).apply {
+        val channel = NotificationChannel(CHANNEL_ID_CALLS, "Ligações recebidas", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Avisa quando alguém te liga pelo WifiCord com o app fechado."
             setSound(ringtone, audioAttrs)
             enableVibration(true)
+        }
+        manager.createNotificationChannel(channel)
+    }
+
+    private fun ensureMessageChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = getSystemService(NotificationManager::class.java) ?: return
+        if (manager.getNotificationChannel(CHANNEL_ID_MESSAGES) != null) return
+        val channel = NotificationChannel(CHANNEL_ID_MESSAGES, "Mensagens", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "Avisa quando chega uma mensagem nova pelo WifiCord com o app fechado."
+            enableVibration(true)
+        }
+        manager.createNotificationChannel(channel)
+    }
+
+    private fun ensureAnnouncementChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = getSystemService(NotificationManager::class.java) ?: return
+        if (manager.getNotificationChannel(CHANNEL_ID_ANNOUNCEMENTS) != null) return
+        val channel = NotificationChannel(CHANNEL_ID_ANNOUNCEMENTS, "Avisos do WifiCord", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            description = "Avisos da administração do WifiCord."
         }
         manager.createNotificationChannel(channel)
     }
@@ -128,23 +249,4 @@ class WifiCordFirebaseMessagingService : FirebaseMessagingService() {
     } catch (_: Exception) {
         null
     }
-
-    // Manda um POST autenticado pro servidor usando o mesmo cookie de
-    // sessão que a WebView do app já tem — sem isso não daria pra provar
-    // quem é a pessoa sem abrir o app inteiro de novo.
-    private fun postToServer(path: String, jsonBody: String) {
-        val cookie = CookieManager.getInstance().getCookie(SERVER_BASE_URL) ?: return
-        val body = jsonBody.toRequestBody("application/json".toMediaType())
-        val request = Request.Builder()
-            .url(SERVER_BASE_URL + path)
-            .addHeader("Cookie", cookie)
-            .post(body)
-            .build()
-        http.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) { /* silencioso — tenta de novo no próximo evento */ }
-            override fun onResponse(call: Call, response: okhttp3.Response) { response.close() }
-        })
-    }
-
-    private fun escape(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"")
 }

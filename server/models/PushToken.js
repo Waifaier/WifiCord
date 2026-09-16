@@ -20,6 +20,12 @@ const PushTokenModel = {
     if (!userId) return [];
     return db.prepare('SELECT token FROM push_tokens WHERE user_id = ?').all(userId).map(r => r.token);
   },
+  // Todos os tokens de todo mundo — usado só pros "avisos do app" (anúncios
+  // de admin), que são pra todo usuário ver, diferente de ligação/mensagem
+  // que são só pra uma pessoa.
+  allTokens() {
+    return db.prepare('SELECT token FROM push_tokens').all().map(r => r.token);
+  },
 };
 
 module.exports = PushTokenModel;

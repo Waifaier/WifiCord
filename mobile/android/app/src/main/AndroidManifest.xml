@@ -47,6 +47,18 @@
             android:name=".push.CallRejectReceiver"
             android:exported="false" />
 
+        <!-- Assim que o celular liga, reconfirma o token de notificação
+             push no servidor — sem isso, se o token tivesse mudado com o
+             aparelho desligado, as notificações só voltariam a funcionar
+             na próxima vez que alguém abrisse o app manualmente. -->
+        <receiver
+            android:name=".push.BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -62,6 +74,12 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Roda o BootReceiver quando o celular liga (ver abaixo) — o sistema
+         já isenta esse aviso específico dos limites de execução em 2º
+         plano do Android 8+, então funciona mesmo sem o app ter sido
+         aberto nenhuma vez desde o boot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Chamada de câmera/áudio (getUserMedia dentro da WebView) -->
     <uses-permission android:name="android.permission.CAMERA" />
