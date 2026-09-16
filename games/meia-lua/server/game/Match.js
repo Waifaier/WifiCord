@@ -24,6 +24,15 @@ const OFFLINE_GRACE = 60;
 const r2 = (v) => Math.round(v * 100) / 100;
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+// Formação do evento "O Show" (ver runShowEvent) — sempre a mesma ordem da
+// esquerda pra direita, como uma banda de verdade parada no palco (em vez
+// de espalhados aleatoriamente). O Maestro, o regente, fica no centro
+// quando está presente; a Marola (cantora) fica ao lado dele.
+const SHOW_STAGE_ORDER = ['tonho', 'gregorio', 'marola', 'maestro', 'lume'];
+const SHOW_STAGE_Y = 16.5;
+const SHOW_STAGE_X1 = 25;
+const SHOW_STAGE_X2 = 38;
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 export class Match {
@@ -1358,15 +1367,20 @@ export class Match {
     }
 
     // Todo mundo vivo (menos a armadilha do macaco e quem ainda nem
-    // "ligou" essa noite — dormente/DISABLED fica de fora) sobe ao palco.
-    for (const a of this.anims) {
-      if (a.def.trap || a.state === 'DISABLED' || a.state === 'DORMANT') continue;
-      const spot = randomFloorInArea('palco');
-      a.x = spot.x; a.y = spot.y;
+    // "ligou" essa noite — dormente/DISABLED fica de fora) sobe ao palco,
+    // formados numa fileira só — não espalhados aleatoriamente. A ordem
+    // (esquerda pra direita) é sempre a mesma; com menos deles presentes,
+    // a fileira só fica mais compacta, sem buracos no meio.
+    const showAnims = this.anims.filter((a) => !a.def.trap && a.state !== 'DISABLED' && a.state !== 'DORMANT');
+    const ordered = showAnims.slice().sort((x, y) => SHOW_STAGE_ORDER.indexOf(x.type) - SHOW_STAGE_ORDER.indexOf(y.type));
+    const n = ordered.length;
+    ordered.forEach((a, i) => {
+      const x = n <= 1 ? (SHOW_STAGE_X1 + SHOW_STAGE_X2) / 2 : SHOW_STAGE_X1 + ((SHOW_STAGE_X2 - SHOW_STAGE_X1) * i) / (n - 1);
+      a.x = x; a.y = SHOW_STAGE_Y;
       a.path = null; a.goal = null; a.targetId = null; a.lastSeen = null;
-      a.dir = Math.random() * Math.PI * 2;
+      a.dir = Math.PI / 2; // de frente pro salão, encarando quem estiver preso ali
       a.performing = true;
-    }
+    });
 
     for (const a of AREAS) this.flicker.set(a.id, this.time + dur + 1);
     this.broadcast('fx', { type: 'show', phase: 'start', dur: Math.round(dur * 10) / 10 });

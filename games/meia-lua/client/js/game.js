@@ -97,6 +97,7 @@ export class Game {
     this.glitch = 0;
     this.showActive = false;
     this.showLoopTimer = null;
+    this.showBreakAt = Infinity;
     this.clockGlitchUntil = 0;
     this.walkAcc = 0;
     this.stepAcc = new Map();
@@ -138,9 +139,11 @@ export class Game {
     audio.stopAll();
     if (this.camOpen) this.closeCams(false);
     this.showActive = false;
+    this.showBreakAt = Infinity;
     clearInterval(this.showLoopTimer);
     this.showLoopTimer = null;
     clearTimeout(this._showSafety);
+    clearTimeout(this._showBreakSfx);
     $('#show-overlay')?.classList.remove('active');
     if ($('#show-overlay')) $('#show-overlay').hidden = true;
     $('#show-blackout')?.classList.remove('active');
@@ -383,6 +386,9 @@ export class Game {
   // Ver Match.runShowEvent/endShowEvent no servidor.
   startShowEvent(dur) {
     this.showActive = true;
+    const d = dur || 18;
+    // últimos ~1.8s: eles "quebram" (ver sprites.js) pouco antes do apagão
+    this.showBreakAt = performance.now() / 1000 + Math.max(2, d - 1.8);
     const ov = $('#show-overlay');
     ov.hidden = false;
     requestAnimationFrame(() => ov.classList.add('active'));
@@ -393,16 +399,27 @@ export class Game {
     this.glitch = 1;
     if (settings.shake) this.shakeUntil = performance.now() + 600;
     clearInterval(this.showLoopTimer);
-    this.showLoopTimer = setInterval(() => { if (this.showActive) audio.play('showtimeLoop', { vol: 0.65 }); }, 1400);
+    // o loop de música (showtimeLoop) dura ~4s de fato (ver audio.js) —
+    // reencadeia um pouco antes de terminar pra não deixar buraco de silêncio.
+    this.showLoopTimer = setInterval(() => { if (this.showActive) audio.play('showtimeLoop', { vol: 0.7 }); }, 3700);
+    clearTimeout(this._showBreakSfx);
+    this._showBreakSfx = setTimeout(() => {
+      if (!this.showActive) return;
+      audio.play('metal', { vol: 0.6 });
+      audio.play('static', { vol: 0.5 });
+      navigator.vibrate?.([80, 40, 80, 40, 160]);
+    }, Math.max(0, d - 1.8) * 1000);
     clearTimeout(this._showSafety);
-    this._showSafety = setTimeout(() => { if (this.showActive) this.endShowEvent(); }, ((dur || 18) + 3) * 1000);
+    this._showSafety = setTimeout(() => { if (this.showActive) this.endShowEvent(); }, (d + 3) * 1000);
   }
 
   endShowEvent() {
     this.showActive = false;
+    this.showBreakAt = Infinity;
     clearInterval(this.showLoopTimer);
     this.showLoopTimer = null;
     clearTimeout(this._showSafety);
+    clearTimeout(this._showBreakSfx);
     const ov = $('#show-overlay');
     ov.classList.remove('active');
     ov.hidden = true;
@@ -895,6 +912,8 @@ export class Game {
     }
     S.players = players;
     S.anims = anims;
+    S.showActive = this.showActive;
+    S.showBreaking = this.showActive && now / 1000 >= (this.showBreakAt || Infinity);
     // olhos de alucinação somam aos reais
     S.eyes = (S.snapEyes || []).concat(S.hallu.filter((h) => h.kind === 'eyes').map((h) => h.e));
   }

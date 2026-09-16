@@ -276,7 +276,7 @@ export class Renderer {
         ctx.beginPath(); ctx.ellipse(sx2, sy2 + scale * 0.38, scale * 0.45, scale * 0.16, 0, 0, TAU); ctx.fill();
         if (!this.animSprite(ctx, a, sx2, sy2, scale, t)) {
           const size = scale * (a.type === 'gregorio' ? 1.35 : a.type === 'maestro' ? 1.5 : 1.15);
-          drawAnimatronic(ctx, a.type === 'pipoca' ? 'tonho' : a.type, sx2, sy2, size, a.dir, t, { state: a.state, moving: a.moving });
+          drawAnimatronic(ctx, a.type === 'pipoca' ? 'tonho' : a.type, sx2, sy2, size, a.dir, t, { state: a.state, moving: a.moving, performing: !!S.showActive, breaking: !!S.showBreaking });
         }
       }
     }

@@ -343,15 +343,27 @@ class AudioSystem {
         this.duck(1.2);
         break;
       case 'showtimeLoop': {
-        const scale = [523.25, 587.33, 622.25, 698.46, 783.99, 622.25, 587.33];
+        // Valsa de caixinha de música torta — não é uma escala repetindo:
+        // é um fraseado em compasso 3 (tema de aniversário desviado pro
+        // modo frígio), com uma nota "errada" de vez em quando, um zumbido
+        // grave contínuo por baixo segurando a tensão, e um harmônico em
+        // trítono quase inaudível sustentado o tempo todo — é isso que
+        // faz soar errado mesmo quando as notas acertam.
+        const notes = [
+          { f: 233.08, d: 0.42 }, { f: 277.18, d: 0.42 }, { f: 311.13, d: 0.58 },
+          { f: 349.23, d: 0.42 }, { f: 311.13, d: 0.42 }, { f: 277.18, d: 0.58 },
+          { f: 233.08, d: 0.42 }, { f: 220.0, d: 0.7 },
+        ];
         let tt = t;
-        for (let i = 0; i < scale.length; i++) {
-          const f = scale[i] * (Math.random() < 0.12 ? 1.03 : 1); // desafinada de propósito
-          this.tone(o, tt, 0.26, { type: 'triangle', freq: f, vol: 0.14, detune: -15 + Math.random() * 30 });
-          this.tone(o, tt, 0.22, { type: 'square', freq: f / 2, vol: 0.05 });
-          tt += 0.19;
+        for (const n of notes) {
+          const wrong = Math.random() < 0.14;
+          const f = n.f * (wrong ? 1.06 : 1);
+          this.tone(o, tt, n.d * 0.92, { type: 'triangle', freq: f, vol: 0.16, attack: 0.03, detune: -10 + Math.random() * 20 });
+          this.tone(o, tt, n.d * 0.6, { type: 'sine', freq: f * 2, vol: 0.04, detune: 6 });
+          tt += n.d;
         }
-        this.tone(o, t, 0.15, { type: 'square', freq: 55, vol: 0.12 });
+        this.tone(o, t, tt - t, { type: 'sawtooth', freq: 55, vol: 0.07, detune: -6 });
+        this.tone(o, t, tt - t, { type: 'sine', freq: 233.08 * Math.SQRT2, vol: 0.025 });
         break;
       }
       case 'static': this.noise(o, t, 0.4, { type: 'highpass', freq: 2500, vol: 0.4 }); break;

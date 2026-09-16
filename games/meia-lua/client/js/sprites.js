@@ -50,18 +50,30 @@ export function drawPlayer(c, x, y, s, color, dir, t, { moving = false, dead = f
   }
 }
 
+// Defasagem de cada um no "compasso" da banda durante o evento "O Show"
+// (ver Match.runShowEvent) — cantam no mesmo ritmo, mas não robóticos em
+// uníssono perfeito, como uma banda de verdade balançando junto.
+const SHOW_PHASE = { tonho: 0, gregorio: 0.9, marola: 1.8, maestro: 2.7, lume: 3.6 };
+
 // ---------------------------------------------------------------- animatrônicos
-export function drawAnimatronic(c, type, x, y, s, dir, t, { state = 'IDLE', moving = false } = {}) {
+export function drawAnimatronic(c, type, x, y, s, dir, t, { state = 'IDLE', moving = false, performing = false, breaking = false } = {}) {
   const info = ANIMATRONIC_INFO[type] || ANIMATRONIC_INFO.tonho;
   const chase = state === 'CHASE';
   const stunned = state === 'STUNNED' || state === 'DISABLED';
+  const jx = breaking ? (Math.random() - 0.5) * s * 0.16 : chase ? (Math.random() - 0.5) * s * 0.05 : 0;
+  const jy = breaking ? (Math.random() - 0.5) * s * 0.1 : 0;
   c.save();
-  c.translate(x + (chase ? (Math.random() - 0.5) * s * 0.05 : 0), y);
+  c.translate(x + jx, y + jy);
   ellipse(c, 0, s * 0.38, s * 0.42, s * 0.16, 0, 'rgba(0,0,0,.5)');
-  const bob = moving ? Math.abs(Math.sin(t * (chase ? 12 : 7))) * s * 0.05 : 0;
-  const eye = stunned ? '#444' : chase ? '#ff2a2a' : info.eye;
+  // "cantando": balanço maior e sincronizado no palco durante o show; nos
+  // últimos instantes antes do apagão (breaking) o balanço vira tremor.
+  const bob = performing
+    ? Math.abs(Math.sin(t * 5.4 + (SHOW_PHASE[type] || 0))) * s * (breaking ? 0.03 : 0.08)
+    : moving ? Math.abs(Math.sin(t * (chase ? 12 : 7))) * s * 0.05 : 0;
+  const eye = stunned ? '#444' : chase ? '#ff2a2a' : breaking && Math.random() < 0.35 ? '#fff' : info.eye;
   const facing = Math.cos(dir) < 0 ? -1 : 1;
   c.translate(0, -bob);
+  if (breaking) c.rotate((Math.random() - 0.5) * 0.08);
   c.scale(facing, 1);
 
   switch (type) {
@@ -173,6 +185,27 @@ export function drawAnimatronic(c, type, x, y, s, dir, t, { state = 'IDLE', movi
     c.scale(facing, 1);
     c.fillStyle = '#7ee7e0'; c.font = `${s * 0.35}px monospace`; c.textAlign = 'center';
     c.fillText('⚡', Math.sin(t * 8) * s * 0.2, -s * 0.7);
+  }
+  if (breaking) {
+    // últimos instantes do show: eles "quebram" — rachaduras, faíscas e
+    // sumiços de um frame (stutter), como se o corpo estivesse se
+    // desmontando antes de sumir com o apagão.
+    c.scale(facing, 1);
+    c.save();
+    c.strokeStyle = 'rgba(255,255,255,.75)'; c.lineWidth = Math.max(1, s * 0.02);
+    c.shadowColor = '#fff'; c.shadowBlur = 4;
+    const seed = Math.floor(t * 9);
+    let rs = seed * 374761393 + (type.charCodeAt(0) || 0) * 97;
+    const rand = () => { rs = (rs * 1103515245 + 12345) & 0x7fffffff; return (rs % 1000) / 1000; };
+    for (let i = 0; i < 3; i++) {
+      const cx = (rand() - 0.5) * s * 0.6, cy = -s * 0.2 + (rand() - 0.5) * s * 0.6;
+      c.beginPath(); c.moveTo(cx, cy);
+      c.lineTo(cx + (rand() - 0.5) * s * 0.3, cy + (rand() - 0.5) * s * 0.3);
+      c.lineTo(cx + (rand() - 0.5) * s * 0.4, cy + (rand() - 0.5) * s * 0.2);
+      c.stroke();
+    }
+    if (rand() < 0.4) { c.fillStyle = 'rgba(255,220,120,.9)'; circle(c, (rand() - 0.5) * s * 0.5, -s * 0.15, s * 0.03, 'rgba(255,220,120,.9)'); }
+    c.restore();
   }
   c.restore();
 }
