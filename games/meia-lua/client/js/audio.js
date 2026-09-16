@@ -4,12 +4,14 @@ import { settings, onSettings } from './settings.js';
 // Timbre de grito por animatrônico (jumpscare): cada um tem uma "voz"
 // diferente — grave e gutural, agudo e insetóide, metálico, etc. — pra não
 // soar todo mundo igual (ver AudioSystem.play('jumpscare', { variant })).
+// "growl"/"growl2" são as taxas (Hz) do modulador em anel de cada voz —
+// é isso que dá o timbre metálico/inumano ao grito (ver ringMod()).
 const JUMPSCARE_VOICES = {
-  tonho: { base: 150, harsh: 95, top: 1300 }, // rosnado grave de bicho grande
-  marola: { base: 260, harsh: 210, top: 2500 }, // grito molhado, gorgolejante
-  lume: { base: 780, harsh: 560, top: 5400 }, // guincho agudo de inseto
-  gregorio: { base: 85, harsh: 55, top: 1400 }, // rugido metálico pesado
-  maestro: { base: 220, harsh: 330, top: 2200 }, // acorde dissonante, quase musical
+  tonho: { base: 130, harsh: 85, top: 1300, growl: 38, growl2: 61 }, // rosnado grave de bicho grande
+  marola: { base: 230, harsh: 190, top: 2500, growl: 55, growl2: 84 }, // grito molhado, gorgolejante
+  lume: { base: 720, harsh: 520, top: 5400, growl: 90, growl2: 140 }, // guincho agudo de inseto
+  gregorio: { base: 75, harsh: 50, top: 1400, growl: 24, growl2: 41 }, // rugido metálico pesado
+  maestro: { base: 200, harsh: 300, top: 2200, growl: 47, growl2: 73 }, // acorde dissonante, quase musical
 };
 
 class AudioSystem {
@@ -44,13 +46,19 @@ class AudioSystem {
     this.noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-    // distorção pesada para os jumpscares
+    // distorção pesada para os jumpscares — drive bem mais forte que antes
+    // e um pouco de assimetria (harmônicos pares), que é o que faz uma
+    // distorção soar "errada"/hostil em vez de só "quente".
     this.dist = ctx.createWaveShaper();
     const curve = new Float32Array(2048);
-    for (let i = 0; i < 2048; i++) { const x = (i / 1024) - 1; curve[i] = Math.tanh(x * 9) * 0.9; }
+    for (let i = 0; i < 2048; i++) {
+      const x = (i / 1024) - 1;
+      const s = Math.tanh(x * 16);
+      curve[i] = Math.max(-1, Math.min(1, s + 0.18 * s * s * Math.sign(x))) * 0.92;
+    }
     this.dist.curve = curve;
     this.distGain = ctx.createGain();
-    this.distGain.gain.value = 0.9;
+    this.distGain.gain.value = 0.95;
     this.dist.connect(this.distGain);
     this.distGain.connect(this.sfxBus);
     this.ready = true;
@@ -112,6 +120,30 @@ class AudioSystem {
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g); g.connect(dest);
     o.start(t); o.stop(t + dur + 0.05);
+  }
+
+  // Modulação em anel (AM verdadeira: portadora × modulador, ambas a taxa
+  // de áudio). É o truque clássico de som de terror/ficção científica pra
+  // timbre metálico e inumano — bem mais hostil que uma onda "limpa"
+  // varrendo de frequência, que soa mais como sirene do que como grito.
+  ringMod(dest, t, dur, { freq, freqEnd, mod, modEnd, type = 'sawtooth', vol = 0.5, attack = 0.002, detune = 0 } = {}) {
+    const car = this.ctx.createOscillator();
+    car.type = type; car.frequency.setValueAtTime(freq, t); car.detune.value = detune;
+    if (freqEnd) car.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
+    const lfo = this.ctx.createOscillator();
+    lfo.type = 'sine'; lfo.frequency.setValueAtTime(mod, t);
+    if (modEnd) lfo.frequency.exponentialRampToValueAtTime(modEnd, t + dur);
+    const ring = this.ctx.createGain();
+    ring.gain.setValueAtTime(0, t); // a saída do lfo (amplitude ±1) vira o próprio ganho -> multiplicação real
+    lfo.connect(ring.gain);
+    car.connect(ring);
+    const env = this.ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.linearRampToValueAtTime(vol, t + attack);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    ring.connect(env); env.connect(dest);
+    car.start(t); car.stop(t + dur + 0.05);
+    lfo.start(t); lfo.stop(t + dur + 0.05);
   }
 
   // ---------- efeitos ----------
@@ -178,25 +210,53 @@ class AudioSystem {
         this.noise(o, t, 1.0, { freq: 3000, vol: 0.8, freqEnd: 400 });
         break;
       case 'jumpscare': {
-        // 0) estalo seco e instantâneo — o "susto" em si, uma fração de
-        // segundo antes do grito, que é o que faz o som ser reconhecido
-        // como jumpscare (sem ele, fica só um grito qualquer).
         const v = JUMPSCARE_VOICES[variant] || JUMPSCARE_VOICES.tonho;
-        this.noise(o, t, 0.07, { type: 'highpass', freq: 1000, vol: 1, attack: 0.0008 });
-        this.tone(o, t, 0.05, { type: 'square', freq: v.harsh * 2.2, vol: 0.55, attack: 0.0008 });
+        const jit = (pct = 0.06) => 1 + (Math.random() * 2 - 1) * pct; // +/- variação a cada susto, pra nunca soar idêntico
+
+        // 0) IMPACTO instantâneo — estalo em espectro cheio + soco de sub
+        // grave distorcido, com ataque quase em degrau (não uma "crescida"
+        // suave). É esse golpe seco no primeiro instante que faz o som ser
+        // sentido como um susto de verdade, e não só um grito qualquer.
+        this.noise(o, t, 0.05, { type: 'highpass', freq: 600, vol: 1, attack: 0.0004 });
+        this.noise(o, t, 0.045, { type: 'lowpass', freq: 9000, vol: 0.95, attack: 0.0004 });
+        const punch = this.ctx.createGain(); punch.gain.value = 1; punch.connect(this.dist);
+        this.tone(punch, t, 0.28, { type: 'square', freq: 42 * jit(), freqEnd: 19, vol: 1, attack: 0.0004 });
+
         // grito metálico distorcido (voz varia por animatrônico) + impacto
         // grave + estática — tudo mais alto e mais brusco que antes.
         const d = this.ctx.createGain();
         d.gain.value = 1;
         d.connect(this.dist);
         const t0 = t + 0.045;
-        for (const [f, det] of [[v.base, 0], [v.base * 1.06, 35], [v.top * 0.5, -20], [v.harsh, 12]]) {
-          this.tone(d, t0, 1.3, { type: 'sawtooth', freq: f, freqEnd: f * 0.3, vol: 0.55, attack: 0.003, detune: det });
+
+        // 1) corpo do grito: duas vozes em modulação de anel (portadora ×
+        // modulador), desafinadas entre si, cada uma na taxa de "growl"
+        // própria do animatrônico — dá aquele timbre metálico/errado, bem
+        // mais hostil do que uma varredura de frequência "limpa".
+        this.ringMod(d, t0, 1.1 * jit(0.05), {
+          type: 'sawtooth', freq: v.base * jit(), freqEnd: v.base * 0.26,
+          mod: v.growl, modEnd: v.growl * 0.45, vol: 0.65, attack: 0.0015,
+        });
+        this.ringMod(d, t0, 1.0 * jit(0.05), {
+          type: 'square', freq: v.base * 1.5 * jit(), freqEnd: v.base * 0.42,
+          mod: v.growl2, modEnd: v.growl2 * 0.55, vol: 0.42, attack: 0.0015, detune: 25,
+        });
+        this.tone(d, t0, 1.2, { type: 'sawtooth', freq: v.harsh, freqEnd: v.harsh * 0.3, vol: 0.4, attack: 0.003 });
+
+        // 2) grito agudo "quebrando" — em vez de um tom limpo, uma rajada
+        // de saltos de pitch aleatórios: imita a instabilidade real de uma
+        // voz forçada no limite, o que perturba muito mais que uma nota só.
+        for (let i = 0, tt = t0; i < 24 && tt < t0 + 0.85; i++) {
+          this.tone(d, tt, 0.045 + Math.random() * 0.03, { type: 'square', freq: v.top * (0.3 + Math.random() * 0.85), vol: 0.34, attack: 0.001 });
+          tt += 0.018 + Math.random() * 0.04;
         }
-        for (let i = 0; i < 18; i++) this.tone(d, t0 + i * 0.038, 0.05, { type: 'square', freq: v.top * (0.35 + Math.random() * 0.7), vol: 0.3, attack: 0.0015 });
-        this.noise(d, t0, 1.35, { type: 'bandpass', freq: 2900, q: 0.5, vol: 1, attack: 0.002, freqEnd: 420 });
-        this.tone(o, t0, 0.95, { type: 'sine', freq: 105, freqEnd: 26, vol: 1, attack: 0.0015 });
-        this.noise(o, t0, 0.3, { type: 'lowpass', freq: 170, vol: 1, attack: 0.0015 });
+
+        // 3) ruído em banda larga varrendo pra baixo (corpo/textura) + sub
+        // grave por fora da distorção (pra sobrar peso "limpo" sentido no
+        // peito em caixas melhores, além da versão distorcida do soco).
+        this.noise(d, t0, 1.3, { type: 'bandpass', freq: 3400, q: 0.4, vol: 1, attack: 0.0015, freqEnd: 380 });
+        this.tone(o, t0, 0.95, { type: 'sine', freq: 100, freqEnd: 23, vol: 1, attack: 0.001 });
+        this.noise(o, t0, 0.32, { type: 'lowpass', freq: 160, vol: 1, attack: 0.001 });
         this.duck(1.5);
         break;
       }
