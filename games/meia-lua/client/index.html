@@ -130,7 +130,7 @@
           <div class="row wrap">
             <button class="btn primary" id="btn-ready">Estou pronto</button>
             <button class="btn primary" id="btn-start">▶ Iniciar partida</button>
-            <button class="btn" id="btn-voice-lobby">🎙 Voz: off</button>
+            <button class="btn" id="btn-voice-lobby"><svg class="icn inline" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3M9 21h6"/></svg> <span id="voice-lobby-label">Voz: off</span></button>
             <button class="btn ghost" id="btn-leave-room">Sair da sala</button>
           </div>
           <p class="error" id="lobby-error"></p>
@@ -241,12 +241,21 @@
     <section class="screen" id="scr-game">
       <canvas id="game-canvas"></canvas>
       <canvas id="fx-canvas"></canvas>
+      <div id="show-overlay" hidden>
+        <div class="show-beam b1"></div>
+        <div class="show-beam b2"></div>
+        <div class="show-beam b3"></div>
+        <div class="show-beam b4"></div>
+        <div class="show-flash"></div>
+        <div class="show-text" id="show-overlay-text">O SHOW VAI COMEÇAR</div>
+      </div>
+      <div id="show-blackout" hidden></div>
       <div id="hud">
         <div class="hud-tl">
           <div class="bar-row"><span>HP</span><div class="bar hp"><i id="hud-hp"></i></div><em id="hud-hp-t"></em></div>
           <div class="bar-row"><span>ST</span><div class="bar st"><i id="hud-st"></i></div></div>
           <div class="bar-row"><span>MEDO</span><div class="bar fear"><i id="hud-fear"></i></div></div>
-          <div class="bar-row"><span>🔦</span><div class="bar bat"><i id="hud-bat"></i></div></div>
+          <div class="bar-row"><span class="icn-label"><svg class="icn" viewBox="0 0 24 24"><path d="M8 3h6l1.5 3-1.5 2v11a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 8 19V8L6.5 6 8 3z"/><path d="M18 9l3-1M18 12h3.5M18 15l3 1" opacity=".55"/></svg></span><div class="bar bat"><i id="hud-bat"></i></div></div>
           <div class="xp-row"><b id="hud-level">Nv 1</b><div class="bar xp"><i id="hud-xp"></i></div><em id="hud-money">$0</em></div>
         </div>
         <div class="hud-tc">
@@ -275,9 +284,9 @@
           <form id="game-chat-form" hidden><input maxlength="200" placeholder="Enter para enviar · Esc para fechar" autocomplete="off" /></form>
         </div>
         <div class="hud-buttons">
-          <button class="hbtn" id="hb-check" title="Checklist (J)">📋</button>
-          <button class="hbtn" id="hb-voice" title="Voz">🎙</button>
-          <button class="hbtn" id="hb-menu" title="Menu (ESC)">☰</button>
+          <button class="hbtn" id="hb-check" title="Checklist (J)"><svg class="icn" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3.5h6a1 1 0 0 1 1 1V6H8V4.5a1 1 0 0 1 1-1z"/><path d="M8.5 12l1.8 1.8L13.5 10.5M8.5 17h7"/></svg></button>
+          <button class="hbtn" id="hb-voice" title="Voz"><svg class="icn" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3M9 21h6"/></svg></button>
+          <button class="hbtn" id="hb-menu" title="Menu (ESC)"><svg class="icn" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         </div>
         <div class="status-center" id="status-center" hidden></div>
       </div>
@@ -287,13 +296,13 @@
         <div class="joy" id="joy"><div class="joy-knob" id="joy-knob"></div></div>
         <div class="tbuttons">
           <button class="tbtn big" data-t="interact">E</button>
-          <button class="tbtn" data-t="sprint">🏃</button>
-          <button class="tbtn" data-t="sneak">🤫</button>
-          <button class="tbtn" data-t="flash">🔦</button>
-          <button class="tbtn" data-t="cams">📷</button>
-          <button class="tbtn" data-t="inv">🎒</button>
-          <button class="tbtn" data-t="map">🗺</button>
-          <button class="tbtn" data-t="chat">💬</button>
+          <button class="tbtn" data-t="sprint" title="Correr"><svg class="icn" viewBox="0 0 24 24"><circle cx="14.5" cy="4.5" r="1.7" fill="currentColor" stroke="none"/><path d="M10 9l3-1.5 2.5 2.5 3 1M8 22l2.5-5 1.5-3-1.5-3M13 14l3 2 2.5 6M6 14l3-1.5"/></svg></button>
+          <button class="tbtn" data-t="sneak" title="Agachar"><svg class="icn" viewBox="0 0 24 24"><circle cx="12" cy="8" r="1.6" fill="currentColor" stroke="none"/><path d="M9 21l1-5-1-3 3-1.5 3 1.5-1 3 1 5M11 12l-3 1M13 12l3 1"/></svg></button>
+          <button class="tbtn" data-t="flash" title="Lanterna"><svg class="icn" viewBox="0 0 24 24"><path d="M8 3h6l1.5 3-1.5 2v11a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 8 19V8L6.5 6 8 3z"/><path d="M18 9l3-1M18 12h3.5M18 15l3 1" opacity=".55"/></svg></button>
+          <button class="tbtn" data-t="cams" title="Câmeras"><svg class="icn" viewBox="0 0 24 24"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.2"/></svg></button>
+          <button class="tbtn" data-t="inv" title="Mochila"><svg class="icn" viewBox="0 0 24 24"><path d="M8 8c-.8-2.2.2-4 2.2-4M16 8c.8-2.2-.2-4-2.2-4"/><path d="M5 9a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V9z"/><rect x="9.5" y="12.5" width="5" height="4" rx="1"/></svg></button>
+          <button class="tbtn" data-t="map" title="Mapa"><svg class="icn" viewBox="0 0 24 24"><path d="M9 4L4 6v14l5-2 6 2 5-2V4l-5 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg></button>
+          <button class="tbtn" data-t="chat" title="Chat"><svg class="icn" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-4 4v-4H4V5z"/><path d="M8 9h8M8 12h5"/></svg></button>
         </div>
       </div>
 

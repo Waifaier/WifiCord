@@ -305,7 +305,7 @@ class App {
   }
 
   renderVoiceButtons() {
-    $('#btn-voice-lobby').textContent = `🎙 Voz: ${this.voice?.active ? 'on' : 'off'}`;
+    $('#voice-lobby-label').textContent = `Voz: ${this.voice?.active ? 'on' : 'off'}`;
   }
 
   backToLobby() {
@@ -436,7 +436,14 @@ class App {
         document.body.classList.toggle('touch', isTouchDevice());
         if (this.game?.running) $('#touch').hidden = !isTouchDevice();
       }),
-      select('fx', 'Efeitos de tela (shader)', [['high', 'Alto'], ['low', 'Leve'], ['off', 'Desligado']], () => this.game?.resize()),
+      // Em celular os shaders ficam sempre desligados no código (ver
+      // construtor de Game em game.js — nem o contexto WebGL é criado),
+      // por causa de um bug real de tela preta num aparelho específico.
+      // Por isso a opção nem aparece aqui: mostrar um seletor que não
+      // faz nada só confundiria.
+      isTouchDevice()
+        ? el('p', { class: 'hint' }, 'Efeitos de tela (shader): desligados no celular (correção de tela preta).')
+        : select('fx', 'Efeitos de tela (shader)', [['high', 'Alto'], ['low', 'Leve'], ['off', 'Desligado']], () => this.game?.resize()),
       select('quality', 'Qualidade gráfica', [['auto', 'Automática'], ['low', 'Baixa (PCs modestos)']], () => { if (this.game?.S) { this.game.S.lowQuality = settings.quality === 'low'; this.game.resize(); } }),
       el('button', { class: 'btn tiny', type: 'button', text: 'Testar som', onclick: () => { audio.unlock(); audio.play('musicbox', { vol: 0.8 }); } }),
     );

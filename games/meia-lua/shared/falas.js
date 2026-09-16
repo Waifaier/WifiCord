@@ -83,6 +83,15 @@ export const FALAS = {
   telefoneTocando: 'O telefone do escritório tá tocando. Quem ligaria pra cá a essa hora?',
   dourado: 'Vi algo dourado brilhando lá no(a) {area}.',
 
+  // ---------- evento: O Show ----------
+  showComeca: '🎪 AS LUZES DO PALCO ACENDEM. Todos eles foram pra lá — e as portas travaram sozinhas.',
+  showFim: '🎪 A música parou. Quando a luz voltou, eles tinham sumido... e a energia foi embora com eles.',
+  rShow: '📻 {nome}: "As portas travaram perto do palco! Tem um show começando— socorro!"',
+  rShowFim: '📻 A energia caiu de vez depois do show. Alguém precisa resetar lá no gerador/painel.',
+
+  // ---------- evento: O Coro ----------
+  rCoro: ['📻 Alguém começou a cantar... e não fui eu.', '📻 Tem um coro cantando baixinho em algum lugar do prédio. Todos eles pararam de rondar.'],
+
   // ---------- cliente ----------
   meViu: ['{anim} me viu. CORRE!', 'Ele me viu... {anim} tá vindo!', 'NÃO. {anim} olhou direto pra mim!'],
   notando: ['Tem algo me olhando...', 'Fica parado... ele tá olhando pra cá.', 'Não se mexe. Não se mexe.'],

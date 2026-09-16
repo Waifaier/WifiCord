@@ -22,8 +22,6 @@ class AudioSystem {
     this.heartbeatUntil = 0;
     this.nextBeat = 0;
     this.nextCreak = 0;
-    this.nextStalkerNote = 0;
-    this.stalkerStep = 0;
   }
 
   unlock() {
@@ -187,6 +185,22 @@ class AudioSystem {
           this.noise(o, t + i * 0.16, 0.12, { type: 'bandpass', freq: 900, q: 4, vol: 0.12 });
         }
         break;
+      case 'choir': {
+        // evento "O Coro": vozes dissonantes cantando baixinho, bem longe
+        // de qualquer melodia — um acorde errado sustentado, sem batida.
+        const voices = [220, 233.08, 311.13, 415.3, 440 * Math.pow(2, 6 / 12)];
+        for (let i = 0; i < voices.length; i++) {
+          this.tone(o, t + i * 0.35, 3.2, {
+            type: 'sine', freq: voices[i], vol: 0.05 + Math.random() * 0.02,
+            attack: 0.9, detune: -20 + Math.random() * 40,
+          });
+          this.tone(o, t + i * 0.35 + 0.1, 3, {
+            type: 'triangle', freq: voices[i] / 2, vol: 0.03, attack: 1.1,
+          });
+        }
+        this.noise(o, t, 3.4, { type: 'bandpass', freq: 1800, q: 5, vol: 0.05, attack: 1.4 });
+        break;
+      }
       case 'music': case 'musicbox': {
         const scale = [0, 3, 5, 6, 7, 10, 12];
         let tt = t;
@@ -317,6 +331,29 @@ class AudioSystem {
         this.noise(o, t, 0.3, { freq: 5000, type: 'highpass', vol: 0.6 });
         break;
       case 'powerOn': this.tone(o, t, 1.2, { type: 'sawtooth', freq: 40, freqEnd: 120, vol: 0.3 }); break;
+      // Evento "O Show": susto de abertura (pancadão de órgão distorcido +
+      // ringMod, igual ao timbre usado nos jumpscares) seguido por uma
+      // valsinha de calíope desafinada que o cliente refaz em loop
+      // enquanto o show dura (ver onFx 'show' em game.js).
+      case 'showtimeSting':
+        this.ringMod(o, t, 1.3, { type: 'sawtooth', freq: 65, freqEnd: 48, mod: 38, modEnd: 30, vol: 0.55, attack: 0.005 });
+        this.tone(o, t, 1.3, { type: 'sawtooth', freq: 130, vol: 0.3, detune: -12 });
+        this.noise(o, t, 0.5, { type: 'highpass', freq: 3000, vol: 0.5, attack: 0.002 });
+        this.tone(o, t + 0.05, 1.1, { type: 'square', freq: 196, vol: 0.18, detune: 18 });
+        this.duck(1.2);
+        break;
+      case 'showtimeLoop': {
+        const scale = [523.25, 587.33, 622.25, 698.46, 783.99, 622.25, 587.33];
+        let tt = t;
+        for (let i = 0; i < scale.length; i++) {
+          const f = scale[i] * (Math.random() < 0.12 ? 1.03 : 1); // desafinada de propósito
+          this.tone(o, tt, 0.26, { type: 'triangle', freq: f, vol: 0.14, detune: -15 + Math.random() * 30 });
+          this.tone(o, tt, 0.22, { type: 'square', freq: f / 2, vol: 0.05 });
+          tt += 0.19;
+        }
+        this.tone(o, t, 0.15, { type: 'square', freq: 55, vol: 0.12 });
+        break;
+      }
       case 'static': this.noise(o, t, 0.4, { type: 'highpass', freq: 2500, vol: 0.4 }); break;
       case 'flare': this.noise(o, t, 1.4, { type: 'highpass', freq: 1500, vol: 0.6, attack: 0.05 }); this.tone(o, t, 0.2, { type: 'square', freq: 90, vol: 0.4 }); break;
       case 'tired': this.noise(o, t, 0.9, { type: 'bandpass', freq: 700, q: 3, vol: 0.4, attack: 0.2 }); break;
@@ -416,7 +453,7 @@ class AudioSystem {
   }
 
   /** Chamado a cada frame: batimentos cardíacos e rangidos ambientes */
-  update(fear, inChase, watched) {
+  update(fear, inChase) {
     if (!this.ready) return;
     const t = this.now;
     const intensity = Math.max(fear / 100, inChase ? 1 : 0);
@@ -432,33 +469,6 @@ class AudioSystem {
       if (Math.random() < 0.5) this.tone(o, t, 1.3, { type: 'sawtooth', freq: 300 + Math.random() * 200, freqEnd: 200, vol: 0.05 });
       else this.noise(o, t, 1.5, { type: 'bandpass', freq: 200 + Math.random() * 400, q: 8, vol: 0.3, attack: 0.4 });
     }
-    this.updateStalkerTheme(t, watched);
-  }
-
-  // "Musiquinha do perseguidor": quando um animatrônico te vê, toca um
-  // motivo simples e lento (tipo caixinha de música) — e quanto mais perto
-  // ele chega (ou mais forte é o "olhar"), mais rápido o motivo toca. Some
-  // sozinho quando ninguém mais te vê (para de agendar notas novas).
-  updateStalkerTheme(t, watched) {
-    const tension = watched?.tension || 0;
-    const dist = watched?.dist;
-    if (tension < 0.03) return; // ninguém te vendo agora — não agenda nada
-    // combina a "tensão" (já suavizada, baseada no olhar) com a distância
-    // real até quem está vendo, quando disponível — o que chegar mais
-    // perto de 1 (mais urgente) domina.
-    const byDist = dist != null ? Math.max(0, 1 - Math.min(1, dist / 14)) : 0;
-    const drive = Math.max(tension, byDist);
-    if (t < this.nextStalkerNote) return;
-    const interval = 0.85 - Math.pow(drive, 1.3) * 0.7; // 0.85s (longe/fraco) até 0.15s (bem perto)
-    this.nextStalkerNote = t + interval;
-    const SCALE = [293.66, 349.23, 311.13, 261.63, 233.08, 277.18]; // motivo curto, menor/fora do eixo — soa "errado" de propósito
-    const f = SCALE[this.stalkerStep % SCALE.length];
-    this.stalkerStep++;
-    const vol = 0.1 + drive * 0.22;
-    const o = this.out(vol, 0, this.musicBus);
-    this.tone(o, t, Math.max(0.35, interval * 1.6), { type: 'triangle', freq: f, vol: 0.5, attack: 0.015, detune: -8 + Math.random() * 16 });
-    this.tone(o, t, 0.3, { type: 'sine', freq: f * 2, vol: 0.12, attack: 0.005 });
-    if (drive > 0.6) this.tone(o, t, 0.5, { type: 'sine', freq: f / 2, vol: 0.18, attack: 0.02 }); // sub grave reforça quando tá quase em cima
   }
 
   stopAll() {

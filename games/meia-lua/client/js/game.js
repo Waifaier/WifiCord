@@ -36,7 +36,15 @@ export class Game {
     this.renderer = new Renderer();
     this.canvas = $('#game-canvas');
     this.ctx = this.canvas.getContext('2d');
-    this.fx = new PostFX($('#fx-canvas'));
+    // Em celular, os shaders WebGL (CRT, aberração cromática etc.) deram
+    // tela preta num aparelho de verdade mesmo com a opção desligada nas
+    // configurações — o contexto WebGL ficava vivo (criado aqui sempre,
+    // sem checar nada) mesmo sem uso, e algo nesse driver/GPU específico
+    // não lidava bem com isso. Pra resolver de vez, em vez de só confiar
+    // na configuração, nem criamos o contexto WebGL em celular: this.fx
+    // fica null e as checagens abaixo (useFx/renderJumpscare) tratam isso
+    // como "sem shader", igual a settings.fx === 'off'.
+    this.fx = isTouchDevice() ? null : new PostFX($('#fx-canvas'));
     this.running = false;
     this.basicsDone = new Set();
     this.lastRenderErrorAt = 0;
@@ -87,6 +95,9 @@ export class Game {
     this.js = null;
     this.hurt = 0;
     this.glitch = 0;
+    this.showActive = false;
+    this.showLoopTimer = null;
+    this.clockGlitchUntil = 0;
     this.walkAcc = 0;
     this.stepAcc = new Map();
     this.heardCd = new Map();
@@ -126,6 +137,14 @@ export class Game {
     document.body.classList.remove('in-game');
     audio.stopAll();
     if (this.camOpen) this.closeCams(false);
+    this.showActive = false;
+    clearInterval(this.showLoopTimer);
+    this.showLoopTimer = null;
+    clearTimeout(this._showSafety);
+    $('#show-overlay')?.classList.remove('active');
+    if ($('#show-overlay')) $('#show-overlay').hidden = true;
+    $('#show-blackout')?.classList.remove('active');
+    if ($('#show-blackout')) $('#show-blackout').hidden = true;
   }
 
   showIntro() {
@@ -342,7 +361,59 @@ export class Game {
         navigator.vibrate?.([40, 80, 40]);
         break;
       case 'actionCancel': break;
+      case 'show':
+        if (f.phase === 'start') this.startShowEvent(f.dur);
+        else if (f.phase === 'end') this.endShowEvent();
+        break;
+      case 'choir':
+        audio.play('choir', { vol: 0.7 });
+        this.glitch = Math.max(this.glitch, 0.35);
+        navigator.vibrate?.(60);
+        break;
+      case 'clockGlitch':
+        this.clockGlitchUntil = nowS + (f.secs || 4);
+        audio.play('static', { vol: 0.3 });
+        this.glitch = Math.max(this.glitch, 0.3);
+        break;
     }
+  }
+
+  // Evento "O Show": susto muito do nada — animatrônicos somem do mapa e
+  // reaparecem no palco, portas ao redor travam, luzes coloridas + música.
+  // Ver Match.runShowEvent/endShowEvent no servidor.
+  startShowEvent(dur) {
+    this.showActive = true;
+    const ov = $('#show-overlay');
+    ov.hidden = false;
+    requestAnimationFrame(() => ov.classList.add('active'));
+    $('#show-overlay-text').textContent = 'O SHOW VAI COMEÇAR...';
+    setTimeout(() => { if (this.showActive) $('#show-overlay-text').textContent = ''; }, 2200);
+    audio.play('showtimeSting', { vol: 1 });
+    navigator.vibrate?.([200, 100, 200, 100, 400]);
+    this.glitch = 1;
+    if (settings.shake) this.shakeUntil = performance.now() + 600;
+    clearInterval(this.showLoopTimer);
+    this.showLoopTimer = setInterval(() => { if (this.showActive) audio.play('showtimeLoop', { vol: 0.65 }); }, 1400);
+    clearTimeout(this._showSafety);
+    this._showSafety = setTimeout(() => { if (this.showActive) this.endShowEvent(); }, ((dur || 18) + 3) * 1000);
+  }
+
+  endShowEvent() {
+    this.showActive = false;
+    clearInterval(this.showLoopTimer);
+    this.showLoopTimer = null;
+    clearTimeout(this._showSafety);
+    const ov = $('#show-overlay');
+    ov.classList.remove('active');
+    ov.hidden = true;
+    const bo = $('#show-blackout');
+    bo.hidden = false;
+    bo.classList.add('active');
+    this.glitch = 1;
+    setTimeout(() => {
+      bo.classList.remove('active');
+      setTimeout(() => { bo.hidden = true; }, 950);
+    }, 950);
   }
 
   jumpscare(type, fatal) {
@@ -694,7 +765,7 @@ export class Game {
           c.fillStyle = 'rgba(0,0,0,.72)'; c.fillRect(0, 0, this.w, this.h);
           for (let i = 0; i < 9; i++) { c.fillStyle = 'rgba(0,0,0,.92)'; c.fillRect(0, (i * this.h) / 9, this.w, this.h / 15); }
         }
-        if (!settings.fx || settings.fx === 'off' || !this.fx.ok) {
+        if (!settings.fx || settings.fx === 'off' || !this.fx || !this.fx.ok) {
           const fear = this.me.fe || 0;
           if (fear > 30 || this.me.hp < this.me.mhp * 0.35) {
             const g = c.createRadialGradient(this.w / 2, this.h / 2, Math.min(this.w, this.h) * 0.25, this.w / 2, this.h / 2, Math.max(this.w, this.h) * 0.7);
@@ -723,8 +794,8 @@ export class Game {
     }
     if (settings.showFps) { c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); c.fillStyle = '#7f7'; c.font = '12px monospace'; c.fillText(`${Math.round(this.fps)} fps`, 8, this.h - 8); }
 
-    // pós-processamento
-    const useFx = settings.fx !== 'off' && this.fx.ok;
+    // pós-processamento (this.fx é null em celular — ver construtor)
+    const useFx = settings.fx !== 'off' && !!this.fx && this.fx.ok;
     const scr = $('#scr-game');
     scr.classList.toggle('fx-on', useFx);
     scr.classList.toggle('cam-open', this.camOpen && !this.js);
@@ -853,9 +924,9 @@ export class Game {
     });
   }
 
-  clockText() {
+  clockText(offsetMin = 0) {
     if (!this.last) return '12:00 AM';
-    const mins = Math.min(360, (this.last.t / 1000 / this.last.d) * 360);
+    const mins = Math.max(0, Math.min(360, (this.last.t / 1000 / this.last.d) * 360) + offsetMin);
     const h = Math.floor(mins / 60);
     const m = Math.floor((mins % 60) / 10) * 10;
     return `${h === 0 ? 12 : h}:${String(m).padStart(2, '0')} AM`;
@@ -877,10 +948,19 @@ export class Game {
       $('#hud-xp').style.width = pct(pr.xp, pr.xpToNext);
       $('#hud-money').textContent = `$${pr.money}`;
     }
-    // relógio com glitch quando o medo está alto
-    let clock = this.clockText();
-    if ((me.fe || 0) > 80 && Math.random() < 0.15) clock = clock.replace(/\d/g, () => '▒░█'[Math.floor(Math.random() * 3)]);
+    // relógio com glitch quando o medo está alto (ou durante o evento "relógio trava")
+    const nowSClock = performance.now() / 1000;
+    const clockGlitching = nowSClock < this.clockGlitchUntil;
+    let clock;
+    if (clockGlitching) {
+      clock = Math.random() < 0.55 ? this.clockText(-(10 + Math.floor(Math.random() * 3) * 10)) : this.clockText();
+      if (Math.random() < 0.45) clock = clock.replace(/\d/g, () => '▒░█'[Math.floor(Math.random() * 3)]);
+    } else {
+      clock = this.clockText();
+      if ((me.fe || 0) > 80 && Math.random() < 0.15) clock = clock.replace(/\d/g, () => '▒░█'[Math.floor(Math.random() * 3)]);
+    }
     $('#hud-clock').textContent = clock;
+    $('#hud-clock').classList.toggle('glitching', clockGlitching);
     $('#hud-night').textContent = `${this.nightTitle.toUpperCase()} · ${this.diffName.toUpperCase()}`;
     $('#hud-power').style.width = `${m.pw}%`;
     $('#hud-power').parentElement.classList.toggle('low', m.pw < 25);

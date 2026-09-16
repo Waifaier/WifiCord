@@ -1,11 +1,19 @@
 // Parâmetros de cada animatrônico original.
 // speed/chase em tiles por segundo; sight/hearing em tiles; fov em graus.
+// BALANCEAMENTO: antes só a Marola cansava numa perseguição longa
+// (chaseLimit/tiredTime) — todo o resto perseguia sem parar, o que somado
+// à stamina curta do jogador tornava fugir quase impossível. Agora todos
+// os 5 animatrônicos de verdade têm um "fôlego": depois de perseguir sem
+// parar por `chaseLimit` segundos, ficam com metade da velocidade e caem
+// pra SEARCH por `tiredTime` segundos (ver updateChase em Animatronic.js).
+// O tempo de fôlego varia com o "personagem" de cada um — quem já é lento
+// aguenta perseguir mais tempo, quem é rápido cansa antes.
 export const ANIM_TYPES = {
   tonho: {
     speed: 1.95, chase: 3.6, sight: 8, fov: 115, hearing: 10, damage: 36,
     doorTime: 1.4, home: { x: 26.5, y: 16.5 },
     patrol: ['palco', 'salao', 'corredor_oeste', 'corredor_norte', 'corredor_leste', 'escritorio', 'seguranca'],
-    idle: [4, 9], shyOnCamera: true, rolls: true,
+    idle: [4, 9], shyOnCamera: true, rolls: true, chaseLimit: 7, tiredTime: 4.5,
   },
   marola: {
     speed: 1.45, chase: 4.6, sight: 9, fov: 95, hearing: 8, damage: 30,
@@ -18,11 +26,12 @@ export const ANIM_TYPES = {
   lume: {
     // É a mais rápida de todas (speed/chase) e é completamente surda
     // (hearing: 0) — passos, gritos, correr, nada disso a alerta. Só
-    // enxerga mesmo, e enxerga muito bem perto de luz (lightSeeker).
+    // enxerga mesmo, e enxerga muito bem perto de luz (lightSeeker). Por
+    // ser a mais rápida de todas, é quem tem o fôlego mais curto.
     speed: 2.25, chase: 3.85, sight: 5.5, fov: 140, hearing: 0, damage: 26,
     doorTime: 1.0, home: { x: 60.5, y: 24.5 },
     patrol: ['cozinha', 'salao', 'banheiros', 'corredor_leste', 'corredor_norte', 'corredor_oeste', 'deposito', 'palco'],
-    idle: [3, 7], lightSeeker: true, lightSight: 14,
+    idle: [3, 7], lightSeeker: true, lightSight: 14, chaseLimit: 5.5, tiredTime: 5,
   },
   gregorio: {
     speed: 1.8, chase: 3.3, sight: 7, fov: 105, hearing: 16, damage: 50,
@@ -32,12 +41,13 @@ export const ANIM_TYPES = {
     blackoutStalker: true, // evento: quando a energia acaba, ele para de
     // rondar normal e vem caçando por audição (ver Animatronic.startBlackoutHunt) —
     // só dá pra ver os olhos brilhando dele no escuro até a luz voltar.
+    chaseLimit: 8, tiredTime: 4,
   },
   maestro: {
     speed: 1.35, chase: 2.9, sight: 12, fov: 360, hearing: 18, damage: 75,
     doorTime: 0.8, home: { x: 31.5, y: 14.5 },
     patrol: ['palco', 'salao', 'corredor_norte', 'corredor_leste', 'corredor_oeste', 'cozinha', 'banheiros', 'porao', 'sala_secreta', 'deposito', 'escritorio', 'seguranca'],
-    idle: [2, 5], conductor: true, blinks: true, dormant: true,
+    idle: [2, 5], conductor: true, blinks: true, dormant: true, chaseLimit: 9, tiredTime: 3.5,
   },
   pipoca: {
     speed: 0, chase: 0, sight: 6, fov: 360, hearing: 0, damage: 0,

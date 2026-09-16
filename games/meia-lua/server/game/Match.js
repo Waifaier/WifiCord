@@ -57,6 +57,13 @@ export class Match {
     this.nextEventAt = rnd(...this.cfg.eventInterval) * 0.6 * this.diff.events;
     this.lastEventType = null;
     this.eventLog = [];
+    // Evento "O Show" (ver runShowEvent/endShowEvent) — susto raro: quando
+    // alguém tá perto do palco, todos os animatrônicos se teleportam pra
+    // lá e as portas ao redor selam até a música parar.
+    this.showActive = false;
+    this.showEndAt = 0;
+    this.lastShowAt = -999;
+    this.showDoorPrev = null;
 
     // Portas
     this.doors = new Map();
@@ -218,7 +225,12 @@ export class Match {
     p.x = pos.x; p.y = pos.y;
     p.dir = Math.atan2(dy, dx);
     p.moved = true;
-    if (sprint) { p.sprinting = true; p.stamina = Math.max(0, p.stamina - 28 * dt); }
+    // Balanceamento: correr gastava 28/s (só ~3.5s de corrida com 100 de
+    // stamina base) contra animatrônicos que perseguiam praticamente sem
+    // limite — reduzido pra dar um fôlego a mais na fuga (ver também a
+    // regeneração mais rápida logo abaixo e o "cansaço" novo dos
+    // animatrônicos em updateChase, no Animatronic.js).
+    if (sprint) { p.sprinting = true; p.stamina = Math.max(0, p.stamina - 21 * dt); }
     if (sneak) p.sneaking = true;
     p.noiseCd -= dt;
     if (p.noiseCd <= 0) {
@@ -273,7 +285,9 @@ export class Match {
         if (p.respawnAt && this.time >= p.respawnAt) this.respawn(p);
         continue;
       }
-      if (!p.sprinting) p.stamina = Math.min(p.derived.maxStamina, p.stamina + (p.moved ? 7 : 13) * dt);
+      // Regeneração também mais rápida (era 7/13) — o objetivo é que dê pra
+      // recuperar fôlego de verdade nos respiros entre perseguições.
+      if (!p.sprinting) p.stamina = Math.min(p.derived.maxStamina, p.stamina + (p.moved ? 9 : 17) * dt);
 
       // eventos da Marola (acampar) e do Tonho (câmeras sem vigilância)
       if (p.moved) p.stillSince = this.time;
@@ -383,6 +397,7 @@ export class Match {
       const [a, b] = this.cfg.eventInterval;
       this.nextEventAt = this.time + rnd(a, b) * this.diff.events;
     }
+    if (this.showActive && this.time >= this.showEndAt) this.endShowEvent();
     if (this.phoneUntil && this.time > this.phoneUntil) this.phoneUntil = 0;
     for (const dc of this.decoys) {
       if (this.time >= dc.next) {
@@ -1169,6 +1184,16 @@ export class Match {
       { t: 'coin', w: 3 },
       { t: 'surge', w: this.power > 20 ? 5 : 0 },
       { t: 'thunder', w: 10 },
+      // "O Show": só entra no sorteio quando dá pra acontecer de verdade —
+      // alguém no palco/salão pra prender, nenhum show já rolando, e um
+      // intervalo mínimo desde o último (pra não virar rotina, tem que
+      // continuar sendo um susto raro e "do nada" como foi pedido).
+      { t: 'show', w: (() => {
+        const near = players.filter((p) => ['palco', 'salao'].includes(areaAt(p.x, p.y)?.id));
+        return !this.showActive && this.time - this.lastShowAt > 150 ? (near.length ? 24 : 0) : 0;
+      })() },
+      { t: 'coro', w: 9 },
+      { t: 'relogioTrava', w: 6 },
     ].filter((e) => e.w > 0 && e.t !== this.lastEventType);
     const total = events.reduce((s, e) => s + e.w, 0);
     let r = Math.random() * total, ev = events[0];
@@ -1266,7 +1291,123 @@ export class Match {
         this.broadcast('fx', { type: 'surge' });
         break;
       }
+      case 'show': {
+        const near = players.filter((p) => ['palco', 'salao'].includes(areaAt(p.x, p.y)?.id));
+        this.runShowEvent(near);
+        break;
+      }
+      case 'coro': {
+        // "Coro": por um instante, todo mundo que tá caçando de verdade
+        // para e vira a cabeça na direção do jogador vivo mais perto dele
+        // — sincronizado, sem ninguém realmente vir atrás de ninguém ainda
+        // (usa investigate(), não CHASE). É um susto de tensão coletiva,
+        // não uma perseguição de verdade.
+        const active = this.anims.filter((a) => !a.def.trap && !['DISABLED', 'DORMANT', 'CHASE', 'STUNNED'].includes(a.state));
+        if (!active.length) break;
+        for (const a of active) {
+          const near = a.pickNearestPlayer();
+          if (near) a.investigate(near.x, near.y);
+        }
+        this.emitSfx('laugh', target.x, target.y, 60);
+        for (const pl of players) pl.fear = Math.min(100, pl.fear + 9 * pl.derived.fearMult);
+        this.broadcast('fx', { type: 'choir' });
+        this.system(fala('rCoro'));
+        break;
+      }
+      case 'relogioTrava': {
+        // Puramente atmosférico (o relógio de verdade não volta no tempo,
+        // só a exibição do cliente pisca voltando por alguns segundos) —
+        // zero risco, só pra deixar todo mundo com um pé atrás.
+        const secs = rnd(3, 5);
+        this.broadcast('fx', { type: 'clockGlitch', secs: Math.round(secs * 10) / 10 });
+        this.emitSfx('static', target.x, target.y, 24);
+        break;
+      }
     }
+  }
+
+  // ========================================================================
+  // Evento "O Show"
+  // ========================================================================
+  // Portas ao redor do palco+salão selam, todos os animatrônicos vivos se
+  // teleportam pro palco e ficam "em cartaz" (IA pausada — ninguém ataca
+  // durante o show, é um susto, não uma armadilha de morte) com luzes e
+  // música por alguns segundos. No fim: tela preta, some tudo, energia
+  // cai e as portas destrancam — alguém precisa ir resetar no
+  // gerador/painel mais perto (ver 'campanel'/'generator' em interactObject).
+  runShowEvent(trappedPlayers) {
+    if (this.showActive || !trappedPlayers.length) return;
+    this.showActive = true;
+    this.lastShowAt = this.time;
+    const dur = rnd(15, 19);
+    this.showEndAt = this.time + dur;
+
+    // Sela as únicas passagens entre palco+salão e o resto do mapa —
+    // quem tiver ali dentro (área contígua, já que o vão pro palco não
+    // tem porta) fica preso até acabar.
+    const sealAreas = new Set(['palco', 'salao']);
+    const showDoors = DOORS.filter((d) => (d.areas || []).some((a) => sealAreas.has(a)));
+    this.showDoorPrev = new Map();
+    for (const d of showDoors) {
+      const st = this.doors.get(d.id);
+      this.showDoorPrev.set(d.id, { open: st.open, locked: st.locked });
+      st.open = false;
+      st.locked = 'sealed';
+      this.broadcast('door', { id: d.id, open: false, locked: true });
+      this.emitSfx('slam', d.x + 0.5, d.y + 0.5, 30);
+    }
+
+    // Todo mundo vivo (menos a armadilha do macaco e quem ainda nem
+    // "ligou" essa noite — dormente/DISABLED fica de fora) sobe ao palco.
+    for (const a of this.anims) {
+      if (a.def.trap || a.state === 'DISABLED' || a.state === 'DORMANT') continue;
+      const spot = randomFloorInArea('palco');
+      a.x = spot.x; a.y = spot.y;
+      a.path = null; a.goal = null; a.targetId = null; a.lastSeen = null;
+      a.dir = Math.random() * Math.PI * 2;
+      a.performing = true;
+    }
+
+    for (const a of AREAS) this.flicker.set(a.id, this.time + dur + 1);
+    this.broadcast('fx', { type: 'show', phase: 'start', dur: Math.round(dur * 10) / 10 });
+    this.emitSfx('showtimeSting', 31.5, 16.5, 90);
+    for (const p of trappedPlayers) p.fear = Math.min(100, p.fear + 22 * p.derived.fearMult);
+    this.system(fala('showComeca'));
+    this.system(fala('rShow', { nome: pick(trappedPlayers).name }));
+  }
+
+  endShowEvent() {
+    this.showActive = false;
+
+    if (this.showDoorPrev) {
+      for (const [id, prev] of this.showDoorPrev) {
+        const st = this.doors.get(id);
+        st.open = prev.open;
+        st.locked = prev.locked;
+        this.broadcast('door', { id, open: st.open, locked: !!st.locked });
+      }
+      this.showDoorPrev = null;
+    }
+
+    // Somem: teleportam de volta pra perto de casa, fora de vista, e a IA
+    // volta ao normal só depois de um tempinho em SEARCH (ninguém reaparece
+    // bem na cara de quem tava preso lá dentro).
+    for (const a of this.anims) {
+      if (a.def.trap || a.state === 'DISABLED' || !a.performing) continue;
+      a.performing = false;
+      a.x = a.def.home.x; a.y = a.def.home.y;
+      a.path = null; a.goal = null;
+      a.setState('SEARCH', rnd(4, 7));
+    }
+
+    // A luz vai embora com eles — precisa achar o gerador/painel pra
+    // voltar (mesmo fluxo de sempre: interactObject 'campanel'/'generator').
+    this.lightsOn = false;
+    this.power = Math.max(0, this.power - rnd(28, 42));
+    this.broadcast('fx', { type: 'show', phase: 'end' });
+    this.broadcast('fx', { type: 'lights', on: false });
+    this.system(fala('showFim'));
+    this.system(fala('rShowFim'));
   }
 
   triggerFinal() {

@@ -40,6 +40,10 @@ export class Animatronic {
     this.stepAcc = 0;
     this.blackoutHunt = false;
     this.blackoutTrackCd = 0;
+    // Evento "O Show" (ver Match.runShowEvent) — enquanto true, a IA
+    // normal fica pausada e ele só balança no palco, sem perceber nem
+    // atacar ninguém (ver o early-return em update()).
+    this.performing = false;
     // "Ligando": ficam desligados no palco até a hora combinada (ver
     // Match.js, que escalona cada um deles pra uma hora diferente da
     // noite em vez de todo mundo começar a andar quase junto). Se por
@@ -213,6 +217,7 @@ export class Animatronic {
   update(dt) {
     const m = this.match;
     if (this.state === 'DISABLED' || this.state === 'DORMANT') { this.moving = false; return; }
+    if (this.performing) { this.moving = false; this.dir += dt * 0.4; return; }
     if (this.def.trap) { this.updateTrap(dt); return; }
     // O apagão do Gregório pula a espera de "ligar": se a energia acabar
     // antes da hora dele, o susto vale mais que a escala — ele já entra

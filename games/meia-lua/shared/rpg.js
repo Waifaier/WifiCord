@@ -55,7 +55,11 @@ export function derivedStats(attrs, equipment) {
     maxHp: 100 + 12 * (attrs.resistencia - 1),
     damageMult: (1 - (armorItem?.armor || 0)) * (1 - 0.035 * (attrs.resistencia - 1)),
     speed: 3.1 * (1 + 0.045 * (attrs.velocidade - 1)),
-    maxStamina: 100 + 8 * (attrs.velocidade - 1),
+    // Base subiu de 100 pra 115 — parte do ajuste pra fugir dos
+    // animatrônicos não ficar tão punitivo pra quem ainda não investiu
+    // pontos em velocidade (ver também o gasto/regeneração de stamina em
+    // Match.js e o "cansaço" ao perseguir em Animatronic.js).
+    maxStamina: 115 + 8 * (attrs.velocidade - 1),
     fearMult: Math.max(0.35, 1 - 0.07 * (attrs.coragem - 1)),
     stunMult: Math.max(0.4, 1 - 0.06 * (attrs.coragem - 1)),
     searchTime: Math.max(0.7, 2.6 - 0.2 * (attrs.investigacao - 1)),
