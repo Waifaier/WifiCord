@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-const { restoreFromRemote, startAutoBackup } = require('./database/remoteBackup');
+const { restoreFromRemote, startAutoBackup, restoreExtraFile, registerExtraFile } = require('./database/remoteBackup');
 
 // Tudo que toca o banco (rotas, sockets, sessão, bootstrap do admin) só
 // pode ser exigido (require) DEPOIS que um eventual snapshot do Turso for
@@ -169,11 +169,27 @@ async function bootstrap() {
   // WifiCord continua CommonJS igual sempre foi), então é carregado com
   // import() dinâmico em vez de require(); ver games/meia-lua/server/
   // integration.js pros detalhes de como ele se encaixa no app/io daqui.
-  // Banco totalmente separado do chat.db, mas na mesma pasta (Persistent
-  // Disk do Render já cobre os dois automaticamente).
+  // Banco totalmente separado do chat.db, mas na mesma pasta. IMPORTANTE:
+  // o Render não tem Persistent Disk de verdade aqui — quem faz o chat.db
+  // sobreviver a redeploy/restart é o backup remoto pro Turso (ver
+  // server/database/remoteBackup.js). Esse backup só cobria o chat.db até
+  // agora, então o meia-lua.sqlite nascia zerado a cada reinício do
+  // processo — era exatamente o "progresso do jogo sempre volta pro
+  // level 1" relatado. As duas linhas abaixo (restore antes de montar,
+  // registro do backup depois) estendem o mesmo mecanismo pro banco do
+  // jogo, sem mexer no que já funciona pro chat.
   const meiaLuaDbPath = path.join(path.dirname(SQLITE_PATH), 'meia-lua.sqlite');
+  await restoreExtraFile(meiaLuaDbPath, 'meia-lua');
   const { mountMeiaLua } = await import('../games/meia-lua/server/integration.js');
   const meiaLua = await mountMeiaLua({ app, io, dbPath: meiaLuaDbPath });
+  registerExtraFile(meiaLuaDbPath, 'meia-lua', () => {
+    // Descarrega o WAL do SQLite do jogo pro arquivo principal antes do
+    // backup ler os bytes — mesma ideia do checkpoint do chat.db logo
+    // abaixo em backupToRemote(), só que aqui a conexão é a do jogo
+    // (ESM, aberta dentro de mountMeiaLua), por isso o callback em vez de
+    // um require direto.
+    meiaLua.db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+  });
   // A ponte de login único (/api/meia-lua/session, usa a sessão do
   // WifiCord) precisa ser montada ANTES do router do próprio jogo — os
   // dois ficam no mesmo prefixo /api/meia-lua, e o router do jogo termina

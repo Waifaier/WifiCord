@@ -25,17 +25,22 @@ const gameRoot = path.resolve(__dirname, '..'); // .../games/meia-lua
  * @param {import('express').Express} opts.app - app Express do WifiCord
  * @param {import('socket.io').Server} opts.io - servidor Socket.IO do WifiCord (raiz)
  * @param {string} opts.dbPath - caminho absoluto do meia-lua.sqlite
- * @returns {Promise<{ rooms: any, config: any, accounts: any }>}
+ * @returns {Promise<{ rooms: any, config: any, accounts: any, db: any }>}
  *   `accounts` é o módulo database/accounts.js já carregado — o WifiCord
  *   passa ele pra server/routes/meiaLua.js (a ponte de sessão), pra não
  *   precisar dar outro import() e arriscar carregar o db.js antes do
  *   DB_PATH estar setado.
+ *   `db` (a conexão SQLite aberta, de database/db.js) é devolvida pro
+ *   WifiCord poder rodar um `PRAGMA wal_checkpoint` antes de mandar o
+ *   arquivo .sqlite pro backup remoto (ver server/database/remoteBackup.js
+ *   e o registerExtraFile em server.js) — sem isso o snapshot enviado
+ *   pode ficar sem as escritas mais recentes, que só existem no -wal.
  */
 export async function mountMeiaLua({ app, io, dbPath }) {
   if (dbPath) process.env.DB_PATH = dbPath;
 
   const { config } = await import('./config.js');
-  await import('./database/db.js'); // cria as tabelas + roda a migração aditiva (wificord_user_id)
+  const { db } = await import('./database/db.js'); // cria as tabelas + roda a migração aditiva (wificord_user_id)
   const accounts = await import('./database/accounts.js');
   const { RoomManager } = await import('./game/RoomManager.js');
   const { registerSockets } = await import('./sockets/index.js');
@@ -81,5 +86,5 @@ export async function mountMeiaLua({ app, io, dbPath }) {
 
   console.log(`[meia-lua] montado em /jogos/meia-lua · API em /api/meia-lua · socket.io namespace /meia-lua · banco: ${dbPath}`);
 
-  return { rooms, config, accounts, apiRouter: apiRouterInstance };
+  return { rooms, config, accounts, apiRouter: apiRouterInstance, db };
 }

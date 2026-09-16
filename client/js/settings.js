@@ -54,8 +54,12 @@
     if (!video || !navigator.mediaDevices?.getUserMedia) return;
     stopPreview();
 
+    // "ideal" em vez de "exact" — mesmo motivo do makeMediaConstraints em
+    // client/js/call.js: um deviceId salvo de outro momento/aparelho que
+    // não existe mais faz o getUserMedia inteiro falhar com "exact", em
+    // vez de simplesmente cair pra câmera padrão com "ideal".
     const constraints = state.videoDeviceId
-      ? { video: { deviceId: { exact: state.videoDeviceId }, width: { ideal: 640 }, height: { ideal: 360 } }, audio: false }
+      ? { video: { deviceId: { ideal: state.videoDeviceId }, width: { ideal: 640 }, height: { ideal: 360 } }, audio: false }
       : { video: true, audio: false };
 
     try {
@@ -106,7 +110,7 @@
       }
 
       const audio = state.audioDeviceId
-        ? { deviceId: { exact: state.audioDeviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: false, channelCount: 1 }
+        ? { deviceId: { ideal: state.audioDeviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: false, channelCount: 1 }
         : { echoCancellation: true, noiseSuppression: true, autoGainControl: false, channelCount: 1 };
       stream = await navigator.mediaDevices.getUserMedia({ audio, video: false });
       const track = stream.getAudioTracks()[0];

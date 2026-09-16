@@ -760,8 +760,19 @@
 
   function makeMediaConstraints(video) {
     const settings = window.Settings?.getMediaSettings?.() || {};
+    // "ideal" em vez de "exact": o deviceId salvo (localStorage, por
+    // aparelho) pode ficar velho — troca de celular, WebView/navegador
+    // atualizado, permissão de câmera/microfone concedida de novo depois
+    // de ter sido negada antes, tudo isso pode mudar os IDs que o
+    // navegador enumera. Com "exact", se esse ID salvo não bater com
+    // NENHUM dispositivo atual, o getUserMedia inteiro falha com
+    // OverconstrainedError — era exatamente o "o dispositivo selecionado
+    // não aceita essa configuração" ao tentar ligar no celular. "ideal"
+    // pede esse dispositivo de preferência, mas deixa o navegador cair
+    // pro padrão sozinho se ele não existir mais, em vez de travar a
+    // ligação inteira por causa disso.
     const audio = settings.audioDeviceId
-      ? { deviceId: { exact: settings.audioDeviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      ? { deviceId: { ideal: settings.audioDeviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       : { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
     // Sem WFNA a câmera ficava sempre travada em "ideal" 720p/30fps mesmo
     // pra quem tinha WFNA ativo — só o compartilhamento de tela olhava pro
@@ -773,7 +784,7 @@
     const res = wfna ? { width: { ideal: 1920, max: 3840 }, height: { ideal: 1080, max: 2160 } } : { width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 } };
     const frameRate = wfna ? { ideal: 60, max: 120 } : { ideal: 30, max: 60 };
     const videoConstraint = video
-      ? Object.assign({}, res, { frameRate }, settings.videoDeviceId ? { deviceId: { exact: settings.videoDeviceId } } : {})
+      ? Object.assign({}, res, { frameRate }, settings.videoDeviceId ? { deviceId: { ideal: settings.videoDeviceId } } : {})
       : false;
     return { audio, video: videoConstraint };
   }
@@ -783,7 +794,19 @@
       throw new Error('O navegador não disponibilizou câmera/microfone. Use HTTPS ou localhost em um navegador compatível.');
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia(makeMediaConstraints(video));
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(makeMediaConstraints(video));
+      } catch (e) {
+        // Rede de segurança: "ideal" (ver makeMediaConstraints) já evita
+        // quase todo OverconstrainedError de deviceId velho, mas se mesmo
+        // assim algum navegador/aparelho recusar a configuração pedida,
+        // tenta de novo sem NENHUM dispositivo/resolução específica — usar
+        // qualquer câmera/microfone padrão é sempre melhor do que a
+        // ligação simplesmente não acontecer.
+        if (e.name !== 'OverconstrainedError') throw e;
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: video ? true : false });
+      }
       const audio = stream.getAudioTracks()[0];
       if (!audio) {
         stream.getTracks().forEach(t => t.stop());
