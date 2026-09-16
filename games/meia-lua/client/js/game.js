@@ -39,6 +39,8 @@ export class Game {
     this.fx = new PostFX($('#fx-canvas'));
     this.running = false;
     this.basicsDone = new Set();
+    this.lastRenderErrorAt = 0;
+    this.renderErrorStreak = 0;
     this.bindSocket();
     this.bindInput();
     this.bindUi();
@@ -644,51 +646,79 @@ export class Game {
       c.translate((Math.random() - 0.5) * m, (Math.random() - 0.5) * m);
     }
 
-    if (this.js && S.t - this.js.start < this.js.dur) {
-      this.renderer.drawJumpscare(c, this.w, this.h, this.js, S.t);
-      const e = S.t - this.js.start;
-      this.hurt = e < 0.2 ? 0.9 : 0.35;
-      this.glitch = e < 0.2 ? 0.8 : 0.25;
-    } else if (this.camOpen) {
-      this.js = null;
-      const cam = CAMERA_BY_ID[this.camId];
-      const ok = !!this.me.camOk;
-      this.renderer.drawCamera(c, this.w, this.h, cam, S, ok);
-      $('#cam-name').textContent = cam.name;
-      $('#cam-time').textContent = this.clockText();
-      $('#cam-status').textContent = ok ? '' : this.last?.cb ? 'CÂMERAS DANIFICADAS' : this.last?.pw <= 0 ? 'SEM ENERGIA' : 'SINAL PERDIDO';
-      audio.setLoop('static', ok ? 0.08 : 0.35);
-    } else {
-      this.js = null;
-      const v = { cx: view.x, cy: view.y, scale };
-      this.renderer.drawWorld(c, this.w, this.h, v, S);
-      this.renderer.drawLighting(c, this.w, this.h, v, S, { light: this.inv?.derived?.light || 3.5, alive: this.me.alive, battery: this.me.bat });
-      if (this.tension > 0.02) {
-        // barras de cinema fechando e borda avermelhada
-        const bar = this.h * 0.11 * Math.min(1, this.tension * 1.3);
-        c.fillStyle = '#000';
-        c.fillRect(0, 0, this.w, bar);
-        c.fillRect(0, this.h - bar, this.w, bar);
-        const pulse = 0.5 + 0.5 * Math.sin(S.t * (6 + this.tension * 10));
-        const g = c.createRadialGradient(this.w / 2, this.h / 2, Math.min(this.w, this.h) * (0.42 - this.tension * 0.18), this.w / 2, this.h / 2, Math.max(this.w, this.h) * 0.62);
-        g.addColorStop(0, 'rgba(0,0,0,0)');
-        g.addColorStop(1, `rgba(${90 + pulse * 60},0,4,${this.tension * (0.45 + pulse * 0.2)})`);
-        c.fillStyle = g;
-        c.fillRect(0, 0, this.w, this.h);
-      }
-      if (this.me.hid) {
-        c.fillStyle = 'rgba(0,0,0,.72)'; c.fillRect(0, 0, this.w, this.h);
-        for (let i = 0; i < 9; i++) { c.fillStyle = 'rgba(0,0,0,.92)'; c.fillRect(0, (i * this.h) / 9, this.w, this.h / 15); }
-      }
-      if (!settings.fx || settings.fx === 'off' || !this.fx.ok) {
-        const fear = this.me.fe || 0;
-        if (fear > 30 || this.me.hp < this.me.mhp * 0.35) {
-          const g = c.createRadialGradient(this.w / 2, this.h / 2, Math.min(this.w, this.h) * 0.25, this.w / 2, this.h / 2, Math.max(this.w, this.h) * 0.7);
+    // ---- Tudo daqui pra baixo desenha o mundo/câmeras/jumpscare no canvas.
+    // drawWorld() começa limpando pra preto (ctx.fillRect preto) e só DEPOIS
+    // desenha o cenário por cima — então qualquer exceção no meio desse
+    // bloco (um sprite faltando, um dado inesperado vindo do servidor etc.)
+    // deixava a tela travada nesse preto inicial PRA SEMPRE, silenciosamente,
+    // porque o requestAnimationFrame do próximo quadro já tinha sido
+    // reagendado lá em cima (de propósito, pra um erro não travar o loop
+    // inteiro) — só que sem isso aqui, cada novo quadro repetia o mesmo erro
+    // e nunca sobrava nada visível além do preto. Agora qualquer falha
+    // aparece num aviso na tela (com a mensagem do erro) em vez de só
+    // desaparecer, então dá pra saber exatamente o que quebrou.
+    try {
+      if (this.js && S.t - this.js.start < this.js.dur) {
+        this.renderer.drawJumpscare(c, this.w, this.h, this.js, S.t);
+        const e = S.t - this.js.start;
+        this.hurt = e < 0.2 ? 0.9 : 0.35;
+        this.glitch = e < 0.2 ? 0.8 : 0.25;
+      } else if (this.camOpen) {
+        this.js = null;
+        const cam = CAMERA_BY_ID[this.camId];
+        const ok = !!this.me.camOk;
+        this.renderer.drawCamera(c, this.w, this.h, cam, S, ok);
+        $('#cam-name').textContent = cam.name;
+        $('#cam-time').textContent = this.clockText();
+        $('#cam-status').textContent = ok ? '' : this.last?.cb ? 'CÂMERAS DANIFICADAS' : this.last?.pw <= 0 ? 'SEM ENERGIA' : 'SINAL PERDIDO';
+        audio.setLoop('static', ok ? 0.08 : 0.35);
+      } else {
+        this.js = null;
+        const v = { cx: view.x, cy: view.y, scale };
+        this.renderer.drawWorld(c, this.w, this.h, v, S);
+        this.renderer.drawLighting(c, this.w, this.h, v, S, { light: this.inv?.derived?.light || 3.5, alive: this.me.alive, battery: this.me.bat });
+        if (this.tension > 0.02) {
+          // barras de cinema fechando e borda avermelhada
+          const bar = this.h * 0.11 * Math.min(1, this.tension * 1.3);
+          c.fillStyle = '#000';
+          c.fillRect(0, 0, this.w, bar);
+          c.fillRect(0, this.h - bar, this.w, bar);
+          const pulse = 0.5 + 0.5 * Math.sin(S.t * (6 + this.tension * 10));
+          const g = c.createRadialGradient(this.w / 2, this.h / 2, Math.min(this.w, this.h) * (0.42 - this.tension * 0.18), this.w / 2, this.h / 2, Math.max(this.w, this.h) * 0.62);
           g.addColorStop(0, 'rgba(0,0,0,0)');
-          g.addColorStop(1, `rgba(60,0,10,${Math.min(0.6, (fear - 30) / 120 + (this.me.hp < this.me.mhp * 0.35 ? 0.3 : 0))})`);
+          g.addColorStop(1, `rgba(${90 + pulse * 60},0,4,${this.tension * (0.45 + pulse * 0.2)})`);
           c.fillStyle = g;
           c.fillRect(0, 0, this.w, this.h);
         }
+        if (this.me.hid) {
+          c.fillStyle = 'rgba(0,0,0,.72)'; c.fillRect(0, 0, this.w, this.h);
+          for (let i = 0; i < 9; i++) { c.fillStyle = 'rgba(0,0,0,.92)'; c.fillRect(0, (i * this.h) / 9, this.w, this.h / 15); }
+        }
+        if (!settings.fx || settings.fx === 'off' || !this.fx.ok) {
+          const fear = this.me.fe || 0;
+          if (fear > 30 || this.me.hp < this.me.mhp * 0.35) {
+            const g = c.createRadialGradient(this.w / 2, this.h / 2, Math.min(this.w, this.h) * 0.25, this.w / 2, this.h / 2, Math.max(this.w, this.h) * 0.7);
+            g.addColorStop(0, 'rgba(0,0,0,0)');
+            g.addColorStop(1, `rgba(60,0,10,${Math.min(0.6, (fear - 30) / 120 + (this.me.hp < this.me.mhp * 0.35 ? 0.3 : 0))})`);
+            c.fillStyle = g;
+            c.fillRect(0, 0, this.w, this.h);
+          }
+        }
+      }
+      this.renderErrorStreak = 0;
+    } catch (err) {
+      this.renderErrorStreak++;
+      // listra vermelha diagonal em vez de deixar preto puro — dá pra
+      // distinguir "travou desenhando" de "ainda carregando"/tela preta comum
+      c.fillStyle = '#1a0000';
+      c.fillRect(0, 0, this.w, this.h);
+      c.strokeStyle = 'rgba(220,40,40,.5)';
+      c.lineWidth = 3;
+      for (let i = -this.h; i < this.w; i += 26) { c.beginPath(); c.moveTo(i, 0); c.lineTo(i + this.h, this.h); c.stroke(); }
+      if (now - this.lastRenderErrorAt > 4000) {
+        this.lastRenderErrorAt = now;
+        console.error('[game] falha ao desenhar o quadro:', err);
+        toast(`Erro ao desenhar o jogo: ${err?.message || err} — manda um print disso pro suporte`, 'danger', 8000);
       }
     }
     if (settings.showFps) { c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); c.fillStyle = '#7f7'; c.font = '12px monospace'; c.fillText(`${Math.round(this.fps)} fps`, 8, this.h - 8); }
