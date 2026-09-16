@@ -172,8 +172,13 @@ export function registerSockets(io, rooms) {
       if (!r) throw new Error('Sem sala.');
       socket.data.voice = true;
       socket.to(r.channel).emit('voice:peer-joined', { id: accountId });
+      // `io` aqui é o namespace '/meia-lua' — `.sockets` já é o Map de
+      // sockets conectados nele (ver o mesmo motivo raiz comentado em
+      // RoomManager.js#removeMember; `io.sockets.sockets`, com dois
+      // ".sockets", só faz sentido no Server raiz do Socket.IO, não num
+      // namespace específico como este).
       const peers = [...r.members.values()]
-        .filter((m) => m.id !== accountId && io.sockets.sockets.get(m.socketId)?.data.voice)
+        .filter((m) => m.id !== accountId && io.sockets.get(m.socketId)?.data.voice)
         .map((m) => m.id);
       return { peers };
     });

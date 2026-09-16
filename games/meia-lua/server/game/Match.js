@@ -404,7 +404,14 @@ export class Match {
     if (this.time >= this.nextEventAt && this.time > GRACE_SECONDS + 10) {
       this.runRandomEvent();
       const [a, b] = this.cfg.eventInterval;
-      this.nextEventAt = this.time + rnd(a, b) * this.diff.events;
+      // Reta final da noite: os eventos ficam mais frequentes conforme o
+      // amanhecer se aproxima, em vez de manter a mesma cadência do início
+      // ao fim — é o mesmo clima de "quanto mais tarde, pior" que os jogos
+      // desse gênero costumam ter, e dá uma sensação de clímax se
+      // aproximando em vez de uma noite inteira no mesmo ritmo.
+      const remaining = Math.max(0, this.duration - this.time);
+      const climax = remaining < this.duration * 0.25 ? 0.6 : 1;
+      this.nextEventAt = this.time + rnd(a, b) * this.diff.events * climax;
     }
     if (this.showActive && this.time >= this.showEndAt) this.endShowEvent();
     if (this.phoneUntil && this.time > this.phoneUntil) this.phoneUntil = 0;
@@ -1203,6 +1210,22 @@ export class Match {
       })() },
       { t: 'coro', w: 9 },
       { t: 'relogioTrava', w: 6 },
+      // "Silêncio": não soma nada, TIRA — ver o case abaixo e
+      // AudioSystem.duckAmbient em client/js/audio.js. É a técnica
+      // oposta de todos os outros eventos daqui (que sempre ADICIONAM som
+      // ou imagem): o ambiente inteiro abafa por alguns segundos, sem
+      // nenhum aviso do porquê, e volta sozinho — o vazio é o que gera a
+      // tensão, não um susto de verdade. Não entra durante uma perseguição
+      // de verdade (abafar o áudio bem na hora que alguém precisa ouvir
+      // os passos de quem está caçando seria só irritante, não assustador).
+      { t: 'silencio', w: this.anims.some((a) => a.state === 'CHASE') ? 0 : 11 },
+      // "Presença": um único jogador (não todo mundo) ouve uma respiração
+      // pesada bem perto do próprio ouvido, sem direção nem imagem — sem
+      // NENHUM animatrônico de verdade vindo até ele. A ambiguidade é o
+      // ponto: a pessoa nunca sabe se foi alguma coisa de verdade ou não,
+      // o que é mais perturbador do que uma aparição visual confirmada
+      // (ver 'apparition' acima, que já cobre esse caso "eu vi algo").
+      { t: 'presenca', w: 10 },
     ].filter((e) => e.w > 0 && e.t !== this.lastEventType);
     const total = events.reduce((s, e) => s + e.w, 0);
     let r = Math.random() * total, ev = events[0];
@@ -1330,6 +1353,21 @@ export class Match {
         const secs = rnd(3, 5);
         this.broadcast('fx', { type: 'clockGlitch', secs: Math.round(secs * 10) / 10 });
         this.emitSfx('static', target.x, target.y, 24);
+        break;
+      }
+      case 'silencio': {
+        const dur = rnd(4.5, 7.5);
+        this.broadcast('fx', { type: 'silence', dur: Math.round(dur * 10) / 10 });
+        break;
+      }
+      case 'presenca': {
+        // Só quem tem ouvido "ligado" no microfone é natural já estar
+        // prestando atenção em som — mas isso aqui é síntese pro cliente
+        // dele, não precisa de voz real; qualquer jogador vivo serve de
+        // alvo. Sempre um só (sendTo, não broadcast) — os outros na sala
+        // não ouvem nada, então nem dá pra comparar/confirmar com alguém.
+        this.sendTo(target, 'fx', { type: 'presence' });
+        target.fear = Math.min(100, target.fear + 8 * target.derived.fearMult);
         break;
       }
     }

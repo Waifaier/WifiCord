@@ -335,6 +335,15 @@ export class Game {
         this.glitch = Math.max(this.glitch, 0.6);
         break;
       case 'whisper': toast(f.text, 'whisper'); audio.play('whisper', { vol: 0.5 }); break;
+      // "Silêncio" (ver o case 'silencio' em Match.js, server) — sem
+      // toast, sem vibração, sem nada visual de propósito: é só o
+      // ambiente sumindo por uns segundos (ver AudioSystem.duckAmbient) e
+      // voltando sozinho, sem explicar o porquê.
+      case 'silence': audio.duckAmbient(f.dur || 5); break;
+      // "Presença" — um único jogador ouve isso (sendTo no servidor, não
+      // broadcast), sem nenhuma imagem/aparição acompanhando: a
+      // ambiguidade de "será que teve alguém aí?" é o ponto.
+      case 'presence': audio.play('presence', { vol: 0.9 }); this.glitch = Math.max(this.glitch, 0.4); break;
       case 'questDone': toast(`${f.line || f.title}  (+${f.xp} XP, +$${f.money})`, 'quest', 5500); audio.play('quest', { vol: 0.8 }); break;
       case 'levelup': toast(fala('nivel', { n: f.level }), 'quest', 5000); audio.play('levelup', { vol: 0.8 }); break;
       case 'lore': this.showLore(f.title, f.text); break;

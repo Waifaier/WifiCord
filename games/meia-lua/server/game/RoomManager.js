@@ -71,7 +71,19 @@ export class Room {
       if (p) this.match.removePlayer(p, reason);
     }
     this.members.delete(accountId);
-    const s = this.io.sockets.sockets.get(m.socketId);
+    // MOTIVO RAIZ de um crash do processo inteiro (não só do jogo — chat e
+    // chamadas junto, já que é tudo o mesmo processo): `this.io` aqui é o
+    // NAMESPACE '/meia-lua' (io.of('/meia-lua') — ver integration.js), não
+    // o Server raiz. Num Namespace do Socket.IO v4, `.sockets` já É o Map
+    // de sockets conectados — `io.sockets.sockets` (com dois `.sockets`)
+    // só existe no Server raiz, onde `.sockets` devolve o namespace "/" e
+    // O SEU `.sockets` é que é o Map. Aqui, `this.io.sockets` (o Map) não
+    // tem propriedade `.sockets` nenhuma — dava `undefined.get(...)`, um
+    // TypeError que não tinha try/catch em volta (roda dentro de um
+    // Timeout — ver o `setTimeout` que chama isso lá embaixo) e derrubava
+    // o processo Node inteiro sempre que alguém saía de uma sala com outra
+    // pessoa ainda dentro.
+    const s = this.io.sockets.get(m.socketId);
     if (s) { s.leave(this.channel); s.emit('voice:reset'); }
     this.io.to(this.channel).emit('voice:peer-left', { id: accountId });
     if (!this.members.size) { this.manager.deleteRoom(this); return; }

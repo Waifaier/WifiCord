@@ -372,6 +372,16 @@ class AudioSystem {
       case 'roll': for (let i = 0; i < 10; i++) this.noise(o, t + i * 0.07, 0.06, { freq: 250, vol: 0.5 }); break;
       case 'conduct': [262, 311, 370, 523].forEach((f, i) => this.tone(o, t + i * 0.18, 0.9, { type: 'sawtooth', freq: f / 2, vol: 0.1 })); break;
       case 'whisper': this.noise(o, t, 1.5, { type: 'bandpass', freq: 2500, q: 6, vol: 0.2, attack: 0.3 }); break;
+      // "Presença" (ver o case 'presenca' em Match.js, server): uma
+      // expiração grave e rouca que cresce devagar e corta de repente, sem
+      // nenhum grito — bem diferente do timbre agudo/etéreo do 'whisper'
+      // acima. O silêncio logo depois é a parte que assusta; não tem
+      // nenhuma imagem acompanhando, só esse som bem perto do ouvido.
+      case 'presence':
+        this.noise(o, t, 1.15, { type: 'bandpass', freq: 220, q: 1.1, vol: 0.55, attack: 0.5 });
+        this.noise(o, t + 0.08, 0.95, { type: 'lowpass', freq: 340, vol: 0.32, attack: 0.6 });
+        this.tone(o, t, 1.2, { type: 'sine', freq: 62, freqEnd: 46, vol: 0.26, attack: 0.5 });
+        break;
       case 'hurt': this.tone(o, t, 0.3, { type: 'square', freq: 150, freqEnd: 60, vol: 0.3 }); break;
       case 'wings': for (let i = 0; i < 8; i++) this.noise(o, t + i * 0.06, 0.05, { type: 'bandpass', freq: 400, q: 1, vol: 0.4 }); break;
       case 'final': this.play('conduct'); this.play('musicbox'); this.tone(o, t, 4, { type: 'sawtooth', freq: 55, vol: 0.3 }); break;
@@ -379,15 +389,47 @@ class AudioSystem {
   }
 
   // ---------- loops contínuos ----------
+  // Nomes de loop "ambiente" — o mundo ao redor, não pistas de perigo real
+  // (diferente de 'chase'/'tension'/'breath'/'static', que carregam
+  // informação de verdade pro jogador e por isso NÃO abafam durante o
+  // evento "silêncio" — ver duckAmbient abaixo e o case 'silencio' em
+  // Match.js). Isso é o que faz a diferença entre "abafar o clima" (bom)
+  // e "abafar um aviso que a pessoa precisava ouvir" (ruim).
+  static AMBIENT_LOOPS = new Set(['ambient', 'hum', 'wind', 'rain', 'generator', 'freezer']);
+
   setLoop(name, vol) {
     if (!this.ready) return;
+    const v = AudioSystem.AMBIENT_LOOPS.has(name) ? vol * this.ambientDuckFactor() : vol;
     let l = this.loops.get(name);
     if (!l) {
-      if (vol <= 0.001) return;
+      if (v <= 0.001) return;
       l = this.createLoop(name);
       this.loops.set(name, l);
     }
-    l.gain.gain.setTargetAtTime(Math.max(0, vol), this.now, 0.15);
+    l.gain.gain.setTargetAtTime(Math.max(0, v), this.now, 0.15);
+  }
+
+  // Evento "silêncio" (ver o case 'silencio' em Match.js, server): abafa o
+  // ambiente por `dur` segundos — fade rápido pro silêncio, um trecho
+  // realmente mudo no meio, fade de volta no final — sem precisar tocar em
+  // cada loop individualmente: como setLoop() já roda a cada frame com o
+  // volume "certo" de cada loop (ver update de áudio em game.js), só
+  // multiplicar esse volume por um fator 1→0→1 aqui já abafa e devolve
+  // tudo de forma consistente, sem brigar com as automações normais.
+  duckAmbient(dur = 5) {
+    if (!this.ready) return;
+    this._duckStart = this.now;
+    this._duckDur = Math.max(1.8, dur);
+  }
+
+  ambientDuckFactor() {
+    if (!this._duckDur) return 1;
+    const elapsed = this.now - this._duckStart;
+    if (elapsed >= this._duckDur) { this._duckDur = 0; return 1; }
+    const fadeOut = 0.6, fadeIn = 1.0;
+    if (elapsed < fadeOut) return 1 - elapsed / fadeOut;
+    if (elapsed > this._duckDur - fadeIn) return Math.max(0, (this._duckDur - elapsed) / fadeIn);
+    return 0;
   }
 
   createLoop(name) {
