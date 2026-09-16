@@ -813,7 +813,10 @@ export class Game {
     audio.setLoop('chase', chasing ? 0.4 : 0);
     audio.setLoop('tension', this.tension > 0.05 ? this.tension * 0.75 : 0);
     audio.setLoop('breath', (this.me.fe || 0) > 70 && !this.breathHeld ? ((this.me.fe - 70) / 30) * 0.5 : 0);
-    audio.update(this.tension > 0.25 ? 0 : Math.max(this.me.fe || 0, this.me.thr ? 90 : 0), chasing);
+    audio.update(this.tension > 0.25 ? 0 : Math.max(this.me.fe || 0, this.me.thr ? 90 : 0), chasing, {
+      tension: this.tension,
+      dist: this.me.wt ? this.me.wt[3] : null,
+    });
     this.app.voice?.updateVolumes((id) => {
       const pl = this.S.players.find((x) => x.id === id);
       return pl ? Math.hypot(pl.x - p.x, pl.y - p.y) : null;

@@ -1905,6 +1905,10 @@ body { min-width: 0; min-height: 100dvh; overflow: hidden; }
 .mini-call-dock button:hover { background: #3b3356; }
 .mini-call-dock button.danger { background: #9e3342; }
 .mini-call-status { color: #c8c1db; font-size: 11px; font-weight: 700; padding: 0 5px; }
+/* Some enquanto o Meia-Lua está em tela cheia (ver updateMeiaLuaFullscreenBtn
+   em games.js) — sem isso esses elementos fixos de z-index altíssimo ficam
+   flutuando por cima do jogo mesmo dentro do :fullscreen de verdade. */
+.mini-call-dock.meialua-fs-hide, .call-float-popup.meialua-fs-hide { display: none !important; }
 
 /* =======================================================================
    Popup flutuante da apresentação de tela (#call-float-popup)

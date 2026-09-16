@@ -79,17 +79,34 @@ function closeMeiaLuaFrame(){
 // atributo allow="fullscreen" do iframe (ver index.html) deixa o conteúdo
 // de dentro dele participar do fullscreen também, se precisar.
 function updateMeiaLuaFullscreenBtn(){
-  const btn=$('meialua-fullscreen-btn');if(!btn)return;
+  const btn=$('meialua-fullscreen-btn');
   const active=document.fullscreenElement===$('meialua-frame-wrap');
-  btn.textContent=active?'⤢ Sair da tela cheia':'⛶ Tela cheia';
+  if(btn)btn.textContent=active?'⤢ Sair da tela cheia':'⛶ Tela cheia';
+  // O mini-dock de chamada (#mini-call-dock) e o popup flutuante de tela
+  // compartilhada (#call-float-popup) usam position:fixed com z-index bem
+  // alto (pra nunca sumirem por trás de nada) — só que isso os faz
+  // aparecer POR CIMA até de um elemento em tela cheia de verdade (bug
+  // visto em vários navegadores de celular: o retângulo/():fullscreen não
+  // isola esses elementos fixos do resto da página). Sem esse toggle
+  // explícito, a bolinha da chamada de voz fica flutuando em cima do jogo
+  // o tempo todo que alguém estiver em chamada. Some enquanto o Meia-Lua
+  // estiver em tela cheia e volta a aparecer normalmente ao sair.
+  document.getElementById('mini-call-dock')?.classList.toggle('meialua-fs-hide',active);
+  document.getElementById('call-float-popup')?.classList.toggle('meialua-fs-hide',active);
 }
 function toggleMeiaLuaFullscreen(){
   const wrap=$('meialua-frame-wrap');if(!wrap)return;
   if(document.fullscreenElement===wrap){document.exitFullscreen?.().catch(()=>{});}
-  else{
-    wrap.requestFullscreen?.()
+  else if(wrap.requestFullscreen){
+    // navigationUI:'hide' pede pro navegador esconder também a barra de
+    // navegação/status quando possível (suportado em parte dos Chrome de
+    // celular) — em navegadores que não reconhecem a opção, é ignorada de
+    // boa e cai no fullscreen normal.
+    wrap.requestFullscreen({ navigationUI: 'hide' })
       .then(()=>{if(isMobileDevice())screen.orientation?.lock?.('landscape')?.catch?.(()=>{});})
       .catch(()=>{window.App?.toast?.('Não foi possível abrir em tela cheia.','error');});
+  }else{
+    window.App?.toast?.('Seu navegador não suporta tela cheia.','error');
   }
 }
 function showHub(){
@@ -119,8 +136,8 @@ function openCard(name){
     const wrap=$('meialua-frame-wrap');
     if(wrap&&isMobileDevice()){
       wrap.classList.add('meialua-mobile');
-      if(document.fullscreenElement!==wrap){
-        wrap.requestFullscreen?.()
+      if(document.fullscreenElement!==wrap&&wrap.requestFullscreen){
+        wrap.requestFullscreen({ navigationUI: 'hide' })
           .then(()=>{screen.orientation?.lock?.('landscape')?.catch?.(()=>{});})
           .catch(()=>{});
       }

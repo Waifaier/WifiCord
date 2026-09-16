@@ -22,6 +22,8 @@ class AudioSystem {
     this.heartbeatUntil = 0;
     this.nextBeat = 0;
     this.nextCreak = 0;
+    this.nextStalkerNote = 0;
+    this.stalkerStep = 0;
   }
 
   unlock() {
@@ -414,7 +416,7 @@ class AudioSystem {
   }
 
   /** Chamado a cada frame: batimentos cardíacos e rangidos ambientes */
-  update(fear, inChase) {
+  update(fear, inChase, watched) {
     if (!this.ready) return;
     const t = this.now;
     const intensity = Math.max(fear / 100, inChase ? 1 : 0);
@@ -430,6 +432,33 @@ class AudioSystem {
       if (Math.random() < 0.5) this.tone(o, t, 1.3, { type: 'sawtooth', freq: 300 + Math.random() * 200, freqEnd: 200, vol: 0.05 });
       else this.noise(o, t, 1.5, { type: 'bandpass', freq: 200 + Math.random() * 400, q: 8, vol: 0.3, attack: 0.4 });
     }
+    this.updateStalkerTheme(t, watched);
+  }
+
+  // "Musiquinha do perseguidor": quando um animatrônico te vê, toca um
+  // motivo simples e lento (tipo caixinha de música) — e quanto mais perto
+  // ele chega (ou mais forte é o "olhar"), mais rápido o motivo toca. Some
+  // sozinho quando ninguém mais te vê (para de agendar notas novas).
+  updateStalkerTheme(t, watched) {
+    const tension = watched?.tension || 0;
+    const dist = watched?.dist;
+    if (tension < 0.03) return; // ninguém te vendo agora — não agenda nada
+    // combina a "tensão" (já suavizada, baseada no olhar) com a distância
+    // real até quem está vendo, quando disponível — o que chegar mais
+    // perto de 1 (mais urgente) domina.
+    const byDist = dist != null ? Math.max(0, 1 - Math.min(1, dist / 14)) : 0;
+    const drive = Math.max(tension, byDist);
+    if (t < this.nextStalkerNote) return;
+    const interval = 0.85 - Math.pow(drive, 1.3) * 0.7; // 0.85s (longe/fraco) até 0.15s (bem perto)
+    this.nextStalkerNote = t + interval;
+    const SCALE = [293.66, 349.23, 311.13, 261.63, 233.08, 277.18]; // motivo curto, menor/fora do eixo — soa "errado" de propósito
+    const f = SCALE[this.stalkerStep % SCALE.length];
+    this.stalkerStep++;
+    const vol = 0.1 + drive * 0.22;
+    const o = this.out(vol, 0, this.musicBus);
+    this.tone(o, t, Math.max(0.35, interval * 1.6), { type: 'triangle', freq: f, vol: 0.5, attack: 0.015, detune: -8 + Math.random() * 16 });
+    this.tone(o, t, 0.3, { type: 'sine', freq: f * 2, vol: 0.12, attack: 0.005 });
+    if (drive > 0.6) this.tone(o, t, 0.5, { type: 'sine', freq: f / 2, vol: 0.18, attack: 0.02 }); // sub grave reforça quando tá quase em cima
   }
 
   stopAll() {

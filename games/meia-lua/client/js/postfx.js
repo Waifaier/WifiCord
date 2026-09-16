@@ -105,6 +105,24 @@ export class PostFX {
   constructor(canvas) {
     this.canvas = canvas;
     this.ok = false;
+    this._init();
+    // e.preventDefault() aqui é obrigatório: sem ele, o navegador considera
+    // o contexto perdido "pra sempre" e nunca dispara webglcontextrestored
+    // depois. Antes esse handler só desligava o postfx (this.ok = false) e
+    // nunca mais ligava de volta — então qualquer perda de contexto
+    // temporária (aparelho ficou sem memória de GPU um instante, tela
+    // apagou e acendeu, trocou de app e voltou — tudo comum em celular)
+    // deixava o jogo sem os efeitos visuais pelo resto da sessão. Como o
+    // jogo já cai pro <canvas> 2D puro (sem os efeitos) enquanto ok=false
+    // (ver game.js), isso nunca causava tela preta — só a perda permanente
+    // do visual "bonito". Agora ele reconstrói sozinho (mesmo contexto,
+    // shaders/buffers recriados) quando o navegador avisa que voltou.
+    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.ok = false; });
+    canvas.addEventListener('webglcontextrestored', () => this._init());
+  }
+
+  _init() {
+    const canvas = this.canvas;
     try {
       // preserveDrawingBuffer:true é essencial aqui: sem ele, o navegador
       // pode "limpar" o buffer da tela logo depois de compor o frame, e se
@@ -115,7 +133,7 @@ export class PostFX {
       // reproduzi testando em um perfil de celular: o quadro era desenhado
       // certinho, mas ao ler os pixels da tela um instante depois, vinha
       // tudo zerado (preto/transparente).
-      const gl = canvas.getContext('webgl', { antialias: false, premultipliedAlpha: false, preserveDrawingBuffer: true })
+      const gl = this.gl || canvas.getContext('webgl', { antialias: false, premultipliedAlpha: false, preserveDrawingBuffer: true })
         || canvas.getContext('experimental-webgl');
       if (!gl) return;
       this.gl = gl;
@@ -147,7 +165,6 @@ export class PostFX {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       this.u = {};
       for (const n of ['uTex', 'uRes', 'uTime', 'uFear', 'uHurt', 'uGlitch', 'uBlackout', 'uCam', 'uFlash', 'uHigh', 'uDark']) this.u[n] = gl.getUniformLocation(prog, n);
-      canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.ok = false; });
       this.ok = true;
     } catch (err) {
       console.warn('[postfx] WebGL indisponível, usando render simples:', err.message);
