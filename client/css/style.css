@@ -4443,8 +4443,20 @@ html.has-custom-titlebar #members-panel {
    botão. Esse bloco fica no fim do arquivo de propósito: como quase
    tudo aqui usa !important, "quem vem por último no arquivo" decide o
    empate de especificidade — é a mesma lição do bug do mini-dock preso
-   (ver comentário lá perto do primeiro @media(max-width:680px)). */
-@media (max-width: 680px) {
+   (ver comentário lá perto do primeiro @media(max-width:680px)).
+
+   SEXTO ACHADO: esse bloco inteiro só valia com "max-width:680px" — ou
+   seja, só na LARGURA da tela. Com o celular deitado (paisagem), a
+   largura vira o lado comprido (normalmente 700-950px em qualquer
+   aparelho — é a altura de pé dele) e some do alcance desse media query,
+   então NENHUMA dessas correções (tela cheia de verdade, esconder o chat
+   atrás, tirar o teto de altura etc.) valia — a chamada caía de volta no
+   layout de desktop (dividindo espaço com o cabeçalho/lista de mensagens,
+   com teto de altura), que é exatamente "nem fica em tela cheia" no
+   celular deitado. Adicionar a condição por ALTURA (o lado curto, que
+   continua pequeno tanto de pé quanto deitado em qualquer celular) cobre
+   os dois casos com a mesma regra. */
+@media (max-width: 680px), (max-height: 680px) and (orientation: landscape) {
   /* A chamada passa a ocupar a tela inteira (como WhatsApp/Discord no
      celular) em vez de dividir espaço com o chat por trás — o resto do
      chat continua intacto, só reaparece quando a chamada termina

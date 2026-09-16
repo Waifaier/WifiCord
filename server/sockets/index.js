@@ -5,6 +5,7 @@ const Friendship = require('../models/Friendship');
 const Message = require('../models/Message');
 const User = require('../models/User');
 const ChannelRead = require('../models/ChannelRead');
+const { sendIncomingCallPush, sendMessagePush } = require('../services/push');
 const recentRewards = new Map();
 
 const MAX_MESSAGE_LENGTH = 2000;
@@ -15,6 +16,29 @@ const AVATAR_BACKFLIP_ALLOWLIST = new Set(['nanowano', 'waifaier', 'desh', 'neut
 const onlineSockets = new Map(); // userId -> Set(socketId)
 const offlineTimers = new Map(); // userId -> Timeout
 const lastChannelMessageAt = new Map(); // "channelId:userId" -> timestamp (para slowmode)
+
+// "Ligação perdida": se quem está sendo chamado não tem nenhum socket
+// conectado no momento (app fechado, ou em segundo plano e o Android matou
+// a conexão — ver o comentário grande sobre isso em client/js/call.js), a
+// oferta ia direto pro quarto vazio (io.to(userRoom(toUserId))) e se
+// perdia pra sempre: reabrir o app minutos depois não mostrava nada,
+// enquanto quem ligou continuava "chamando" pro outro lado indefinidamente
+// (não tinha timeout nenhum — ver ringTimer em call.js). Guarda a última
+// oferta de cada pessoa por um tempo curto (mesmo prazo do toque) e
+// reenvia assim que o socket dela conecta de novo.
+const pendingCalls = new Map(); // toUserId -> { fromUserId, sdp, callType, at }
+const PENDING_CALL_TTL_MS = 45000;
+
+// Prévia curta do conteúdo pra notificação push (mesma ideia de
+// contentPreview em client/js/notifications.js, mas do lado do servidor —
+// aqui não tem acesso a essa função do cliente).
+function pushPreview(content) {
+  const raw = String(content || '');
+  if (raw.startsWith('__MEDIA__:')) return '📎 Enviou um arquivo';
+  if (raw.startsWith('__STICKER__:')) return '✨ Enviou uma figurinha';
+  if (raw.startsWith('__SUPER__:')) return '✨ Enviou um super emoji';
+  return raw.length > 160 ? raw.slice(0, 157) + '…' : raw;
+}
 
 function userRoom(userId) {
   return 'user:' + userId;
@@ -99,6 +123,16 @@ function initSockets(io) {
     next();
   });
 
+  // Chamado pela rota POST /api/push/reject-call (botão "Rejeitar" da
+  // notificação nativa de ligação no Android, tocado sem abrir o app) —
+  // avisa quem ligou na hora, igual um hangup normal, e limpa a oferta
+  // pendente pra ela não reaparecer se a pessoa abrir o app depois.
+  io.wcRejectPendingCall = function (rejectingUserId, callerUserId) {
+    const pending = pendingCalls.get(rejectingUserId);
+    if (pending && pending.fromUserId === callerUserId) pendingCalls.delete(rejectingUserId);
+    io.to(userRoom(callerUserId)).emit('call:hangup', { fromUserId: rejectingUserId });
+  };
+
   io.on('connection', (socket) => {
     const userId = socket.userId;
 
@@ -106,6 +140,27 @@ function initSockets(io) {
     onlineSockets.get(userId).add(socket.id);
 
     socket.join(userRoom(userId));
+
+    // Ver o comentário grande sobre pendingCalls lá em cima: se tinha uma
+    // ligação esperando essa pessoa e quem ligou ainda está online, reenvia
+    // a oferta agora — é isso que faz a tela de "fulano está te ligando"
+    // aparecer ao reabrir o app, em vez de nunca mostrar nada enquanto o
+    // outro lado fica "chamando" pra sempre.
+    const pendingForMe = pendingCalls.get(userId);
+    if (pendingForMe) {
+      const expired = Date.now() - pendingForMe.at > PENDING_CALL_TTL_MS;
+      const callerStillOnline = onlineSockets.has(pendingForMe.fromUserId);
+      if (expired || !callerStillOnline) {
+        pendingCalls.delete(userId);
+      } else {
+        socket.emit('call:offer', {
+          fromUserId: pendingForMe.fromUserId,
+          sdp: pendingForMe.sdp,
+          callType: pendingForMe.callType,
+          renegotiation: false,
+        });
+      }
+    }
 
     if (offlineTimers.has(userId)) {
       clearTimeout(offlineTimers.get(userId));
@@ -200,6 +255,21 @@ function initSockets(io) {
       Message.addMentions(saved.id, mentionedIds);
       mentionedIds.forEach(function (mentionedId) {
         io.to(userRoom(mentionedId)).emit('mention:new', { serverId: channel.server_id, channelId, messageId: saved.id, fromUserId: userId });
+        // Só push pra quem foi @mencionado, não pro canal inteiro — igual
+        // Discord: mensagem solta de canal não acorda ninguém, menção sim.
+        if (!onlineSockets.get(mentionedId)?.size) {
+          const author = User.findById(userId);
+          sendMessagePush(mentionedId, {
+            fromUserId: userId,
+            fromName: author?.displayName || author?.username,
+            fromAvatar: author?.avatarUrl,
+            preview: pushPreview(content),
+            kind: 'channel',
+            channelId,
+            serverId: channel.server_id,
+            channelName: channel.name,
+          }).catch(() => {});
+        }
       });
       callback({ message: saved });
     });
@@ -238,6 +308,15 @@ function initSockets(io) {
       rewardMessage(userId, content);
       io.to(dmRoom(userId, toUserId)).emit('dm:message', saved);
       io.to(userRoom(toUserId)).emit('dm:message', saved);
+      if (!onlineSockets.get(Number(toUserId))?.size) {
+        sendMessagePush(toUserId, {
+          fromUserId: userId,
+          fromName: sender?.displayName || sender?.username,
+          fromAvatar: sender?.avatarUrl,
+          preview: pushPreview(content),
+          kind: 'dm',
+        }).catch(() => {});
+      }
       callback({ message: saved });
     });
 
@@ -297,17 +376,40 @@ function initSockets(io) {
     socket.on('call:offer', (data) => {
       const toUserId = Number(data && data.toUserId);
       if (!canCall(toUserId) || !data?.sdp) return;
+      const callType = data.callType === 'audio' ? 'audio' : 'video';
+      const isFreshCall = data.renegotiation !== true;
+      // Só guarda/repete convite novo — uma renegociação (ICE restart etc.)
+      // é sobre uma chamada da qual já se faz parte, não uma ligação nova
+      // pra "acordar" ninguém (ver o guard equivalente em handleOffer,
+      // client/js/call.js).
+      if (isFreshCall) pendingCalls.set(toUserId, { fromUserId: userId, sdp: data.sdp, callType, at: Date.now() });
       io.to(userRoom(toUserId)).emit('call:offer', {
         fromUserId: userId,
         sdp: data.sdp,
-        callType: data.callType === 'audio' ? 'audio' : 'video',
+        callType,
         renegotiation: data.renegotiation === true,
       });
+      // Ninguém com socket aberto pra receber ao vivo agora — manda um push
+      // pra acordar o app no celular (ver server/services/push.js; vira
+      // no-op silencioso até o Firebase estar configurado).
+      if (isFreshCall && !onlineSockets.get(toUserId)?.size) {
+        const caller = User.findById(userId);
+        sendIncomingCallPush(toUserId, {
+          fromUserId: userId,
+          fromName: caller?.displayName || caller?.username,
+          fromAvatar: caller?.avatarUrl,
+          callType,
+        }).catch(() => {});
+      }
     });
 
     socket.on('call:answer', (data) => {
       const toUserId = Number(data && data.toUserId);
       if (!canCall(toUserId) || !data?.sdp) return;
+      // A pessoa (userId) respondeu: a oferta que estava pendente pra ela
+      // já foi entregue/atendida, não precisa mais ser reenviada se
+      // reconectar de novo.
+      pendingCalls.delete(userId);
       io.to(userRoom(toUserId)).emit('call:answer', {
         fromUserId: userId,
         sdp: data.sdp,
@@ -327,6 +429,13 @@ function initSockets(io) {
     socket.on('call:hangup', (data) => {
       const toUserId = Number(data && data.toUserId);
       if (!canCall(toUserId)) return;
+      // Limpa qualquer oferta pendente entre essas duas pessoas, não
+      // importa quem mandou o hangup — quem ligou cancelando antes de ser
+      // atendido, ou quem recebeu recusando.
+      const p1 = pendingCalls.get(toUserId);
+      if (p1 && p1.fromUserId === userId) pendingCalls.delete(toUserId);
+      const p2 = pendingCalls.get(userId);
+      if (p2 && p2.fromUserId === toUserId) pendingCalls.delete(userId);
       io.to(userRoom(toUserId)).emit('call:hangup', { fromUserId: userId });
     });
 

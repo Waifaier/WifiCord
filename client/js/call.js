@@ -861,6 +861,33 @@
     }
   }
 
+  // Confirma que uma stream tem frame de vídeo de verdade chegando (não só
+  // "desmutou") antes de trocar o palco pra ela — ver o comentário grande
+  // em pc.ontrack/activate (transceptor fixo de tela) sobre por que isso é
+  // necessário. Decodifica num <video> fora da tela (não mexe no
+  // principal), sem travar pra sempre se nunca chegar nada real.
+  function waitForRealFrame(stream, timeoutMs = 4000) {
+    return new Promise((resolve) => {
+      const probe = document.createElement('video');
+      probe.muted = true; probe.playsInline = true; probe.autoplay = true;
+      probe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:2px;height:2px;opacity:0.01;pointer-events:none;';
+      let done = false;
+      const finish = (ok) => {
+        if (done) return;
+        done = true;
+        probe.srcObject = null;
+        probe.remove();
+        resolve(ok);
+      };
+      probe.addEventListener('loadedmetadata', () => { if (probe.videoWidth > 0) finish(true); });
+      probe.addEventListener('resize', () => { if (probe.videoWidth > 0) finish(true); });
+      document.body.appendChild(probe);
+      probe.srcObject = stream;
+      probe.play?.().catch(() => {});
+      setTimeout(() => finish(false), timeoutMs);
+    });
+  }
+
   function attachRemoteStream(stream) {
     if (!el.remoteVideo) return;
     el.remoteVideo.srcObject = stream;
@@ -1170,7 +1197,45 @@
           // — o transceptor fixo nunca é removido, então 'ended' quase
           // nunca dispara mais durante a ligação; contar só com 'ended'
           // como antes deixava remoteScreenActive preso incorretamente).
+          // QUINTO motivo raiz, achado testando esse fluxo isolado de novo
+          // com dois lados de verdade conectando (não só a negociação): o
+          // transceptor fixo de tela, mesmo sem NENHUMA track anexada
+          // (ninguém chamou replaceTrack nele — só existe pra reservar o
+          // slot, ver addFixedTransceivers/bindFixedTransceivers acima),
+          // ainda assim disparava um 'unmute' de verdade por um instante
+          // logo depois de conectar — sem nenhum frame de vídeo real por
+          // trás — e o código antigo confiava cegamente nesse unmute e
+          // trocava a tela toda pro layout de apresentação (tela cheia) na
+          // hora, em cima de um vídeo sem conteúdo nenhum: exatamente a
+          // "transmissão toda quebrada" tomando a tela inteira. O 'mute'
+          // seguinte corrigia sozinho um instante depois, mas nesse
+          // meio-tempo (que pode durar bem mais que isso numa rede real,
+          // não só no teste local instantâneo) o palco já tinha mostrado a
+          // apresentação quebrada. Espera meio segundo e confirma que a
+          // track continua desmutada antes de trocar o layout — um blip
+          // curto (o caso espúrio) nunca passa dessa espera; uma
+          // apresentação de verdade dura muito mais que isso.
           const activate = () => {
+            // Um temporizador fixo pra filtrar o blip não dava: testando
+            // repetidas vezes com dois lados de verdade conectando, a
+            // duração do blip espúrio variava run a run (às vezes corrigia
+            // sozinho em menos de 1s, às vezes passava de 2s) — então
+            // qualquer prazo fixo ou deixava passar o blip mais longo, ou
+            // atrasava demais uma apresentação de verdade. O sinal que não
+            // engana é se o navegador decodificou ALGUM frame de verdade
+            // (dimensões reais) — um transceptor sem track nenhuma por trás
+            // não tem frame pra decodificar, não importa quanto tempo
+            // passe. Sobe um <video> fora da tela só pra essa checagem, sem
+            // mexer no <video> principal até ter certeza.
+            state._screenActivatePending = true;
+            waitForRealFrame(stream).then((real) => {
+              if (!state._screenActivatePending) return; // já foi cancelado (deactivate rodou nesse meio-tempo)
+              state._screenActivatePending = false;
+              if (!real || track.muted) return; // nunca decodificou nada real, ou já foi remutado
+              doActivate();
+            });
+          };
+          const doActivate = () => {
             console.log('[WifiCord/call] tela remota ATIVA (unmute) — mostrando no palco');
             state.remoteScreenActive = true;
             state.remoteScreenStream = stream;
@@ -1188,6 +1253,11 @@
             updateFloatPopup();
           };
           const deactivate = () => {
+            // Cancela uma ativação que ainda estava esperando confirmação
+            // de frame real (ver comentário grande acima) — é exatamente o
+            // caso do blip espúrio: unmute seguido de mute antes de ter
+            // decodificado qualquer coisa de verdade.
+            state._screenActivatePending = false;
             console.log('[WifiCord/call] tela remota INATIVA (mute/ended)');
             state.remoteScreenActive = false;
             state.remoteScreenStream = null;
@@ -1484,6 +1554,19 @@
       // negotiationReady só vira true quando a chamada conecta de verdade
       // (ver onconnectionstatechange em pcCreate) — não aqui.
       window.Sounds?.startLoop('ringback'); // toc-toc de "chamando..." pra quem ligou
+      // Sem isso, se a pessoa nunca atender (app fechado pra sempre, ou só
+      // ignorando), essa tela ficava "Conectando…"/tocando pra sempre — não
+      // existe nenhum evento de rede que avise "ninguém vai atender". 45s é
+      // o mesmo prazo do toque da notificação nativa no Android (ver
+      // setTimeoutAfter em WifiCordFirebaseMessagingService.kt) e do
+      // pendingCalls no servidor (ver server/sockets/index.js).
+      clearTimeout(state.ringTimer);
+      state.ringTimer = setTimeout(() => {
+        if (state.inCall && String(state.targetUserId) === String(target)) {
+          window.App?.toast('Ninguém atendeu.', 'info');
+          endCall(true);
+        }
+      }, 45000);
     } catch (e) {
       window.App?.toast(e.message || 'Não foi possível iniciar a chamada.', 'error');
       endCall(false);
@@ -1627,6 +1710,8 @@
       await flushCandidates(state.pc);
       setCallStatus('Conectado', 'connected');
       window.Sounds?.stopLoop(); // para o ringback assim que a outra pessoa atende
+      clearTimeout(state.ringTimer);
+      state.ringTimer = null;
     } catch (e) {
       state.isSettingRemoteAnswerPending = false;
       console.error('Resposta WebRTC inválida:', e);
@@ -1668,6 +1753,8 @@
     if (notify && target) window.ChatSocket?.sendCallHangup?.({ toUserId: target });
     clearTimeout(state.reconnectTimer);
     state.reconnectTimer = null;
+    clearTimeout(state.ringTimer);
+    state.ringTimer = null;
     stopQualityMonitor();
     // Marca o fim da chamada ANTES de parar as tracks: em teoria .stop()
     // não deveria disparar 'onended' (só o navegador desconectando o
