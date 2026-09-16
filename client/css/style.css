@@ -4555,3 +4555,38 @@ html.has-custom-titlebar #members-panel {
   .games-grid { grid-template-columns: 1fr; }
   .meialua-frame-wrap { min-height: 0; }
 }
+@media (max-width: 480px) {
+  .game-card-cover { height: 104px; font-size: 36px; }
+  .game-card-cover-meialua { background-size: auto, auto 72px; }
+}
+
+/* "Vire o celular": games.js liga .meialua-mobile no wrap só quando detecta
+   um aparelho de celular de verdade (nada de janela de desktop estreita —
+   ver isMobileDevice() lá) no instante em que abre o jogo, então esse aviso
+   nunca aparece à toa numa janela redimensionada. Escondido por padrão e
+   revelado pelo @media(orientation:portrait) abaixo, que reage sozinho a
+   girar o aparelho, sem precisar de JS ouvindo resize/orientationchange. */
+.meialua-rotate-hint {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+  padding: 24px;
+  background: rgba(5, 3, 8, .94);
+  color: #fff;
+}
+.meialua-rotate-icon { font-size: 46px; animation: meialua-rotate-swing 1.6s ease-in-out infinite; }
+.meialua-rotate-hint p { max-width: 260px; margin: 0; font-size: 14px; line-height: 1.5; color: rgba(255, 255, 255, .85); }
+@keyframes meialua-rotate-swing {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(90deg); }
+}
+@media (prefers-reduced-motion: reduce) { .meialua-rotate-icon { animation: none; } }
+@media (orientation: portrait) {
+  .meialua-frame-wrap.meialua-mobile .meialua-rotate-hint { display: flex; }
+}

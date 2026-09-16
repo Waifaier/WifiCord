@@ -755,6 +755,14 @@
              elemento escolhido e quem está dentro dele (efeito "top layer"),
              então um botão de fora simplesmente some/some fica inacessível. -->
         <button type="button" id="meialua-fullscreen-btn" class="meialua-fullscreen-btn" title="Tela cheia">⛶ Tela cheia</button>
+        <!-- Também fica DENTRO do wrap (mesmo motivo do botão de tela cheia
+             acima) — só aparece em celular (classe .meialua-mobile ligada
+             pelo games.js ao abrir o jogo) enquanto está na vertical
+             (@media orientation:portrait no style.css cuida de mostrar). -->
+        <div class="meialua-rotate-hint" id="meialua-rotate-hint" aria-hidden="true">
+          <div class="meialua-rotate-icon">📱</div>
+          <p>Vire seu celular na horizontal para jogar</p>
+        </div>
       </div>
     </div>
   </div>

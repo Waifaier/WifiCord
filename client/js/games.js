@@ -54,8 +54,21 @@ function rgbaFrom(rgbStr,alpha){const m=/rgb\((\d+),(\d+),(\d+)\)/.exec(rgbStr);
 // deixava o iframe do Meia-Lua rodando escondido, com o microfone
 // possivelmente ainda ligado se a pessoa estivesse numa chamada de voz.
 function stopFlappy(){running=false;cancelAnimationFrame(raf);window.Sounds?.stopLoop?.();}
+// Detecta celular de verdade (não só janela estreita de desktop): exige
+// indício de touch como aparelho principal (pointer:coarse) E ou o
+// user-agent batendo com um celular/tablet ou a menor dimensão da tela
+// sendo típica de celular. Usado só pra decidir se liga tela cheia
+// automática + aviso de "vire o celular" ao entrar no Meia-Lua.
+function isMobileDevice(){
+  const coarse=window.matchMedia?.('(pointer: coarse)')?.matches;
+  if(!coarse)return false;
+  const uaMobile=/Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(navigator.userAgent||'');
+  const smallish=Math.min(window.screen?.width||window.innerWidth,window.screen?.height||window.innerHeight)<900;
+  return uaMobile||smallish;
+}
 function closeMeiaLuaFrame(){
   const f=$('meialua-frame');if(f&&f.getAttribute('src'))f.setAttribute('src','about:blank');
+  $('meialua-frame-wrap')?.classList.remove('meialua-mobile');
   // Sai da tela cheia junto (senão a pessoa "volta pra Jogos" e o
   // navegador fica preso em tela cheia mostrando o hub em vez do jogo).
   if(document.fullscreenElement&&document.fullscreenElement===$('meialua-frame-wrap'))document.exitFullscreen?.().catch(()=>{});
@@ -73,7 +86,11 @@ function updateMeiaLuaFullscreenBtn(){
 function toggleMeiaLuaFullscreen(){
   const wrap=$('meialua-frame-wrap');if(!wrap)return;
   if(document.fullscreenElement===wrap){document.exitFullscreen?.().catch(()=>{});}
-  else{wrap.requestFullscreen?.().catch(()=>{window.App?.toast?.('Não foi possível abrir em tela cheia.','error');});}
+  else{
+    wrap.requestFullscreen?.()
+      .then(()=>{if(isMobileDevice())screen.orientation?.lock?.('landscape')?.catch?.(()=>{});})
+      .catch(()=>{window.App?.toast?.('Não foi possível abrir em tela cheia.','error');});
+  }
 }
 function showHub(){
   stopFlappy();closeMeiaLuaFrame();
@@ -92,6 +109,22 @@ function openCard(name){
     // à toa) — closeMeiaLuaFrame() limpa de volta pra 'about:blank' ao sair.
     const f=$('meialua-frame');
     if(f&&(!f.getAttribute('src')||f.getAttribute('src')==='about:blank'))f.setAttribute('src','/jogos/meia-lua/');
+    // No celular: já entra em tela cheia (o toque no card conta como o
+    // "gesto do usuário" que a Fullscreen API exige) e, se o aparelho
+    // suportar, trava a orientação em paisagem. A classe .meialua-mobile
+    // liga o aviso de "vire o celular" (style.css) enquanto ele ainda
+    // estiver na vertical — em navegadores sem suporte a nada disso
+    // (iOS mais antigo, por ex.) o jogo segue funcionando normalmente,
+    // só sem o efeito automático; o botão manual de tela cheia continua ali.
+    const wrap=$('meialua-frame-wrap');
+    if(wrap&&isMobileDevice()){
+      wrap.classList.add('meialua-mobile');
+      if(document.fullscreenElement!==wrap){
+        wrap.requestFullscreen?.()
+          .then(()=>{screen.orientation?.lock?.('landscape')?.catch?.(()=>{});})
+          .catch(()=>{});
+      }
+    }
   }
 }
 function open(){document.getElementById('modal-overlay')?.classList.remove('hidden');document.querySelectorAll('.modal').forEach(m=>m.classList.add('hidden'));$('modal-games')?.classList.remove('hidden');showHub();}
