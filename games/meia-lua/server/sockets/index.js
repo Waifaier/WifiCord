@@ -147,6 +147,14 @@ export function registerSockets(io, rooms) {
     on('interact', 'interact', (d) => { matchOf()?.interact(accountId, typeof d.target === 'string' ? d.target.slice(0, 40) : null); });
     on('flashlight', 'action', () => { matchOf()?.toggleFlashlight(accountId); });
     socket.on('breath', (d) => { if (!allow(lim.action)) return; matchOf()?.setBreath(accountId, !!d?.hold); });
+    // Nível do microfone (0..1), medido no navegador de cada um — nunca o
+    // áudio em si — só pra animatrônicos que "ouvem voz" (ver types.js).
+    socket.on('voice:level', (d) => {
+      if (!allow(lim.action)) return;
+      const l = Number(d?.l);
+      if (!Number.isFinite(l)) return;
+      matchOf()?.playerVoiceNoise(accountId, Math.max(0, Math.min(1, l)));
+    });
     on('useItem', 'action', (d) => { matchOf()?.useItem(accountId, String(d.item || '')); });
     on('equip', 'action', (d) => { matchOf()?.equip(accountId, String(d.item || '')); });
     on('unequip', 'action', (d) => { matchOf()?.unequip(accountId, String(d.slot || '')); });

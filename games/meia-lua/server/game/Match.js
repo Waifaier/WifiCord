@@ -488,6 +488,18 @@ export class Match {
     if (this.noises.length < 64) this.noises.push({ x, y, radius, source });
   }
 
+  // Nível de voz do microfone (0..1), medido no navegador do jogador e
+  // mandado só como um número — nunca o áudio em si. Vira um "barulho" que
+  // apenas animatrônicos com hearsVoice (ver Animatronic.hear) percebem.
+  playerVoiceNoise(accountId, level) {
+    const p = this.players.get(accountId);
+    if (!p || !p.alive || p.saved) return;
+    if (this.time < (p.voiceNoiseCd || 0)) return;
+    p.voiceNoiseCd = this.time + 0.4;
+    if (level < 0.05) return;
+    this.addNoise(p.x, p.y, 3.5 + level * 11, 'voice');
+  }
+
   emitSfx(s, x, y, radius = 20, extra = {}) {
     for (const p of this.players.values()) {
       if (!p.online || p.saved) continue;
@@ -643,9 +655,17 @@ export class Match {
     p.holdBreath = !!hold;
   }
 
+  // Pipoca não machuca — é só uma alucinação pra mexer com a cabeça de
+  // quem vê: nenhum dano, só o clarão fantasmagórico (mesma fx visual das
+  // aparições aleatórias) e um baque de medo.
   trapClash(anim, target) {
     this.emitSfx('cymbals', anim.x, anim.y, 45);
     this.broadcast('fx', { type: 'clash', x: r2(anim.x), y: r2(anim.y) });
+    const ang = Math.random() * Math.PI * 2;
+    this.sendTo(target, 'fx', {
+      type: 'apparition', kind: 'pipoca',
+      x: r2(target.x + Math.cos(ang) * 2.1), y: r2(target.y + Math.sin(ang) * 2.1),
+    });
     for (const a of this.anims) {
       if (a === anim || a.def.trap) continue;
       if (Math.hypot(a.x - anim.x, a.y - anim.y) < 28) a.investigate(anim.x, anim.y);
@@ -654,6 +674,17 @@ export class Match {
     for (const p of this.alivePlayers()) {
       if (Math.hypot(p.x - anim.x, p.y - anim.y) < 12) this.notify(p, fala('pipoca'), 'danger');
     }
+  }
+
+  // Assombração: de vez em quando a Pipoca se teleporta pra perto de um
+  // jogador (sem ninguém vendo) só pra fazer a tela tremeluzir e sussurrar
+  // — nenhum dano, nenhuma perseguição de verdade, é só pra assustar.
+  animHaunt(anim, target) {
+    this.emitSfx('musicbox', anim.x, anim.y, 16);
+    const area = areaAt(target.x, target.y);
+    this.sendTo(target, 'fx', { type: 'flicker', area: area?.id, until: 1.4 });
+    this.sendTo(target, 'fx', { type: 'whisper', text: pick(LORE.whispers) });
+    target.fear = Math.min(100, target.fear + 5 * target.derived.fearMult);
   }
 
   areaAccessible(areaId) {
@@ -1018,6 +1049,13 @@ export class Match {
     }
   }
 
+  // Depois que um animatrônico acerta um jumpscare e teleporta pra longe
+  // (ver Animatronic.teleportAfterAttack), quem estava perto ouve o
+  // "sumiço" dele indo embora — reforça que ele já não está mais ali.
+  onAnimTeleportAway(anim, target, ox, oy) {
+    this.emitSfx('teleportOut', ox, oy, 20, { who: target.id });
+  }
+
   conductAlert(maestro, target) {
     for (const a of this.anims) if (a !== maestro) a.investigate(target.x, target.y);
     this.emitSfx('conduct', maestro.x, maestro.y, Infinity);
@@ -1029,13 +1067,26 @@ export class Match {
     const t = pick(players);
     const area = areaAt(t.x, t.y);
     if (!area || !anim.def.patrol.includes(area.id)) return;
+    // Quanto mais perto o Maestro já está de alguém, mais perto ele ousa
+    // reaparecer (e mais assustador fica) — bem em cima às vezes.
+    const dNow = Math.hypot(t.x - anim.x, t.y - anim.y);
+    const bold = anim.def.blinks && dNow < 16;
+    const minGap = bold ? 3.5 : 7;
     for (let i = 0; i < 12; i++) {
       const pt = randomFloorInArea(area.id);
-      if (players.every((p) => Math.hypot(p.x - pt.x, p.y - pt.y) > 7 && !this.playerSees(p, pt.x, pt.y))) {
+      if (players.every((p) => Math.hypot(p.x - pt.x, p.y - pt.y) > minGap && !this.playerSees(p, pt.x, pt.y))) {
         anim.x = pt.x; anim.y = pt.y; anim.path = null;
         anim.setState('PATROL', 20);
         anim.goTo(t.x, t.y);
         this.emitSfx('musicbox', pt.x, pt.y, 22);
+        // Se ele reapareceu bem perto, a tela treme/tremula um instante —
+        // é o "piscar" do Maestro, sem chegar a ser um jumpscare de verdade.
+        const d = Math.hypot(t.x - pt.x, t.y - pt.y);
+        if (d < 6) {
+          this.sendTo(t, 'fx', { type: 'flicker', area: area.id, until: 1.1 });
+          this.emitSfx('static', pt.x, pt.y, 10);
+          t.fear = Math.min(100, t.fear + 6 * t.derived.fearMult);
+        }
         return;
       }
     }

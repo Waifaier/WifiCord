@@ -495,32 +495,46 @@ export class Renderer {
     const p = el / js.dur;
     const img = assets.img[`face_${js.type}`];
     const m = assets.manifest?.faces?.[js.type];
-    // 1) corte seco para o preto
+    const accent = (ANIMATRONIC_INFO[js.type] || ANIMATRONIC_INFO.tonho).eye;
+    // 1) corte seco pro branco (estalo) e, logo em seguida, pro preto —
+    // o par de cortes é o que vende o "susto" antes do grito aparecer.
+    if (el < 0.045) { ctx.fillStyle = accent; ctx.fillRect(0, 0, w, h); return; }
     if (el < 0.07) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h); return; }
     if (!img || !m) { drawJumpscare(ctx, js.type, w, h, Math.min(1, p), t); return; }
-    const stutter = Math.floor(el * 16) / 16; // animação "travando"
+    const stutter = Math.floor(el * 20) / 20; // animação "travando", mais nervosa
     const base = Math.min(w, h);
-    let zoom = 1.05 + Math.min(1, stutter * 5) * 0.55;
-    if (js.fatal && p > 0.5) zoom += (p - 0.5) * 3.2;
-    const shake = base * (0.06 * (1 - Math.min(1, p * 1.3)) + 0.012);
-    const bgPulse = Math.floor(el * 20) % 2;
+    let zoom = 1.12 + Math.min(1, stutter * 6) * 0.8;
+    if (js.fatal && p > 0.5) zoom += (p - 0.5) * 3.6;
+    const shake = base * (0.095 * (1 - Math.min(1, p * 1.1)) + 0.016);
+    const bgPulse = Math.floor(el * 24) % 2;
     ctx.fillStyle = el < 0.12 ? '#ffffff' : bgPulse ? '#2a0003' : '#080000';
     ctx.fillRect(0, 0, w, h);
-    const frame = [0, 1, 2, 2, 1, 2][Math.floor(el * 24) % 6];
+    const frame = [0, 1, 2, 2, 1, 2][Math.floor(el * 30) % 6];
     const size = base * zoom;
-    const jx = (hash(Math.floor(el * 30)) - 0.5) * shake * 2;
-    const jy = (hash(Math.floor(el * 30) + 7) - 0.5) * shake * 2;
+    const jx = (hash(Math.floor(el * 36)) - 0.5) * shake * 2;
+    const jy = (hash(Math.floor(el * 36) + 7) - 0.5) * shake * 2;
     ctx.imageSmoothingEnabled = false;
-    // eco vermelho deslocado
-    ctx.globalAlpha = 0.45;
-    drawFrame(ctx, img, m.fw, m.fh, frame, 0, w / 2 - size / 2 + jx * 3, h / 2 - size / 2 + jy * 2, size, size);
+    // aberração cromática: ecos deslocados em direções opostas
+    ctx.globalAlpha = 0.4;
+    ctx.globalCompositeOperation = 'lighter';
+    drawFrame(ctx, img, m.fw, m.fh, frame, 0, w / 2 - size / 2 + jx * 3.4, h / 2 - size / 2 + jy * 2.2, size, size);
+    ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
     drawFrame(ctx, img, m.fw, m.fh, frame, 0, w / 2 - size / 2 + jx, h / 2 - size / 2 + jy, size, size);
+    // lavagem de cor por animatrônico (dá personalidade ao susto)
+    if (el < 0.5) {
+      ctx.globalAlpha = Math.max(0, 0.32 - el * 0.5);
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = accent;
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+    }
     // rasgos
-    for (let i = 0; i < (el < 0.25 ? 6 : 2); i++) {
-      const y = hash(i * 13 + Math.floor(el * 25)) * h;
-      const hh = hash(i * 7 + Math.floor(el * 25)) * 18 + 2;
-      const off = (hash(i * 3 + Math.floor(el * 25)) - 0.5) * 60;
+    for (let i = 0; i < (el < 0.3 ? 9 : 3); i++) {
+      const y = hash(i * 13 + Math.floor(el * 26)) * h;
+      const hh = hash(i * 7 + Math.floor(el * 26)) * 22 + 2;
+      const off = (hash(i * 3 + Math.floor(el * 26)) - 0.5) * 90;
       try { ctx.drawImage(ctx.canvas, 0, y * (ctx.canvas.height / h), ctx.canvas.width, hh * (ctx.canvas.height / h), off, y, w, hh); } catch { /* ignora */ }
     }
     if (js.fatal && p > 0.72) {

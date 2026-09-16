@@ -8,13 +8,13 @@ export const ANIMATRONIC_INFO = {
   marola: { name: 'Marola, a Foca Cantora', short: 'Marola', color: '#5d7c8f', eye: '#8ff7ff',
     desc: 'A foca se arrasta devagar, mas quando me vê dá uma arrancada absurda. Se eu aguentar uns segundos, ela cansa.' },
   lume: { name: 'Lume, a Mariposa Lanterneira', short: 'Lume', color: '#c9b67a', eye: '#ff7af2',
-    desc: 'A mariposa vem atrás de luz. Com a lanterna acesa ela me vê de longe. No escuro ela quase não enxerga.' },
+    desc: 'A mariposa é surda — correr, gritar, nada disso adianta com ela. Mas enxerga rápido demais: com a lanterna acesa ela me vê de longe, e no escuro quase não enxerga nada. É a mais veloz de todas.' },
   gregorio: { name: 'Gregório, o Gorila Garçom', short: 'Gregório', color: '#3d3a44', eye: '#ff3b3b',
-    desc: 'O gorila ouve qualquer barulho. Abre porta num instante e esmurra as blindadas até arrombar, gastando a energia.' },
+    desc: 'O gorila ouve qualquer barulho — passos, portas, e até minha própria voz no microfone. Abre porta num instante e esmurra as blindadas até arrombar, gastando a energia.' },
   maestro: { name: 'O Maestro', short: 'Maestro', color: '#1c1320', eye: '#ffffff',
-    desc: 'O Maestro enxerga pra todo lado. Quando me acha, rege os outros até mim.' },
+    desc: 'O Maestro enxerga pra todo lado. De vez em quando ele simplesmente aparece do nada bem perto de alguém — a tela treme quando ele faz isso — e quando me acha, rege os outros até mim.' },
   pipoca: { name: 'Pipoca, o Macaco dos Pratos', short: 'Pipoca', color: '#8f5a33', eye: '#ff2a1a',
-    desc: 'O macaco não ataca, mas se eu passar correndo ou de lanterna perto dele, ele bate os pratos e todos ouvem. Perto dele eu ando agachado (Espaço). E ele muda de lugar quando ninguém tá olhando.' },
+    desc: 'O macaco não machuca ninguém — é só uma alucinação pra mexer com a cabeça da gente. Ele se teleporta perto e a tela tremeluz, ou bate os pratos se eu passar correndo ou de lanterna perto dele (aí todo mundo ouve). Perto dele eu ando agachado (Espaço). E ele muda de lugar quando ninguém tá olhando.' },
 };
 
 export const DIFFICULTIES = {

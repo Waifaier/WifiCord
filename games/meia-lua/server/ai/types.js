@@ -16,7 +16,10 @@ export const ANIM_TYPES = {
     // tempo vira alvo preferido da próxima ronda dela (ver startPatrol()).
   },
   lume: {
-    speed: 2.25, chase: 3.85, sight: 5.5, fov: 140, hearing: 6, damage: 26,
+    // É a mais rápida de todas (speed/chase) e é completamente surda
+    // (hearing: 0) — passos, gritos, correr, nada disso a alerta. Só
+    // enxerga mesmo, e enxerga muito bem perto de luz (lightSeeker).
+    speed: 2.25, chase: 3.85, sight: 5.5, fov: 140, hearing: 0, damage: 26,
     doorTime: 1.0, home: { x: 60.5, y: 24.5 },
     patrol: ['cozinha', 'salao', 'banheiros', 'corredor_leste', 'corredor_norte', 'corredor_oeste', 'deposito', 'palco'],
     idle: [3, 7], lightSeeker: true, lightSight: 14,
@@ -25,7 +28,7 @@ export const ANIM_TYPES = {
     speed: 1.8, chase: 3.3, sight: 7, fov: 105, hearing: 16, damage: 50,
     doorTime: 0.4, home: { x: 64.5, y: 33.5 },
     patrol: ['cozinha', 'salao', 'corredor_leste', 'corredor_oeste', 'corredor_norte', 'porao', 'deposito', 'escritorio', 'seguranca'],
-    idle: [3, 8], bashDoors: true,
+    idle: [3, 8], bashDoors: true, hearsVoice: true, // também escuta o microfone (ver Match.playerVoiceNoise)
     blackoutStalker: true, // evento: quando a energia acaba, ele para de
     // rondar normal e vem caçando por audição (ver Animatronic.startBlackoutHunt) —
     // só dá pra ver os olhos brilhando dele no escuro até a luz voltar.

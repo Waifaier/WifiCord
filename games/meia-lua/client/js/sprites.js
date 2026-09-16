@@ -180,10 +180,10 @@ export function drawAnimatronic(c, type, x, y, s, dir, t, { state = 'IDLE', movi
 // ---------------------------------------------------------------- jumpscare
 export function drawJumpscare(c, type, w, h, p, t) {
   const info = ANIMATRONIC_INFO[type] || ANIMATRONIC_INFO.tonho;
-  c.fillStyle = p < 0.08 ? '#fff' : `rgba(${60 + Math.random() * 60},0,0,1)`;
+  c.fillStyle = p < 0.05 ? info.eye : p < 0.1 ? '#fff' : `rgba(${60 + Math.random() * 60},0,0,1)`;
   c.fillRect(0, 0, w, h);
-  const scale = Math.min(w, h) * (0.55 + p * 0.9);
-  const shake = (1 - p) * 30 + 10;
+  const scale = Math.min(w, h) * (0.65 + p * 1.05);
+  const shake = (1 - p) * 44 + 14;
   c.save();
   c.translate(w / 2 + (Math.random() - 0.5) * shake, h / 2 + (Math.random() - 0.5) * shake);
   c.rotate((Math.random() - 0.5) * 0.12);

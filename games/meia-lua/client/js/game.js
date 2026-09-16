@@ -345,8 +345,8 @@ export class Game {
 
   jumpscare(type, fatal) {
     const now = performance.now() / 1000;
-    this.js = { type, fatal, start: now, dur: fatal ? 1.9 : 1.05 };
-    audio.play(fatal ? 'jumpscareFatal' : 'jumpscare', { vol: 1 });
+    this.js = { type, fatal, start: now, dur: fatal ? 1.9 : 1.1 };
+    audio.play(fatal ? 'jumpscareFatal' : 'jumpscare', { vol: 1, variant: type });
     navigator.vibrate?.(fatal ? [300, 80, 500] : [180, 60, 250]);
     if (this.camOpen) this.closeCams(false);
     this.hurt = 1;

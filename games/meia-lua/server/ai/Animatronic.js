@@ -55,6 +55,7 @@ export class Animatronic {
       this.dir = Math.PI / 2;
       this.trapCd = 4;
       this.relocateCd = rnd(35, 60);
+      this.hauntCd = rnd(18, 28);
     }
   }
 
@@ -190,6 +191,10 @@ export class Animatronic {
 
   hear(noise) {
     if (['DISABLED', 'DORMANT', 'STUNNED', 'CHASE'].includes(this.state)) return;
+    // Só quem tem o ouvido "ligado" no microfone (ver Match.playerVoiceNoise)
+    // percebe barulho vindo da voz — os outros ignoram completamente,
+    // mesmo perto, porque nunca chegam a "ouvir" isso de verdade.
+    if (noise.source === 'voice' && !this.def.hearsVoice) return;
     const d = Math.hypot(noise.x - this.x, noise.y - this.y);
     const range = Math.min(noise.radius * (this.def.hearing / 8), this.def.hearing) * (0.85 + 0.15 * this.aggression);
     if (d > range) return;
@@ -330,6 +335,28 @@ export class Animatronic {
       const spots = this.def.spots.filter((sp) => m.areaAccessible(areaAt(sp.x, sp.y)?.id)
         && players.every((p) => Math.hypot(p.x - sp.x, p.y - sp.y) > 6 && !m.playerSees(p, sp.x, sp.y)));
       if (spots.length) { const sp = pick(spots); this.x = sp.x; this.y = sp.y; }
+      return;
+    }
+    // Assombração: de vez em quando ela se teleporta pra um dos "spots"
+    // mais perto de alguém — sem ninguém vendo — só pra tremeluzir a tela
+    // e sussurrar. Não machuca, não persegue: é só pra mexer com a cabeça.
+    this.hauntCd -= dt;
+    if (this.hauntCd <= 0) {
+      this.hauntCd = rnd(24, 40);
+      const near = players.find((p) => !p.hidden
+        && Math.hypot(p.x - this.x, p.y - this.y) > 5 && Math.hypot(p.x - this.x, p.y - this.y) < 22);
+      if (!near) return;
+      const watched = players.some((p) => m.playerSees(p, this.x, this.y)) || m.isWatchedOnCamera(this.x, this.y);
+      if (watched) return;
+      const spots = this.def.spots.filter((sp) => {
+        const d = Math.hypot(sp.x - near.x, sp.y - near.y);
+        return d > 2.5 && d < 8 && m.areaAccessible(areaAt(sp.x, sp.y)?.id) && !m.playerSees(near, sp.x, sp.y);
+      });
+      if (spots.length) {
+        const sp = pick(spots);
+        this.x = sp.x; this.y = sp.y;
+        m.animHaunt(this, near);
+      }
     }
   }
 
@@ -530,9 +557,7 @@ export class Animatronic {
       this.attackCd = 2.2;
       m.damagePlayer(target, this);
       if (this.def.rolls && m.time < this.rollUntil) { this.stun(1.4); return; }
-      this.setState('SEARCH', 3);
-      this.stateTime = 0;
-      this.tiredUntil = m.time + 1.2; // recuo após atacar
+      this.teleportAfterAttack(target);
       return;
     }
 
@@ -557,6 +582,38 @@ export class Animatronic {
     } else {
       this.followPath(dt);
     }
+  }
+
+  // Depois de acertar o jogador, ele some dali em vez de ficar rondando
+  // perto — teleporta pra outro ponto da própria rota de patrulha, longe
+  // de quem acabou de atacar e fora da linha de visão de qualquer um, e
+  // só depois entra em SEARCH (então quando o jogador se recupera do
+  // susto, o bicho já não está mais ali).
+  teleportAfterAttack(target) {
+    const m = this.match;
+    const ox = this.x, oy = this.y;
+    const areas = this.def.patrol.length ? this.def.patrol : [areaAt(this.x, this.y)?.id].filter(Boolean);
+    let placed = false;
+    for (let tries = 0; tries < 14 && !placed; tries++) {
+      const areaId = pick(areas);
+      if (!m.areaAccessible(areaId)) continue;
+      const pt = randomFloorInArea(areaId);
+      if (!pt) continue;
+      const d = Math.hypot(pt.x - target.x, pt.y - target.y);
+      if (d < 5.5) continue;
+      const seen = [...m.alivePlayers()].some((p) => !p.hidden && m.playerSees(p, pt.x, pt.y));
+      if (seen) continue;
+      this.x = pt.x; this.y = pt.y;
+      placed = true;
+    }
+    this.path = null;
+    this.goal = null;
+    this.dir = Math.random() * Math.PI * 2;
+    this.lostTime = 0;
+    this.setState('SEARCH', rnd(3, 5));
+    this.stateTime = 0;
+    this.tiredUntil = m.time + 1.2; // recuo após atacar
+    m.onAnimTeleportAway(this, target, ox, oy);
   }
 }
 

@@ -1,6 +1,17 @@
 // Sistema de áudio 100% sintetizado (Web Audio API) — sons originais, sem arquivos externos.
 import { settings, onSettings } from './settings.js';
 
+// Timbre de grito por animatrônico (jumpscare): cada um tem uma "voz"
+// diferente — grave e gutural, agudo e insetóide, metálico, etc. — pra não
+// soar todo mundo igual (ver AudioSystem.play('jumpscare', { variant })).
+const JUMPSCARE_VOICES = {
+  tonho: { base: 150, harsh: 95, top: 1300 }, // rosnado grave de bicho grande
+  marola: { base: 260, harsh: 210, top: 2500 }, // grito molhado, gorgolejante
+  lume: { base: 780, harsh: 560, top: 5400 }, // guincho agudo de inseto
+  gregorio: { base: 85, harsh: 55, top: 1400 }, // rugido metálico pesado
+  maestro: { base: 220, harsh: 330, top: 2200 }, // acorde dissonante, quase musical
+};
+
 class AudioSystem {
   constructor() {
     this.ctx = null;
@@ -104,7 +115,7 @@ class AudioSystem {
   }
 
   // ---------- efeitos ----------
-  play(name, { vol = 1, pan = 0 } = {}) {
+  play(name, { vol = 1, pan = 0, variant } = {}) {
     if (!this.ready || vol <= 0.01) return;
     const t = this.now;
     const o = this.out(vol, pan);
@@ -167,25 +178,39 @@ class AudioSystem {
         this.noise(o, t, 1.0, { freq: 3000, vol: 0.8, freqEnd: 400 });
         break;
       case 'jumpscare': {
-        // grito metálico distorcido + impacto grave + estática
+        // 0) estalo seco e instantâneo — o "susto" em si, uma fração de
+        // segundo antes do grito, que é o que faz o som ser reconhecido
+        // como jumpscare (sem ele, fica só um grito qualquer).
+        const v = JUMPSCARE_VOICES[variant] || JUMPSCARE_VOICES.tonho;
+        this.noise(o, t, 0.07, { type: 'highpass', freq: 1000, vol: 1, attack: 0.0008 });
+        this.tone(o, t, 0.05, { type: 'square', freq: v.harsh * 2.2, vol: 0.55, attack: 0.0008 });
+        // grito metálico distorcido (voz varia por animatrônico) + impacto
+        // grave + estática — tudo mais alto e mais brusco que antes.
         const d = this.ctx.createGain();
         d.gain.value = 1;
         d.connect(this.dist);
-        const t0 = t + 0.06;
-        for (const [f, det] of [[620, 0], [655, 35], [930, -20], [310, 12]]) {
-          this.tone(d, t0, 1.25, { type: 'sawtooth', freq: f, freqEnd: f * 0.35, vol: 0.45, attack: 0.004, detune: det });
+        const t0 = t + 0.045;
+        for (const [f, det] of [[v.base, 0], [v.base * 1.06, 35], [v.top * 0.5, -20], [v.harsh, 12]]) {
+          this.tone(d, t0, 1.3, { type: 'sawtooth', freq: f, freqEnd: f * 0.3, vol: 0.55, attack: 0.003, detune: det });
         }
-        for (let i = 0; i < 14; i++) this.tone(d, t0 + i * 0.045, 0.05, { type: 'square', freq: 1400 + Math.random() * 2400, vol: 0.25, attack: 0.002 });
-        this.noise(d, t0, 1.3, { type: 'bandpass', freq: 2600, q: 0.6, vol: 1, attack: 0.003, freqEnd: 500 });
-        this.tone(o, t0, 0.9, { type: 'sine', freq: 90, freqEnd: 32, vol: 1, attack: 0.002 });
-        this.noise(o, t0, 0.25, { type: 'lowpass', freq: 180, vol: 1, attack: 0.002 });
-        this.duck(1.4);
+        for (let i = 0; i < 18; i++) this.tone(d, t0 + i * 0.038, 0.05, { type: 'square', freq: v.top * (0.35 + Math.random() * 0.7), vol: 0.3, attack: 0.0015 });
+        this.noise(d, t0, 1.35, { type: 'bandpass', freq: 2900, q: 0.5, vol: 1, attack: 0.002, freqEnd: 420 });
+        this.tone(o, t0, 0.95, { type: 'sine', freq: 105, freqEnd: 26, vol: 1, attack: 0.0015 });
+        this.noise(o, t0, 0.3, { type: 'lowpass', freq: 170, vol: 1, attack: 0.0015 });
+        this.duck(1.5);
         break;
       }
       case 'jumpscareFatal':
-        this.play('jumpscare', { vol });
+        this.play('jumpscare', { vol, variant });
         this.tone(o, t + 0.9, 1.4, { type: 'sawtooth', freq: 55, freqEnd: 30, vol: 0.6 });
         this.noise(o, t + 1.0, 1.2, { type: 'highpass', freq: 3000, vol: 0.5, attack: 0.3 });
+        break;
+      case 'teleportOut':
+        // "sumiço" do animatrônico depois de atacar: estática subindo +
+        // um tom grave escorregando pra baixo, cortando seco no final.
+        this.noise(o, t, 0.5, { type: 'highpass', freq: 3200, vol: 0.6, attack: 0.002, freqEnd: 9500 });
+        this.tone(o, t, 0.35, { type: 'sine', freq: 820, freqEnd: 55, vol: 0.32, attack: 0.002 });
+        this.tone(o, t + 0.05, 0.18, { type: 'square', freq: 1700, vol: 0.08, attack: 0.001 });
         break;
       case 'notice': {
         // "ele percebeu": raspão metálico + inspiração reversa + batida seca

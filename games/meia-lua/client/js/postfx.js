@@ -106,7 +106,16 @@ export class PostFX {
     this.canvas = canvas;
     this.ok = false;
     try {
-      const gl = canvas.getContext('webgl', { antialias: false, premultipliedAlpha: false, preserveDrawingBuffer: false })
+      // preserveDrawingBuffer:true é essencial aqui: sem ele, o navegador
+      // pode "limpar" o buffer da tela logo depois de compor o frame, e se
+      // isso acontecer antes do próximo desenho (comum em celulares, onde o
+      // ritmo de composição da tela é mais instável que no desktop), a
+      // tela do jogo fica completamente preta mesmo com o desenho
+      // acontecendo normalmente por baixo. Foi exatamente isso que
+      // reproduzi testando em um perfil de celular: o quadro era desenhado
+      // certinho, mas ao ler os pixels da tela um instante depois, vinha
+      // tudo zerado (preto/transparente).
+      const gl = canvas.getContext('webgl', { antialias: false, premultipliedAlpha: false, preserveDrawingBuffer: true })
         || canvas.getContext('experimental-webgl');
       if (!gl) return;
       this.gl = gl;

@@ -11,6 +11,8 @@ export class VoiceChat {
     this.active = false;
     this.talking = false;
     this.onChange = () => {};
+    this._levelCtx = null;
+    this._levelRaf = null;
 
     socket.on('voice:peer-joined', ({ id }) => { if (this.active) this.connect(id, true); });
     socket.on('voice:peer-left', ({ id }) => this.drop(id));
@@ -28,17 +30,61 @@ export class VoiceChat {
     if (!res?.ok) { this.leave(); throw new Error(res?.error || 'Falha ao entrar na voz.'); }
     // Quem entra agora espera ofertas de quem já está? Não: quem entra inicia com os existentes.
     for (const id of res.peers) this.connect(id, true);
+    this.startLevelMeter();
     this.onChange();
   }
 
   leave() {
     if (!this.active && !this.stream) return;
     this.active = false;
+    this.stopLevelMeter();
     this.socket.emit('voice:leave', {});
     for (const id of [...this.peers.keys()]) this.drop(id);
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
     this.onChange();
+  }
+
+  // Mede o volume do próprio microfone localmente (Web Audio) e manda só
+  // um número (0..1) pro servidor de vez em quando — nunca o áudio em si.
+  // É o que dá ao Gregório (hearsVoice, ver server/ai/types.js) o "ouvido"
+  // pra perceber o jogador falando, igual ele já percebe passos.
+  startLevelMeter() {
+    if (this._levelCtx || !this.stream) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      const ctx = new AC();
+      const src = ctx.createMediaStreamSource(this.stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.5;
+      src.connect(analyser);
+      this._levelCtx = ctx;
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      let lastSent = 0;
+      const tick = () => {
+        if (!this.active || this._levelCtx !== ctx) return;
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) { const v = (data[i] - 128) / 128; sum += v * v; }
+        const rms = Math.sqrt(sum / data.length);
+        const now = performance.now();
+        const speaking = !settings.ptt || this.talking;
+        if (speaking && rms > 0.035 && now - lastSent > 350) {
+          lastSent = now;
+          this.socket.emit('voice:level', { l: Math.min(1, rms * 4.5) });
+        }
+        this._levelRaf = requestAnimationFrame(tick);
+      };
+      this._levelRaf = requestAnimationFrame(tick);
+    } catch (err) { console.warn('[voz] medidor de volume', err); }
+  }
+
+  stopLevelMeter() {
+    if (this._levelRaf) cancelAnimationFrame(this._levelRaf);
+    this._levelRaf = null;
+    if (this._levelCtx) { const c = this._levelCtx; this._levelCtx = null; c.close().catch(() => {}); }
   }
 
   applyPtt() {
