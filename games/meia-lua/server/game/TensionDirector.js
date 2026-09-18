@@ -22,10 +22,26 @@ const CATEGORY_BY_PHASE = {
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rnd = (a, b) => a + Math.random() * (b - a);
 
+// Reescrito pra seguir a filosofia "o jogador não sabe que entrou num jogo
+// de terror" — ele começa achando que só foi contratado pra um trabalho
+// esquisito numa pizzaria velha, e o terror precisa CONTAMINAR essa rotina
+// aos poucos, não anunciar a chegada dele. Isso muda três coisas na curva,
+// todas proporcionais à duração real da noite (antes eram segundos fixos,
+// o que não escalava direito com NIGHT_SECONDS custom):
+//   1. a fase 'calma' (só ambientação banal, nunca nada que pareça um
+//      "evento de terror") dura bem mais — referência: ~95% trabalho / 5%
+//      estranho no começo, indo pra ~60/40 perto do meio da noite (ver
+//      allowedCategories() e o multiplicador de intervalo em Match.js);
+//   2. a tensão sobe mais devagar por padrão — o susto precisa parecer
+//      "aconteceu" e não "o jogo decidiu que já é hora";
+//   3. a categoria 'real' (hoje só O Show) fica travada até bem mais tarde
+//      na noite, mesmo que a tensão numérica já tivesse permitido antes —
+//      nunca é o primeiro susto da sessão.
 export class TensionDirector {
-  constructor() {
+  constructor(duration = 360) {
+    this.duration = Math.max(30, duration);
     this.phase = 'calma';
-    this.tension = 8;
+    this.tension = 4;
     this.timeInPhase = 0;
     this.matchTime = 0;
     this.recoveryUntil = 0; // enquanto > matchTime, só 'ambient' e 'sempre' passam
@@ -39,11 +55,11 @@ export class TensionDirector {
     this.matchTime += dt;
     this.timeInPhase += dt;
 
-    let delta = 0.55; // deriva natural pra cima — a tensão nunca fica parada de vez
-    if (signals.darkness) delta += 0.9;
-    if (signals.nearDanger) delta += 1.1;
-    if (signals.alone) delta += 0.35;
-    if (signals.togetherCalm) delta -= 0.4; // grupo junto e tudo calmo: um respiro
+    let delta = 0.4; // deriva natural pra cima — mais lenta que antes (era 0.55): dá tempo da rotina assentar antes de qualquer coisa subir sozinha
+    if (signals.darkness) delta += 0.8;
+    if (signals.nearDanger) delta += 1.05;
+    if (signals.alone) delta += 0.3;
+    if (signals.togetherCalm) delta -= 0.45; // grupo junto e tudo calmo: um respiro
     if (this.phase === 'falsaSeguranca') delta -= 1.6; // a "isca" de segurança precisa parecer real
     this.tension = clamp(this.tension + delta * dt, 0, 100);
 
@@ -54,14 +70,16 @@ export class TensionDirector {
     const t = this.tension;
     switch (this.phase) {
       case 'calma':
-        if (t > 22) this._enter('estranheza');
+        // Limiar mais alto que antes (era 22) — a fase de "só trabalho"
+        // precisa durar de verdade, não só alguns segundos.
+        if (t > 30) this._enter('estranheza');
         break;
       case 'estranheza':
-        if (t > 42) this._enter('tensao');
+        if (t > 55) this._enter('tensao');
         else if (t < 10) this._enter('calma');
         break;
       case 'tensao':
-        if (t > 68) this._enter(Math.random() < 0.35 ? 'falsaSeguranca' : 'tensaoExtrema');
+        if (t > 78) this._enter(Math.random() < 0.35 ? 'falsaSeguranca' : 'tensaoExtrema');
         break;
       case 'falsaSeguranca':
         // Dura um tempo fixo curto (não depende só da tensão, que está
@@ -82,17 +100,45 @@ export class TensionDirector {
     if (phase === 'falsaSeguranca') this._falsaDur = rnd(6, 12);
   }
 
-  // Primeiros segundos de partida: só o mais discreto possível, pra dar
-  // tempo do jogador pensar "foi só o jogo" antes de qualquer coisa maior
-  // (pedido #13 — primeira impressão).
+  // Primeiro pedaço de partida: só o mais discreto possível — nada que
+  // pareça um "evento de terror" de verdade, só a rotina normal do
+  // trabalho (que já é meio decadente/esquisita por conta própria). Agora
+  // é uma fração da duração real da noite (antes eram 45s fixos, que numa
+  // noite mais longa/curta não fazia sentido igual): ~20% da noite,
+  // referência do pedido "o jogador precisa entrar sem entender
+  // completamente onde está".
   get earlyGame() {
-    return this.matchTime < 45;
+    return this.matchTime < this.duration * 0.2;
+  }
+
+  // Ainda mais cedo que earlyGame — os primeiros instantes de todos: nem
+  // ambientação nenhuma tem chance de rolar aqui (ver o gate extra em
+  // Match.updateWorld), só a própria rotina/tarefas. É literalmente o
+  // "primeira impressão: 'que lugar velho', não 'entrei num jogo de
+  // terror'".
+  get openingRoutine() {
+    return this.matchTime < this.duration * 0.08;
   }
 
   allowedCategories() {
     if (this.earlyGame) return ['ambient'];
     if (this.matchTime < this.recoveryUntil) return ['ambient'];
-    return CATEGORY_BY_PHASE[this.phase] || ['ambient'];
+    const cats = CATEGORY_BY_PHASE[this.phase] || ['ambient'];
+    // 'real' (hoje só O Show) trava até bem mais tarde na noite mesmo que
+    // a tensão numérica já tivesse liberado a fase 'tensaoExtrema' antes
+    // disso — nunca deve ser o primeiro susto grande da sessão (pedido:
+    // "não transforme isso em jumpscare cedo demais").
+    if (this.matchTime < this.duration * 0.32) return cats.filter((c) => c !== 'real');
+    return cats;
+  }
+
+  // 0 nos primeiros instantes, sobe suavemente até 1 por volta de metade
+  // da noite — usado só pra Match espaçar o INTERVALO entre eventos (não
+  // a categoria, que allowedCategories() já cobre), seguindo a proporção
+  // pedida (~95/5 no começo, ~60/40 depois). Não é mais uma coisa pra
+  // seguir à risca, só a referência de progressão.
+  get routineRatio() {
+    return clamp(1 - this.matchTime / (this.duration * 0.5), 0, 1);
   }
 
   // Peso adaptativo: cada vez que um tipo específico já rodou nessa

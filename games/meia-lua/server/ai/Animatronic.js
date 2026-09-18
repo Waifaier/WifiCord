@@ -121,11 +121,14 @@ export class Animatronic {
     if (this.blackoutHunt || this.state === 'DISABLED') return;
     const target = this.pickNearestPlayer();
     if (!target) return;
+    // Passa pelo mesmo portão de qualquer outra perseguição (ver
+    // Match.requestChase) — mesmo um apagão não pula a "primeira
+    // perseguição precisa ter contexto" (regra #17). Enquanto travado, o
+    // apagão vira só mais uma aparição calma vinda da escuridão.
+    if (!this.match.requestChase(this, target)) return;
     this.blackoutHunt = true;
     this.blackoutTrackCd = 0;
-    this.targetId = target.id;
     this.lastSeen = { x: target.x, y: target.y };
-    this.setState('CHASE');
   }
 
   endBlackoutHunt() {
@@ -255,8 +258,7 @@ export class Animatronic {
           const d = Math.hypot(seen.x - this.x, seen.y - this.y);
           const instant = d < 2.3 || (m.blackout && d < 4) || (this.state === 'SEARCH' && d < 3.5);
           if (instant) {
-            this.targetId = seen.id;
-            this.setState('CHASE');
+            m.requestChase(this, seen); // ver Match.requestChase — vira aparição calma se a 1ª perseguição ainda não foi liberada
           } else {
             // percebeu algo: para, encara e a suspeita vai enchendo
             const wasInvestigating = this.state === 'INVESTIGATE';
@@ -407,7 +409,7 @@ export class Animatronic {
       rate *= 0.75 + 0.25 * this.aggression;
       this.notice += rate * dt;
       this.lastSeen = { x: t.x, y: t.y };
-      if (this.notice >= 1) { this.targetId = t.id; this.notice = 0; this.setState('CHASE'); }
+      if (this.notice >= 1) { this.notice = 0; m.requestChase(this, t); }
     } else {
       this.notice -= dt * 0.4;
       if (this.notice <= 0) {

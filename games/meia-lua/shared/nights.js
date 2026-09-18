@@ -27,7 +27,12 @@ export const DEFAULT_DIFFICULTY = 'dificil';
 export const NIGHTS = {
   1: {
     title: 'Noite 1 — Primeiro Turno',
-    intro: 'Primeira noite. Me contrataram pra fazer o "inventário" da Pizzaria Meia-Lua, fechada há 12 anos. A energia mal funciona... e juro que vi os bonecos do palco mexerem a cabeça.',
+    // Regra #1/#9: o início precisa parecer só um bico estranho numa
+    // pizzaria velha e decadente — "que lugar velho", não "entrei num
+    // jogo de terror". Nada de sobrenatural, nenhum aviso, nenhum boneco
+    // mexendo sozinho — isso o jogador tem que descobrir por conta própria,
+    // bem mais tarde.
+    intro: 'Primeira noite. Consegui um bico pra dar um jeito na Pizzaria Meia-Lua — parece que tá fechada faz uns bons anos. Inventário, limpeza, o que aparecer. Combinei de vir à noite mesmo, que é quando dá pra entrar sem atrapalhar ninguém. Vamos ver no que dá.',
     animatronics: ['tonho', 'marola'],
     aggression: 1.05,
     powerDrain: 1.0,
@@ -37,11 +42,15 @@ export const NIGHTS = {
     spawns: [
       { item: 'fusivel', count: 3, areas: ['salao', 'palco', 'cozinha', 'banheiros', 'corredor_oeste', 'corredor_leste', 'escritorio'] },
     ],
+    // Regra #2/#10: tarefas de trabalho normal primeiro ("limpar o
+    // palco", não "investigar o palco") — a descoberta (a chave entre as
+    // tábuas) continua acontecendo, só que como um efeito colateral da
+    // tarefa banal, não como o objetivo declarado dela.
     quests: [
-      { id: 'n1_palco', type: 'interact', target: 'o_palco', title: 'Investigar o palco', desc: 'Tem algo brilhando no centro do palco.', hint: 'Primeiro o palco. Fica ao norte do salão. Se eu chegar perto do ponto de interrogação e apertar E, vejo o que é.', done: 'Uma chave presa entre as tábuas do palco... é a do depósito.', reward: { xp: 40, money: 15 }, gives: 'chave_deposito' },
-      { id: 'n1_fusiveis', type: 'collect', item: 'fusivel', count: 3, title: 'Encontrar três fusíveis', desc: 'Os fusíveis devem estar jogados por aí.', hint: 'Vou revirar caixas e armários com E. Quando aparece aquele brilho roxo ✦, sei que tem algo importante por perto.', done: 'Três fusíveis. Agora é levar pro depósito.', reward: { xp: 60, money: 20 } },
-      { id: 'n1_energia', type: 'deliver', item: 'fusivel', count: 3, target: 'o_fusiveis', requires: ['n1_fusiveis', 'n1_palco'], title: 'Restaurar a energia', desc: 'Tenho que colocar os fusíveis na caixa do depósito.', hint: 'Com a chave, abro o depósito pelo Corredor Oeste. A caixa de fusíveis fica num canto lá dentro.', done: 'Clack. As luzes zumbiram. A energia voltou!', reward: { xp: 80, money: 35 }, effect: { power: 45 } },
-      { id: 'n1_sobreviver', type: 'survive', title: 'Sobreviver até 6:00', desc: 'Só preciso aguentar até as 6.', hint: 'Se algo vier, fecho uma porta blindada (Segurança ou Escritório) ou me escondo num armário. As portas comem energia, então nada de deixar fechado à toa.', done: 'Seis da manhã. Consegui.', reward: { xp: 100, money: 50 } },
+      { id: 'n1_palco', type: 'interact', target: 'o_palco', title: 'Limpar o palco', desc: 'Antes de mais nada, dá uma limpada no palco — parece que ninguém mexe aqui há anos.', hint: 'O palco fica ao norte do salão. Chego perto do ponto de interrogação e aperto E pra começar a limpar.', done: 'Varrendo, achei uma chave presa entre as tábuas do palco... deve ser a do depósito.', reward: { xp: 40, money: 15 }, gives: 'chave_deposito' },
+      { id: 'n1_fusiveis', type: 'collect', item: 'fusivel', count: 3, title: 'Juntar uns fusíveis', desc: 'O painel de energia tá com uns fusíveis faltando — devem estar largados por aí.', hint: 'Vou revirar caixas e armários com E. Quando aparece aquele brilho roxo ✦, sei que tem algo útil por perto.', done: 'Três fusíveis. Agora é levar pro depósito.', reward: { xp: 60, money: 20 } },
+      { id: 'n1_energia', type: 'deliver', item: 'fusivel', count: 3, target: 'o_fusiveis', requires: ['n1_fusiveis', 'n1_palco'], title: 'Restaurar a energia', desc: 'Com os fusíveis em mãos, dá pra religar o painel no depósito.', hint: 'Com a chave, abro o depósito pelo Corredor Oeste. A caixa de fusíveis fica num canto lá dentro.', done: 'Clack. As luzes zumbiram. A energia voltou.', reward: { xp: 80, money: 35 }, effect: { power: 45 } },
+      { id: 'n1_sobreviver', type: 'survive', title: 'Fechar o turno', desc: 'Só preciso terminar o expediente até as 6.', hint: 'Lugar velho, chão que range, cano que bate — é só ignorar e continuar trabalhando. Se alguma coisa parecer estranha demais, dá pra fechar uma porta blindada (Segurança ou Escritório) ou me esconder num armário — mas isso gasta energia, então não é pra ficar fechando à toa.', done: 'Seis da manhã. Turno fechado.', reward: { xp: 100, money: 50 } },
     ],
   },
   2: {

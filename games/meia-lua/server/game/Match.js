@@ -66,13 +66,35 @@ export class Match {
     this.phoneUntil = 0;
     this.noises = [];
     this.lastCamCheckAt = 0; // evento do Tonho (ver Animatronic.speedNow)
-    this.nextEventAt = rnd(...this.cfg.eventInterval) * 0.6 * this.diff.events;
+    // Primeiro sorteio de evento vem bem mais devagar que os seguintes —
+    // os primeiros minutos são pra render trabalho, não terror (ver
+    // TensionDirector.openingRoutine e o multiplicador de intervalo em
+    // updateWorld()).
+    this.nextEventAt = rnd(...this.cfg.eventInterval) * 1.4 * this.diff.events;
     this.lastEventType = null;
     this.eventLog = [];
     // Ritmo do terror (ver TensionDirector.js) — decide só a CATEGORIA de
     // evento permitida a cada momento (fases calma/estranheza/tensão/...);
     // o sorteio e a execução de cada evento continuam 100% aqui no Match.
-    this.director = new TensionDirector();
+    this.director = new TensionDirector(this.duration);
+    // "O jogador não sabe que entrou num jogo de terror" — ver a filosofia
+    // completa no topo do commit. Dois marcos controlam isso:
+    //  - firstEncounterDone: já rolou a primeira aparição CALMA de um
+    //    animatrônico de verdade (parado, longe, sem perseguir — regra #7).
+    //    Some sozinho na hora, o jogo nunca diz "você viu uma coisa".
+    //  - firstChaseUnlocked: só depois disso é que QUALQUER perseguição de
+    //    verdade pode começar — e só depois de uma sequência de contexto
+    //    (silêncio → som → nada → som mais perto — regra #17), nunca como
+    //    primeiro susto da sessão. Enquanto travado, todo animatrônico que
+    //    "pegaria" um jogador vira só mais uma aparição calma em vez disso
+    //    (ver requestChase() e Animatronic.js).
+    this.firstEncounterDone = false;
+    this.firstEncounterAt = -999;
+    this.firstChaseUnlocked = false;
+    this.chaseBuildupScheduled = false;
+    // Marca se a "primeira coisa estranha" silenciosa (regra #3 — uma
+    // cadeira em outro lugar, sem nenhum aviso) já rolou nessa partida.
+    this.firstOddityDone = false;
     // Sequências de passos ao longo do tempo (ver EventChains.js) — falso
     // alarme com resolução tardia, correntes assimétricas entre
     // jogadores, etc. Passo por passo continua tudo decidido aqui no
@@ -86,6 +108,8 @@ export class Match {
     this.showEndAt = 0;
     this.lastShowAt = -999;
     this.showDoorPrev = null;
+    this.showEndMode = 'susto'; // sorteado de novo a cada show — ver runShowEvent
+    this.showLingerAnimId = null;
 
     // Portas
     this.doors = new Map();
@@ -445,8 +469,33 @@ export class Match {
       && aliveList.every((p) => aliveList.every((q) => Math.hypot(p.x - q.x, p.y - q.y) < 12));
     this.director.update(dt, { darkness, nearDanger, alone: soloPlayer, togetherCalm });
 
-    // eventos aleatórios
-    if (this.time >= this.nextEventAt && this.time > GRACE_SECONDS + 10) {
+    // A "primeira coisa estranha" (regra #3) — garantida uma vez por
+    // partida, mas só depois que o jogador já teve uns bons segundos de
+    // rotina normal, e nunca no exato instante em que uma missão termina
+    // (pra não virar "terminei a tarefa → aconteceu algo", que é
+    // exatamente o padrão de script que a regra #5/#25 pede pra evitar).
+    if (!this.firstOddityDone && !this.director.openingRoutine && this.time > this.duration * 0.1 && Math.random() < 0.0006) {
+      this.tryFirstOddity();
+    }
+
+    // Uma vez que já rolou a primeira aparição calma (ver requestChase),
+    // dispara — só uma vez — a sequência de contexto que precisa acontecer
+    // antes de QUALQUER perseguição de verdade poder começar (regra #17).
+    // Exige folga real desde a aparição ("muito mais tarde", não em
+    // seguida) e que a tensão já tenha saído da calma pura.
+    if (!this.firstChaseUnlocked && !this.chaseBuildupScheduled && this.firstEncounterDone
+      && this.director.phase !== 'calma' && this.time > this.firstEncounterAt + 25) {
+      this.chaseBuildupScheduled = true;
+      this.scheduleFirstChaseBuildup();
+    }
+
+    // eventos aleatórios — no início da noite ("regra #24": ~95% trabalho
+    // / 5% estranho) o intervalo entre sorteios fica bem mais esticado, em
+    // cima da restrição de categoria que earlyGame já aplica (ver
+    // TensionDirector.allowedCategories) — as duas coisas juntas é que
+    // fazem a abertura parecer rotina de verdade, não só "os mesmos
+    // eventos, só que mais raros".
+    if (this.time >= this.nextEventAt && this.time > Math.max(GRACE_SECONDS + 10, this.duration * 0.05)) {
       this.runRandomEvent();
       const [a, b] = this.cfg.eventInterval;
       // Reta final da noite: os eventos ficam mais frequentes conforme o
@@ -455,8 +504,9 @@ export class Match {
       // desse gênero costumam ter, e dá uma sensação de clímax se
       // aproximando em vez de uma noite inteira no mesmo ritmo.
       const remaining = Math.max(0, this.duration - this.time);
+      const opening = 1 + this.director.routineRatio * 0.8; // até 1.8x mais espaçado na abertura
       const climax = remaining < this.duration * 0.25 ? 0.6 : 1;
-      this.nextEventAt = this.time + rnd(a, b) * this.diff.events * climax;
+      this.nextEventAt = this.time + rnd(a, b) * this.diff.events * climax * opening;
     }
     if (this.showActive && this.time >= this.showEndAt) this.endShowEvent();
     if (this.phoneUntil && this.time > this.phoneUntil) this.phoneUntil = 0;
@@ -1125,6 +1175,87 @@ export class Match {
     }
   }
 
+  // Portão único por onde TODA perseguição de verdade tem que passar (ver
+  // firstChaseUnlocked no construtor). Animatronic.js chama isso em vez de
+  // "setState('CHASE')" direto nos três lugares onde uma perseguição
+  // começaria do zero (não nos que só re-selecionam alvo de uma perseguição
+  // já em andamento — essa já passou pelo portão uma vez).
+  //
+  // Enquanto travado: a "perseguição que ia começar" vira só mais uma
+  // aparição calma (mesmo comportamento do OBSERVE — encara de longe, foge
+  // se o jogador chegar perto, nunca ataca) em vez de virar uma caçada de
+  // verdade. É literalmente a regra #7 ("primeira aparição: parado, muito
+  // distante... o jogador olha novamente, ele não está mais lá") acontecendo
+  // pela via normal do jogo, não um evento fx decorativo à parte.
+  requestChase(anim, target) {
+    if (this.firstChaseUnlocked) {
+      anim.targetId = target.id;
+      anim.setState('CHASE');
+      return true;
+    }
+    if (!anim.def.trap) anim.startObserve(target);
+    if (!this.firstEncounterDone) {
+      this.firstEncounterDone = true;
+      this.firstEncounterAt = this.time;
+    }
+    return false;
+  }
+
+  // Sequência de contexto (regra #17: "o jogador tem medo porque sabe que
+  // aquela criatura já estava presente antes") que precisa acontecer ANTES
+  // da primeira perseguição de verdade poder começar. Só roda uma vez por
+  // partida, disparada de updateWorld() depois que já rolou pelo menos uma
+  // aparição calma (firstEncounterDone) e um tempo de decência desde ela —
+  // "muito mais tarde", não logo em seguida.
+  scheduleFirstChaseBuildup() {
+    const target = pick([...this.alivePlayers()]);
+    if (!target) { this.chaseBuildupScheduled = false; return; } // ninguém em jogo agora — tenta de novo mais tarde
+    const pid = target.id;
+    // Passo 1 (agora): o ambiente abafa por um instante — mesmo mecanismo
+    // do evento 'silencio', mas aqui como abertura de uma sequência, não
+    // como evento avulso.
+    this.broadcast('fx', { type: 'silence', dur: rnd(5, 8) });
+    // Passo 2 (4-7s depois): um som atrás do jogador. Ele olha. Nada lá —
+    // o jogo não manda mais nenhum sinal aqui de propósito, é o próprio
+    // silêncio que faz esse "nada" acontecer.
+    this.chains.schedule(rnd(4, 7), () => {
+      const cur = this.players.get(pid);
+      if (!cur || !cur.alive || cur.hidden) return;
+      const ang = (cur.dir || 0) + Math.PI + rnd(-0.5, 0.5);
+      this.sendTo(cur, 'fx', { type: 'sfx', s: 'stepsBehind', x: r2(cur.x + Math.cos(ang) * rnd(2.5, 3.5)), y: r2(cur.y + Math.sin(ang) * rnd(2.5, 3.5)) });
+    });
+    // Passo 3 (11-18s depois do passo 1): um som metálico, agora mais
+    // perto — a criatura "está mais perto" (regra #17), mas ainda sem
+    // aparecer nem atacar.
+    this.chains.schedule(rnd(11, 18), () => {
+      const cur = this.players.get(pid);
+      if (!cur || !cur.alive || cur.hidden) return;
+      const ang = Math.random() * Math.PI * 2;
+      this.sendTo(cur, 'fx', { type: 'sfx', s: 'metal', x: r2(cur.x + Math.cos(ang) * rnd(1.8, 2.6)), y: r2(cur.y + Math.sin(ang) * rnd(1.8, 2.6)) });
+    });
+    // Passo 4 (19-26s depois do passo 1): o portão abre. A PRÓXIMA vez que
+    // algum animatrônico veria um jogador de perto o suficiente pra
+    // perseguir de verdade, agora pode.
+    this.chains.schedule(rnd(19, 26), () => { this.firstChaseUnlocked = true; });
+  }
+
+  // A "primeira coisa estranha" (regra #3): reposiciona em silêncio um
+  // item já largado no chão — sem som, sem fx, sem ganho de medo, sem
+  // nenhuma explicação. Se o jogador não tiver visto o item antes de sair
+  // da área e voltar, nem chega a notar — e está tudo bem, o objetivo não
+  // é garantir o susto, é que quando ele notar, o jogo não tenha avisado.
+  tryFirstOddity() {
+    const g = [...this.ground.values()].find((x) => ITEMS[x.item]?.type !== 'quest');
+    if (!g) return; // nada largado ainda pra mover — sem problema, só não acontece dessa vez
+    const area = areaAt(g.x, g.y);
+    if (!area) return;
+    const pt = randomFloorInArea(area.id);
+    if (!pt) return;
+    this.firstOddityDone = true;
+    this.removeGround(g.id);
+    this.addGround(g.item, pt.x, pt.y, g.amount, false);
+  }
+
   // Depois que um animatrônico acerta um jumpscare e teleporta pra longe
   // (ver Animatronic.teleportAfterAttack), quem estava perto ouve o
   // "sumiço" dele indo embora — reforça que ele já não está mais ali.
@@ -1614,6 +1745,15 @@ export class Match {
     this.lastShowAt = this.time;
     const dur = rnd(19, 25);
     this.showEndAt = this.time + dur;
+    // Duas formas de terminar (regra #15: "o show não precisa
+    // necessariamente terminar em jumpscare"). 'susto' é a quebra alta de
+    // sempre (luz+som+vibração saindo do palco); 'silenciosa' é mais
+    // perturbadora do jeito oposto — a música para, todo mundo fica
+    // imóvel, e UM animatrônico continua se mexendo um pouco mais que os
+    // outros antes de parar de vez (ver endShowEvent). Nenhuma das duas é
+    // "mais correta" — as duas são reais, o jogador não sabe qual vai vir.
+    this.showEndMode = Math.random() < 0.55 ? 'silenciosa' : 'susto';
+    this.showLingerAnimId = null;
 
     // Sela as únicas passagens entre palco+salão e o resto do mapa —
     // quem tiver ali dentro (área contígua, já que o vão pro palco não
@@ -1647,9 +1787,15 @@ export class Match {
     });
 
     for (const a of AREAS) this.flicker.set(a.id, this.time + dur + 1);
-    this.broadcast('fx', { type: 'show', phase: 'start', dur: Math.round(dur * 10) / 10 });
+    // O começo precisa parecer uma apresentação de verdade, quase
+    // agradável (regra #14) — não "aqui vem o susto". O cliente já cuida
+    // de tocar isso num volume/intensidade bem mais contido que antes (ver
+    // startShowEvent em client/js/game.js); aqui só reduzimos o susto de
+    // medo do início, que era alto demais pra algo que ainda devia parecer
+    // normal.
+    this.broadcast('fx', { type: 'show', phase: 'start', dur: Math.round(dur * 10) / 10, mode: this.showEndMode });
     this.emitSfx('showtimeSting', 31.5, 16.5, 90);
-    for (const p of trappedPlayers) p.fear = Math.min(100, p.fear + 22 * p.derived.fearMult);
+    for (const p of trappedPlayers) p.fear = Math.min(100, p.fear + 10 * p.derived.fearMult);
     this.system(fala('showComeca'));
     this.system(fala('rShow', { nome: pick(trappedPlayers).name }));
 
@@ -1687,19 +1833,23 @@ export class Match {
       if (!this.showActive) return;
       const off = ordered.find((a) => a.type === 'maestro' && a.performing) || pick(ordered.filter((a) => a.performing));
       if (!off) return;
+      // Guarda esse mesmo animatrônico como candidato a "ficar mexendo
+      // sozinho depois que a música já parou" no final silencioso (regra
+      // #15) — reaproveita quem já chamou atenção uma vez na apresentação,
+      // então a continuidade faz sentido em vez de ser um sorteio à parte.
+      this.showLingerAnimId = off.id;
       const savedDir = off.dir;
       off.dir = savedDir + Math.PI * (0.4 + Math.random() * 0.3) * (Math.random() < 0.5 ? 1 : -1);
       this.broadcast('fx', { type: 'showPhase', phase: 'estranho', anim: off.id });
       this.chains.schedule(1.4, () => { if (off.performing) off.dir = savedDir; });
     });
 
-    // Fase "quebra" (existente — o próprio Match/cliente já tratam o
-    // 1.8s final como a hora do "susto de verdade" saindo do palco; aqui
-    // só avisamos o cliente do nome da fase pra ele conseguir reagir de
-    // forma consistente com as fases anteriores em vez de um timer solto).
+    // Fase "quebra": o próprio Match/cliente já tratam o 1.8s final como a
+    // hora do desfecho saindo do palco — o `mode` diz qual dos dois vai
+    // acontecer (ver o comentário no início desta função e endShowEvent).
     this.chains.schedule(Math.max(0, dur - 1.8), () => {
       if (!this.showActive) return;
-      this.broadcast('fx', { type: 'showPhase', phase: 'quebra' });
+      this.broadcast('fx', { type: 'showPhase', phase: 'quebra', mode: this.showEndMode, anim: this.showLingerAnimId });
     });
   }
 
@@ -1716,22 +1866,46 @@ export class Match {
       this.showDoorPrev = null;
     }
 
+    // Final "silencioso" (regra #15): a música já devia ter parado (o
+    // cliente corta o loop na fase 'quebra' — ver onFx em client/js/game.js)
+    // e o palco deveria estar imóvel, mas UM animatrônico específico
+    // continua se mexendo por mais um instante — sozinho, sem música, sem
+    // ninguém dizer o porquê — antes de parar de vez junto com a luz. Só
+    // ele tem seu reset adiado; o resto do elenco já some normal agora.
+    const lingerId = this.showEndMode === 'silenciosa' ? this.showLingerAnimId : null;
+    const linger = lingerId != null ? this.anims.find((a) => a.id === lingerId && a.performing) : null;
+
     // Somem: teleportam de volta pra perto de casa, fora de vista, e a IA
     // volta ao normal só depois de um tempinho em SEARCH (ninguém reaparece
     // bem na cara de quem tava preso lá dentro).
     for (const a of this.anims) {
       if (a.def.trap || a.state === 'DISABLED' || !a.performing) continue;
+      if (a === linger) continue; // esse aqui fica mais um pouco — ver abaixo
       a.performing = false;
       a.x = a.def.home.x; a.y = a.def.home.y;
       a.path = null; a.goal = null;
       a.setState('SEARCH', rnd(4, 7));
     }
 
+    if (linger) {
+      this.broadcast('fx', { type: 'showPhase', phase: 'residual', anim: linger.id });
+      const lingerId2 = linger.id;
+      this.chains.schedule(rnd(2, 3.2), () => {
+        const a = this.anims.find((x) => x.id === lingerId2);
+        if (!a || !a.performing) return; // já foi resetado por outro caminho — nada a fazer
+        a.performing = false;
+        a.x = a.def.home.x; a.y = a.def.home.y;
+        a.path = null; a.goal = null;
+        a.setState('SEARCH', rnd(4, 7));
+        this.broadcast('fx', { type: 'showPhase', phase: 'residualEnd' });
+      });
+    }
+
     // A luz vai embora com eles — precisa achar o gerador/painel pra
     // voltar (mesmo fluxo de sempre: interactObject 'campanel'/'generator').
     this.lightsOn = false;
     this.power = Math.max(0, this.power - rnd(28, 42));
-    this.broadcast('fx', { type: 'show', phase: 'end' });
+    this.broadcast('fx', { type: 'show', phase: 'end', mode: this.showEndMode });
     this.broadcast('fx', { type: 'lights', on: false });
     this.system(fala('showFim'));
     this.system(fala('rShowFim'));

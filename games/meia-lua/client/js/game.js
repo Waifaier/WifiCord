@@ -440,7 +440,7 @@ export class Game {
         break;
       case 'actionCancel': break;
       case 'show':
-        if (f.phase === 'start') this.startShowEvent(f.dur);
+        if (f.phase === 'start') this.startShowEvent(f.dur, f.mode);
         else if (f.phase === 'end') this.endShowEvent();
         break;
       // Fases de verdade da "Hora do Show" (ver runShowEvent em Match.js)
@@ -460,12 +460,27 @@ export class Game {
         } else if (f.phase === 'estranho') {
           audio.play('showGlitch', { vol: 0.5 });
           this.glitch = Math.max(this.glitch, 0.18);
+          // Um tremor bem pequeno aqui em vez de no início do show (regra
+          // #14: a intensidade tem que CRESCER, não começar no talo) — é a
+          // primeira coisa realmente "física" que o jogador sente na
+          // apresentação.
+          if (settings.shake) this.shakeUntil = performance.now() + 220;
+        } else if (f.phase === 'quebra') {
+          // 'quebra' não precisa de reação própria aqui na maior parte dos
+          // casos — o cliente já tem seu próprio timer local pra esse
+          // instante (showBreakAt, ver startShowEvent), que dispara a
+          // quebra visual/sonora sozinho. Só guardamos o modo aqui como
+          // reforço, caso o fx de 'start' não tenha chegado antes por
+          // algum motivo de rede.
+          if (f.mode) this.showEndMode = f.mode;
+        } else if (f.phase === 'residual' || f.phase === 'residualEnd') {
+          // Final "silencioso" (regra #15): o animatrônico que continua se
+          // mexendo depois que a música já parou já está sendo renderizado
+          // normal a partir do snapshot do servidor (ele só demora mais
+          // pra "voltar pra casa" — ver Match.endShowEvent) — de propósito
+          // NENHUMA reação extra aqui, nem som nem vibração: o silêncio em
+          // volta dele é o próprio ponto.
         }
-        // 'quebra' não precisa de reação própria aqui — o cliente já tem
-        // seu próprio timer local pra esse instante (showBreakAt, ver
-        // startShowEvent), que dispara a quebra visual/sonora sozinho.
-        // Este fx existe só pra manter a narrativa de fases consistente
-        // caso algo no futuro precise reagir a ela também.
         break;
       case 'choir':
         audio.play('choir', { vol: 0.7 });
@@ -483,20 +498,27 @@ export class Game {
   // Evento "O Show": susto muito do nada — animatrônicos somem do mapa e
   // reaparecem no palco, portas ao redor travam, luzes coloridas + música.
   // Ver Match.runShowEvent/endShowEvent no servidor.
-  startShowEvent(dur) {
+  // Regra #14: o show precisa começar parecendo uma apresentação de
+  // verdade — "talvez até agradável ou nostálgico" — e só ir ficando
+  // errado aos poucos. Antes a abertura já vinha com sting no talo,
+  // vibração forte e glitch máximo, o que entregava "vem susto" logo de
+  // cara. Agora a intensidade cresce junto com as fases (ver onFx
+  // 'showPhase' acima) em vez de já nascer no pico.
+  startShowEvent(dur, mode) {
     this.showActive = true;
+    this.showEndMode = mode || (Math.random() < 0.55 ? 'silenciosa' : 'susto'); // o servidor manda o modo de verdade; isso aqui é só rede de segurança
     const d = dur || 18;
-    // últimos ~1.8s: eles "quebram" (ver sprites.js) pouco antes do apagão
+    // últimos ~1.8s: o desfecho (susto alto OU o final silencioso — ver
+    // o timeout abaixo) pouco antes do apagão.
     this.showBreakAt = performance.now() / 1000 + Math.max(2, d - 1.8);
     const ov = $('#show-overlay');
     ov.hidden = false;
     requestAnimationFrame(() => ov.classList.add('active'));
-    $('#show-overlay-text').textContent = 'O SHOW VAI COMEÇAR...';
+    $('#show-overlay-text').textContent = 'A APRESENTAÇÃO VAI COMEÇAR...';
     setTimeout(() => { if (this.showActive) $('#show-overlay-text').textContent = ''; }, 2200);
-    audio.play('showtimeSting', { vol: 1 });
-    navigator.vibrate?.([200, 100, 200, 100, 400]);
-    this.glitch = 1;
-    if (settings.shake) this.shakeUntil = performance.now() + 600;
+    audio.play('showtimeSting', { vol: 0.55 });
+    navigator.vibrate?.(90);
+    this.glitch = Math.max(this.glitch, 0.12);
     clearInterval(this.showLoopTimer);
     // o loop de música (showtimeLoop) dura ~4s de fato (ver audio.js) —
     // reencadeia um pouco antes de terminar pra não deixar buraco de silêncio.
@@ -504,9 +526,20 @@ export class Game {
     clearTimeout(this._showBreakSfx);
     this._showBreakSfx = setTimeout(() => {
       if (!this.showActive) return;
-      audio.play('metal', { vol: 0.6 });
-      audio.play('static', { vol: 0.5 });
-      navigator.vibrate?.([80, 40, 80, 40, 160]);
+      if (this.showEndMode === 'silenciosa') {
+        // A música simplesmente para — sem sting, sem vibração, sem
+        // estática. O animatrônico que "fica mexendo sozinho" (ver
+        // showPhase 'residual') já está sendo desenhado pelo snapshot do
+        // servidor; aqui a única coisa que o cliente faz é NÃO tocar o
+        // loop de novo.
+        clearInterval(this.showLoopTimer);
+        this.showLoopTimer = null;
+      } else {
+        audio.play('metal', { vol: 0.6 });
+        audio.play('static', { vol: 0.5 });
+        navigator.vibrate?.([80, 40, 80, 40, 160]);
+        if (settings.shake) this.shakeUntil = performance.now() + 600;
+      }
     }, Math.max(0, d - 1.8) * 1000);
     clearTimeout(this._showSafety);
     this._showSafety = setTimeout(() => { if (this.showActive) this.endShowEvent(); }, (d + 3) * 1000);

@@ -37,8 +37,13 @@ const participants = [
   { account: account('p2', 'Jogador 2'), socketId: 'sock2' },
 ];
 
-console.log('=== TESTE FORÇADO 1: runShowEvent (sequência completa do Show) ===');
-{
+console.log('=== TESTE FORÇADO 1: runShowEvent (sequência completa do Show, nos dois desfechos) ===');
+// Regra #15 do pedido de reformulação: o show agora tem 2 finais possíveis
+// (Match.showEndMode: 'susto' ou 'silenciosa' — ver runShowEvent). Roda os
+// dois de propósito, forçando o modo logo depois da chamada (o valor é lido
+// de novo, dinamicamente, só quando cada fase agendada dispara — dá pra
+// sobrescrever a escolha aleatória sem mexer no motor de verdade).
+for (const forcedMode of ['susto', 'silenciosa']) {
   const match = new Match(room, io, 5, participants, 'dificil'); // noite 5 tem o Maestro
   clearInterval(match.interval);
   for (const p of match.players.values()) p.invulnUntil = Infinity;
@@ -47,9 +52,11 @@ console.log('=== TESTE FORÇADO 1: runShowEvent (sequência completa do Show) ==
   for (let i = 0; i < 100 && !match.ended; i++) { match.lastTick = Date.now() - 200; match.tick(); }
 
   const players = [...match.players.values()];
+  emittedEvents.length = 0;
   let crashed = null;
   try {
     match.runShowEvent(players); // chamada direta, pulando o sorteio normal
+    match.showEndMode = forcedMode; // força o desfecho pra testar os dois caminhos
     // agora deixa o relógio (chains + updateWorld) rodar a sequência toda:
     // ~25s de duração máxima do show + folga pro endShowEvent disparar.
     const showTicks = Math.ceil(35 / 0.1);
@@ -62,11 +69,15 @@ console.log('=== TESTE FORÇADO 1: runShowEvent (sequência completa do Show) ==
   }
 
   const phases = emittedEvents.filter((e) => e.type === 'show' || e.type === 'showPhase');
-  console.log(`fases do show observadas (ordem real de emissão): ${phases.map((p) => p.phase || 'start').join(' -> ')}`);
-  console.log(`showActive ao final: ${match.showActive} (esperado: false, ou seja, endShowEvent rodou)`);
-  console.log(`chains.count ao final: ${match.chains.count} (esperado: 0, nenhum passo do show ficou travado pra sempre)`);
-  if (crashed) { console.error('❌ CRASH no teste do Show:', crashed.stack); process.exitCode = 1; }
-  else console.log('✅ sequência do Show rodou do start ao fim sem exceção.\n');
+  console.log(`  [modo forçado: ${forcedMode}] fases observadas: ${phases.map((p) => p.phase || 'start').join(' -> ')}`);
+  console.log(`  [modo forçado: ${forcedMode}] showActive ao final: ${match.showActive} (esperado: false) | chains.count: ${match.chains.count} (esperado: 0)`);
+  if (forcedMode === 'silenciosa') {
+    const hasResidual = phases.some((p) => p.phase === 'residual');
+    const hasResidualEnd = phases.some((p) => p.phase === 'residualEnd');
+    console.log(`  [modo forçado: ${forcedMode}] fase 'residual' apareceu: ${hasResidual} | 'residualEnd' apareceu: ${hasResidualEnd} (esperado: true nas duas, se algum animatrônico ficou marcado pra "continuar se mexendo")`);
+  }
+  if (crashed) { console.error(`❌ CRASH no teste do Show (modo ${forcedMode}):`, crashed.stack); process.exitCode = 1; }
+  else console.log(`  ✅ sequência do Show (modo ${forcedMode}) rodou do start ao fim sem exceção.\n`);
 }
 
 console.log('=== TESTE FORÇADO 2: estado OBSERVE de um animatrônico (presença sem ataque) ===');
