@@ -337,30 +337,50 @@ class App {
   }
 
   onMatchEnd(res) {
+    // Antes de mais nada: quem sou eu e qual era meu papel? (game.stop() não
+    // limpa nem `you` nem `animRole` — só depois de ler isso é que paramos.)
+    const myId = this.game.you;
+    const iWasAnim = this.game.animRole === 'animatronic';
     this.game.stop();
-    const win = res.result === 'victory';
+    // `res.result`/`res.reason` sempre foram do ponto de vista HUMANO
+    // (convenção do servidor inteira) — pro jogador-animatrônico o sentido
+    // é o oposto. O servidor já manda isso pronto em `res.players[].personalWon`
+    // (ver Match.personalWon); o `iWasAnim` aqui é só um fallback pra
+    // payloads antigos/sem essa entrada.
+    const mine = res.players?.find((p) => p.id === myId);
+    const win = mine ? !!mine.personalWon : iWasAnim ? res.result === 'defeat' : res.result === 'victory';
     const title = $('#res-title');
     title.className = win ? 'win' : 'lose';
-    title.textContent = res.result === 'aborted' ? 'PARTIDA ENCERRADA' : win ? (res.trueEnding ? 'FINAL VERDADEIRO' : '06:00 AM') : 'FIM DE TURNO';
+    title.textContent = res.result === 'aborted' ? 'PARTIDA ENCERRADA'
+      : win ? (iWasAnim ? 'CAÇADA CONCLUÍDA' : res.trueEnding ? 'FINAL VERDADEIRO' : '06:00 AM')
+      : iWasAnim ? 'CAÇADA FRUSTRADA' : 'FIM DE TURNO';
+    const humanReasonLine = res.result === 'victory'
+      ? (res.reason === 'escape' ? 'Atravessei o portão e não olhei pra trás.' : res.reason === 'missions' ? 'Terminamos tudo antes que ele nos pegasse.' : 'O sol nasceu. Sobrevivi a mais uma noite.')
+      : res.reason === 'missions' ? 'Ele terminou o que queria antes de nós.' : 'Pegaram todos nós. O rádio só chia.';
+    const animReasonLine = res.reason === 'missions' ? (win ? 'Terminei minhas missões antes deles.' : 'Eles terminaram as missões primeiro.')
+      : res.reason === 'wiped' ? 'Nenhum deles sobrou.'
+      : win ? 'Consegui o que eu queria essa noite.' : 'Eles escaparam de mim dessa vez.';
     $('#res-sub').textContent = [
       `${res.title} (${res.difficulty || ''})`,
-      win ? (res.reason === 'escape' ? 'Atravessei o portão e não olhei pra trás.' : 'O sol nasceu. Sobrevivi a mais uma noite.') : res.result === 'defeat' ? 'Pegaram todos nós. O rádio só chia.' : 'O turno acabou antes da hora.',
-      res.badEnding ? 'Mas o Maestro continua ligado lá dentro... (final ruim)' : '',
-      res.nextNight ? `Amanhã volto para a Noite ${res.nextNight}.` : '',
+      res.result === 'aborted' ? 'O turno acabou antes da hora.' : iWasAnim ? animReasonLine : humanReasonLine,
+      !iWasAnim && res.badEnding ? 'Mas o Maestro continua ligado lá dentro... (final ruim)' : '',
+      !iWasAnim && res.nextNight ? `Amanhã volto para a Noite ${res.nextNight}.` : '',
       `Fiquei ${fmtTime(res.seconds)} lá dentro.`,
     ].filter(Boolean).join(' ');
     $('#res-quests').replaceChildren(...res.quests.map((q) => el('li', { class: q.done ? 'done' : 'fail', text: `${q.done ? '✔' : '✘'} ${q.title}` })));
     $('#res-players').replaceChildren(...res.players.map((p) => el('tr', {},
-      el('td', { text: p.name }), el('td', { text: `+${p.xpGained}` }), el('td', { text: `+${p.moneyGained}` }),
+      el('td', { text: `${p.name}${p.role === 'animatronic' ? ' 👹' : ''}` }), el('td', { text: `+${p.xpGained}` }), el('td', { text: `+${p.moneyGained}` }),
       el('td', { text: `${p.level}${p.levelsGained ? ` (+${p.levelsGained}⭐)` : ''}` }), el('td', { text: p.deaths }))));
     // Minigame de lembrança (Fase 1: "Feliz Aniversário, Lucas") — dispara
     // uma vez, só na transição pra Noite 3, antes da tela de resultados.
+    // Só faz sentido no lado humano/campanha (nextNight nunca existe pro
+    // papel bestial, ver endMatch) — iWasAnim já cobre isso via nextNight null.
     const showResultsNow = () => showScreen('results', { push: false });
     const triggerMinigame = win && res.nextNight === 3 && !hasSeenMinigame('lucas') ? 'lucas' : null;
     setTimeout(() => {
       if (triggerMinigame) this.playMinigame(triggerMinigame, showResultsNow);
       else showResultsNow();
-    }, res.result === 'defeat' ? 1200 : 300);
+    }, res.result === 'aborted' || win ? 300 : 1200);
     audio.unlock();
     audio.play(win ? 'levelup' : 'blackout', { vol: 0.8 });
     this.loadProfile().catch(() => {});

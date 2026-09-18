@@ -111,6 +111,7 @@ export class Game {
     this.inv = data.inventory;
     this.progress = data.progress;
     this.quests = data.quests;
+    this.beastQuests = data.beastQuests || [];
     this.updateTargets();
     this.pending = [];
     this.seq = data.seq || 0;
@@ -159,6 +160,7 @@ export class Game {
     $('#game-chat').replaceChildren(...[...$('#lobby-chat').children].slice(-6).map((n) => n.cloneNode(true)));
     this.renderHotbar();
     this.renderQuests();
+    this.renderBeastQuests();
     this.showIntro();
     this.resize();
     this.input.enabled = true;
@@ -228,6 +230,9 @@ export class Game {
       if (d.remove) this.S.ground.delete(d.remove);
     });
     s.on('quests', (q) => { if (!this.running) return; this.quests = q; this.updateTargets(); this.renderQuests(); if (!$('#ov-check').hidden) this.renderChecklist(); });
+    // Missões do PRÓPRIO lado animatrônico (ver Match.broadcastBeastQuests)
+    // — sendTo, só chega pra quem realmente é o animatrônico secreto.
+    s.on('beastQuests', (q) => { if (!this.running) return; this.beastQuests = q; this.renderBeastQuests(); });
     s.on('inv', (inv) => { if (!this.running) return; this.inv = inv; this.renderHotbar(); if (!$('#ov-inv').hidden) this.renderInventory(); });
     s.on('progress', (p) => { if (this.running) this.progress = p; });
     s.on('fx', (f) => this.running && this.onFx(f));
@@ -1048,6 +1053,22 @@ export class Game {
       const rb = b.ps.find((p) => p[0] === id) || row;
       players.push({ id, x: lerp(ra[1], rb[1]), y: lerp(ra[2], rb[2]), dir: rb[3], alive: !!(flags & 1), hidden: !!(flags & 2), flash: !!(flags & 4), sprinting: !!(flags & 8), sneaking: !!(flags & 64), moving: Math.hypot(rb[1] - ra[1], rb[2] - ra[2]) > 0.01, name: info.name, color: info.color, hp: row[5] });
     }
+    // Modo Animatronic: `latest.ps` só tem VOCÊ MESMO pra um jogador-beast
+    // (ver Match.sendSnapshots — nunca a posição pronta de nenhum humano,
+    // de propósito). A única forma de ele "ver" alguém é através de
+    // `me.sensed.seen` (visão real, linha de visão já checada no servidor
+    // — ver beastSenseFor) — desenha esses como sprites de jogador de
+    // verdade, na posição exata, exatamente como ele enxergaria de fato.
+    // Sem isso, `sensed` chegava calculado do servidor e nunca era
+    // consumido em lugar nenhum do cliente — o bug real por trás de
+    // "não estou conseguindo vê-lo".
+    if (this.animRole === 'animatronic' && this.me?.sensed) {
+      for (const [id, x, y] of this.me.sensed.seen) {
+        if (players.some((p) => p.id === id)) continue;
+        const info = this.names.get(id) || { name: '?', color: 0 };
+        players.push({ id, x, y, dir: 0, alive: true, hidden: false, flash: false, moving: false, name: info.name, color: info.color, hp: 100, sensed: true });
+      }
+    }
     const anims = [];
     for (const row of latest.an) {
       const id = row[0];
@@ -1143,12 +1164,29 @@ export class Game {
     const box = $('#anim-hud');
     if (!box) return;
     box.hidden = this.animRole !== 'animatronic';
+    // Reseta o slot de missões pro estado certo a cada partida nova — sem
+    // isso, o painel de missões bestiais podia ficar visível herdado de
+    // uma partida anterior onde este jogador tinha sido o animatrônico.
+    const beastBox = $('#hud-beast-quests');
+    if (beastBox) beastBox.hidden = this.animRole !== 'animatronic';
     if (this.animRole !== 'animatronic') return;
     $('#anim-hud-abilities').replaceChildren(...Object.entries(this.ABILITY_LABELS).map(([id, label]) =>
       el('button', {
         class: 'btn tiny', 'data-ability': id, text: label,
         onclick: () => this.socket.emit('animAbility', { ability: id }),
       })));
+    // Começa recolhido (pedido: menos poluição na tela) — só energia e
+    // status de perseguição ficam sempre visíveis; as 9 habilidades só
+    // aparecem depois de um toque/clique aqui.
+    const toggle = $('#anim-hud-toggle');
+    if (toggle && !toggle.dataset.bound) {
+      toggle.dataset.bound = '1';
+      toggle.addEventListener('click', () => {
+        const open = box.classList.toggle('open');
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        $('#anim-hud-abilities').hidden = !open;
+      });
+    }
   }
 
   updateAnimHud() {
@@ -1281,12 +1319,32 @@ export class Game {
     else st.hidden = true;
 
     const heard = $('#hud-heard');
-    heard.replaceChildren(...(m.hr || []).map(([ti, d, ang, chase]) => {
-      const a = (ang / 8) * Math.PI;
-      const r = Math.min(this.w, this.h) * 0.42;
-      const x = this.w / 2 + Math.cos(a) * r, y = this.h / 2 + Math.sin(a) * r;
-      return el('span', { style: `left:${x}px;top:${y}px;opacity:${Math.max(0.25, 1 - d / 15)};color:${chase ? '#ff3b3b' : '#ffb36b'}`, title: ANIMATRONIC_INFO[ANIM_TYPES[ti]].short, text: chase ? '‼' : '♪' });
-    }));
+    // Percepção do PRÓPRIO jogador-animatrônico sobre os humanos (ver
+    // beastSenseFor/me.sensed em Match.js) — reaproveita exatamente a
+    // mesma bússola visual que já existia pro humano ouvir o animatrônico
+    // (`m.hr`, que nesse modo nunca dispara: não existe IA caçadora nenhuma
+    // no Modo Animatronic, só jogadores — ver animatronicMode.js), então
+    // não há conflito nenhum em usar o mesmo slot de tela pro sentido
+    // OPOSTO quando o papel é bestial. É a resposta direta a "não estou
+    // conseguindo vê-lo, nem ele me ver" — sem isso o `sensed` já calculado
+    // no servidor nunca chegava a aparecer em lugar nenhum no cliente.
+    if (this.animRole === 'animatronic' && this.me?.sensed) {
+      const p = this.display;
+      heard.replaceChildren(...this.me.sensed.heard.map(([x, y]) => {
+        const a = Math.atan2(y - p.y, x - p.x);
+        const d = Math.hypot(x - p.x, y - p.y);
+        const r = Math.min(this.w, this.h) * 0.42;
+        const sx = this.w / 2 + Math.cos(a) * r, sy = this.h / 2 + Math.sin(a) * r;
+        return el('span', { style: `left:${sx}px;top:${sy}px;opacity:${Math.max(0.25, 1 - d / 20)};color:#7ee7e0`, title: 'Som de atividade humana', text: '♪' });
+      }));
+    } else {
+      heard.replaceChildren(...(m.hr || []).map(([ti, d, ang, chase]) => {
+        const a = (ang / 8) * Math.PI;
+        const r = Math.min(this.w, this.h) * 0.42;
+        const x = this.w / 2 + Math.cos(a) * r, y = this.h / 2 + Math.sin(a) * r;
+        return el('span', { style: `left:${x}px;top:${y}px;opacity:${Math.max(0.25, 1 - d / 15)};color:${chase ? '#ff3b3b' : '#ffb36b'}`, title: ANIMATRONIC_INFO[ANIM_TYPES[ti]].short, text: chase ? '‼' : '♪' });
+      }));
+    }
 
     if (this.camOpen) for (const b of $('#cam-buttons').children) b.classList.toggle('active', b.dataset.cam === this.camId);
     const vb = $('#hb-voice');
@@ -1295,11 +1353,28 @@ export class Game {
   }
 
   renderQuests() {
+    // Jogador-animatrônico não vê as missões dos "trabalhadores" nesse slot
+    // — ele tem as PRÓPRIAS (ver renderBeastQuests) — mesma filosofia de
+    // "eu sou o animatrônico, não o funcionário" pedida (senão a lista de
+    // missões humanas fica ali sem fazer sentido nenhum pra ele, poluindo
+    // a tela com informação que não é dele).
     const box = $('#hud-quests');
+    if (this.animRole === 'animatronic') { box.hidden = true; return; }
+    box.hidden = false;
     box.replaceChildren(el('h4', { text: 'Anotações [J]' }), ...this.quests.map((q) => el('div', { class: `q ${q.done ? 'done' : q.active ? '' : 'locked'}` },
       q.done ? '✔' : q.active ? '▸' : '·',
       el('span', { text: q.title + (q.optional ? ' (opcional)' : '') }),
       !q.done && q.count > 1 && q.active ? el('em', { text: q.type === 'repair' ? `${q.progress}%` : `${q.progress}/${q.count}` }) : null)));
+  }
+
+  renderBeastQuests() {
+    const box = $('#hud-beast-quests');
+    if (!box || this.animRole !== 'animatronic') return;
+    box.hidden = false;
+    box.replaceChildren(el('h4', { text: 'Suas missões' }), ...(this.beastQuests || []).map((q) => el('div', { class: `q ${q.done ? 'done' : ''}` },
+      q.done ? '✔' : '▸',
+      el('span', { text: q.title }),
+      !q.done && q.count > 1 ? el('em', { text: `${q.progress}/${q.count}` }) : null)));
   }
 
   renderChecklist() {

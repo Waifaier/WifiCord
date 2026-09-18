@@ -15,6 +15,11 @@
   --pixel: 'VT323', 'Share Tech Mono', ui-monospace, monospace;
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
+  /* Tamanho/opacidade do analógico virtual (ver #settings-form em main.js
+     e a leitura em applyTouchPrefs() no mesmo arquivo) — mexer só nessas
+     duas variáveis em vez de duplicar as regras do .joy/.joy-knob. */
+  --joy-scale: 1;
+  --joy-opacity: 0.85;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); overflow: hidden; }
@@ -347,11 +352,56 @@ kbd { background: #1a1520; border: 1px solid var(--line); border-bottom-width: 2
 .heard { position: absolute; inset: 0; }
 .heard span { position: absolute; font-size: 18px; color: #ff6b6b; transform: translate(-50%, -50%); opacity: .8; animation: pulse 1s infinite; }
 @keyframes pulse { 50% { opacity: .3 } }
-.chat-hud { position: absolute; left: 10px; bottom: calc(76px + var(--safe-b)); width: min(360px, 60vw); pointer-events: auto !important; }
+.chat-hud { position: absolute; left: 10px; bottom: calc(76px + var(--safe-b)); width: min(360px, 60vw); pointer-events: auto !important; z-index: 20; }
 .chat-hud .chat-log { max-height: 150px; min-height: 0; font-size: 12px; background: linear-gradient(transparent, rgba(0,0,0,.35)); pointer-events: none; mask-image: linear-gradient(transparent, #000 30%); }
 .chat-hud form input { width: 100%; background: rgba(0,0,0,.8); pointer-events: auto; }
-.hud-buttons { position: absolute; right: 10px; bottom: calc(10px + var(--safe-b)); display: flex; gap: 6px; pointer-events: auto !important; }
+.hud-buttons { position: absolute; right: 10px; bottom: calc(10px + var(--safe-b)); display: flex; gap: 6px; pointer-events: auto !important; z-index: 20; }
 .hbtn { pointer-events: auto; width: 42px; height: 42px; border-radius: 50%; background: rgba(10,8,14,.8); border: 1px solid var(--line); cursor: pointer; font-size: 1.1rem; }
+
+/* ---------- Modo Animatronic: HUD de habilidades do jogador secreto ----------
+   Dock PRÓPRIO no canto direito, nunca mais no canto do chat (bug relatado:
+   os dois brigavam pelo bottom-left sem z-index nenhum, o chat sempre
+   ganhava por vir depois no DOM — agora ambos têm z-index explícito e
+   ficam em cantos opostos, então nem a ordem no DOM importa mais).
+   Começa RECOLHIDO (só rótulo + barra de energia + status de perseguição);
+   as 9 habilidades só aparecem depois de um toque em .anim-hud-head — é a
+   resposta direta a "muita informação na tela, deixando poluído". */
+.anim-hud {
+  position: absolute; right: 10px; bottom: calc(64px + var(--safe-b));
+  z-index: 40; width: min(230px, 46vw);
+  background: rgba(10,6,14,.88); border: 1px solid rgba(255,59,92,.35);
+  border-radius: 10px; padding: 8px 10px; font: 12px/1.3 sans-serif; color: #e9e3f0;
+  pointer-events: auto !important;
+}
+.anim-hud-head { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: none; color: inherit; cursor: pointer; padding: 0; font: inherit; text-align: left; }
+.anim-hud-head b { letter-spacing: .03em; text-transform: uppercase; font-size: 11px; color: #ffcf4a; font-weight: normal; }
+.anim-hud-head span { font-size: 10px; color: #ff3b5c; flex: 1; text-align: right; }
+.anim-hud-chevron { display: inline-block; font-size: 10px; transition: transform .15s; flex-shrink: 0; }
+.anim-hud.open .anim-hud-chevron { transform: rotate(180deg); }
+.anim-hud-energybar { background: #221827; border-radius: 6px; height: 8px; overflow: hidden; margin-top: 6px; }
+.anim-hud-energybar i { display: block; height: 100%; background: #ff3b5c; width: 100%; transition: width .2s; }
+.anim-hud-abilities { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 8px; max-height: 32vh; overflow-y: auto; }
+.anim-hud-abilities button { font-size: 10px; padding: 5px 2px; line-height: 1.15; }
+@media (max-width: 700px) {
+  .anim-hud { width: min(180px, 50vw); bottom: calc(56px + var(--safe-b)); right: 6px; padding: 6px 8px; }
+  .anim-hud-head b { font-size: 10px; }
+  .anim-hud-abilities button { font-size: 9px; padding: 4px 2px; }
+}
+/* Em telas de toque o lado direito já tem o d-pad de ações (.tbuttons) perto
+   do chão e os hud-buttons mais acima — o anim-hud fica no vão entre os
+   dois, nunca por cima de nenhum. */
+body.touch .anim-hud { bottom: calc(200px + var(--safe-b)); right: 10px; }
+@media (max-height: 460px) {
+  /* Paisagem baixa: chat-hud já sobe pro topo-esquerdo (ver bloco @media
+     (max-height:460px) mais abaixo) — o anim-hud vai pro topo-DIREITO,
+     canto livre nessa altura, em vez de competir por espaço lá embaixo. */
+  .anim-hud, body.touch .anim-hud { top: calc(6px + var(--safe-t)); bottom: auto; right: 6px; width: min(150px, 30vw); }
+}
+
+/* Missões do lado animatrônico — mesmo slot visual das missões humanas
+   (.hud-quests), nunca os dois ao mesmo tempo (ver setupAnimHud no JS),
+   pra não empilhar mais um painel de informação na tela. */
+.beast-quests .q b { color: #ff9a8a; }
 .hbtn.on { border-color: var(--good); box-shadow: 0 0 10px rgba(111,213,139,.4); }
 .hbtn.talking { background: #1d3b25; }
 .status-center { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); text-align: center; font-family: var(--pixel); font-size: 2rem; color: #ff6b6b; background: rgba(0,0,0,.55); padding: 10px 24px; border-radius: 4px; }
@@ -436,8 +486,8 @@ kbd { background: #1a1520; border: 1px solid var(--line); border-bottom-width: 2
 
 /* ---------- touch ---------- */
 #touch { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
-.joy { position: absolute; left: calc(20px + env(safe-area-inset-left, 0px)); bottom: calc(28px + var(--safe-b)); width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.15); pointer-events: auto; touch-action: none; }
-.joy-knob { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; background: rgba(231,176,74,.35); border: 2px solid rgba(231,176,74,.6); }
+.joy { position: absolute; left: calc(20px + env(safe-area-inset-left, 0px)); bottom: calc(28px + var(--safe-b)); width: calc(130px * var(--joy-scale)); height: calc(130px * var(--joy-scale)); border-radius: 50%; background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.15); pointer-events: auto; touch-action: none; opacity: var(--joy-opacity); }
+.joy-knob { position: absolute; left: 50%; top: 50%; width: calc(56px * var(--joy-scale)); height: calc(56px * var(--joy-scale)); margin: calc(-28px * var(--joy-scale)) 0 0 calc(-28px * var(--joy-scale)); border-radius: 50%; background: rgba(231,176,74,.35); border: 2px solid rgba(231,176,74,.6); }
 .tbuttons { position: absolute; right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(70px + var(--safe-b)); display: grid; grid-template-columns: repeat(3, 52px); gap: 8px; pointer-events: auto; direction: rtl; }
 .tbtn { width: 52px; height: 52px; border-radius: 50%; background: rgba(10,8,14,.7); border: 1px solid rgba(255,255,255,.2); font-size: 1.2rem; touch-action: none; display: flex; align-items: center; justify-content: center; }
 .tbtn.big { width: 52px; height: 52px; font-family: var(--pixel); font-size: 1.8rem; color: var(--accent); border-color: var(--accent); }

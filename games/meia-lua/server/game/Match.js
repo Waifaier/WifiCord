@@ -193,6 +193,20 @@ export class Match {
       // exatamente isso que preserva a ambiguidade pedida ("foi o jogo ou
       // foi o animatronic?", regra final do pedido).
       this.anims = [];
+      // Missões do lado animatrônico (pedido: "quero que o animatronic
+      // também tenha missões, e quem terminar as missões primeiro ganha").
+      // Time único, não por-jogador (mesmo modelo dos this.quests humanos
+      // logo acima) — com 1+ animatrônicos, o progresso é compartilhado.
+      // Quando os 4 terminam, o lado animatrônico vence na hora, mesmo com
+      // humanos ainda vivos e sem esperar o amanhecer (ver checkEnd() e
+      // completeBeastQuest()) — o espelho exato do que a missão humana tipo
+      // 'escape' já fazia pro lado humano.
+      this.beastQuests = [
+        { id: 'sense', title: 'Farejar um humano', desc: 'Perceba um humano (visão ou audição) pela primeira vez.', done: false, progress: 0, count: 1 },
+        { id: 'scare', title: 'Assustar 2 humanos diferentes', desc: 'Use uma habilidade mirada em 2 humanos diferentes.', done: false, progress: 0, count: 2, scaredIds: new Set() },
+        { id: 'chase', title: 'Iniciar uma perseguição', desc: 'Comece a perseguir um humano de verdade.', done: false, progress: 0, count: 1 },
+        { id: 'catch', title: 'Capturar um humano', desc: 'Alcance um humano durante uma perseguição.', done: false, progress: 0, count: 1 },
+      ];
     } else {
       for (const p of this.players.values()) p.role = 'funcionario';
       // Animatrônicos — ativação escalonada ao longo da noite: cada
@@ -300,7 +314,11 @@ export class Match {
   }
 
   canAct(p) {
-    return p.alive && p.online && !p.saved && this.time >= p.stunUntil;
+    // Modo Animatronic: usado por useItem/remoteDoor/interact — nenhuma
+    // dessas 3 é coisa de animatrônico (item consumível, painel remoto de
+    // porta, interagir com objeto de missão). Um só ponto central em vez
+    // de repetir a checagem de papel em cada método.
+    return p.alive && p.online && !p.saved && this.time >= p.stunUntil && p.role !== 'animatronic';
   }
 
   applyInput(p, inp, dt) {
@@ -809,7 +827,7 @@ export class Match {
 
   equip(accountId, itemId) {
     const p = this.players.get(accountId);
-    if (!p || p.saved) return;
+    if (!p || p.saved || p.role === 'animatronic') return;
     const it = ITEMS[itemId];
     if (!it || it.type !== 'equip' || !(p.inv[itemId] > 0)) return;
     p.equipment[it.slot] = itemId;
@@ -819,7 +837,7 @@ export class Match {
 
   unequip(accountId, slot) {
     const p = this.players.get(accountId);
-    if (!p || p.saved || !(slot in p.equipment)) return;
+    if (!p || p.saved || p.role === 'animatronic' || !(slot in p.equipment)) return;
     p.equipment[slot] = null;
     if (slot === 'lanterna') p.flash = false;
     this.recalcStats(p);
@@ -872,7 +890,7 @@ export class Match {
 
   toggleFlashlight(accountId) {
     const p = this.players.get(accountId);
-    if (!p || !p.alive || p.saved) return;
+    if (!p || !p.alive || p.saved || p.role === 'animatronic') return;
     if (!p.equipment.lanterna) { this.notify(p, fala('semLanterna')); return; }
     if (!p.flash && p.battery <= 0) { this.notify(p, fala('semBateria'), 'warn'); return; }
     p.flash = !p.flash;
@@ -882,7 +900,7 @@ export class Match {
 
   setCamera(accountId, camId) {
     const p = this.players.get(accountId);
-    if (!p || p.saved) return;
+    if (!p || p.saved || p.role === 'animatronic') return;
     if (camId === null) { p.cam = null; return; }
     if (typeof camId !== 'string' || !CAMERA_BY_ID[camId]) return;
     if (!this.canUseCameras(p)) { this.notify(p, fala('camSemMonitor'), 'warn'); this.sendTo(p, 'fx', { type: 'camClose' }); return; }
@@ -974,6 +992,15 @@ export class Match {
   }
 
   interactObject(p, o) {
+    // Modo Animatronic: o jogador escolhido pra ser a criatura não é um
+    // funcionário disfarçado — ele não deveria conseguir fazer NENHUMA
+    // tarefa de trabalhador (revistar caixa, consertar, ler documento,
+    // painel, disjuntor, se esconder...). Antes disso não existia nenhuma
+    // trava aqui, então o jogador-animatrônico podia simplesmente ignorar
+    // o próprio papel e ir fazer as missões dos humanos — o que também
+    // quebra a assimetria de informação (ele acabaria sabendo onde ficam
+    // os objetivos/itens da mesma forma que um humano).
+    if (p.role === 'animatronic') { this.notify(p, 'Você não pode interagir com isso — use as habilidades do animatrônico.', 'warn'); return; }
     switch (o.type) {
       case 'container': {
         const c = this.containers.get(o.id);
@@ -1531,6 +1558,18 @@ export class Match {
       case 'chase': this.beginPlayerChase(p, target); break;
       default: break;
     }
+    // Missão 'scare' (ver this.beastQuests): qualquer habilidade MIRADA
+    // num humano de verdade conta, menos 'chase' (que tem a própria missão
+    // — 'scare' é sobre assombrar à distância, não perseguir) e as duas
+    // sem alvo fixo (flicker/falsoAlarme mexem no prédio todo, não numa
+    // pessoa específica).
+    if (target && abilityId !== 'chase' && abilityId !== 'flicker' && abilityId !== 'falsoAlarme') {
+      const q = this.beastQuests?.find((x) => x.id === 'scare');
+      if (q && !q.done && !q.scaredIds.has(target.id)) {
+        q.scaredIds.add(target.id);
+        this.markBeastProgress('scare', 1);
+      }
+    }
     return true;
   }
 
@@ -1541,6 +1580,7 @@ export class Match {
     beastPlayer.beastCatchCd = 0;
     this.onAnimChase({ type: beastPlayer.beast.type, x: beastPlayer.x, y: beastPlayer.y, targetId: target.id });
     this.emitSfx('steps', beastPlayer.x, beastPlayer.y, 24);
+    this.markBeastProgress('chase', 1);
   }
 
   /** Chamado todo tick (só no modo Animatronic) — checa alcance de captura das perseguições ativas. */
@@ -1562,6 +1602,7 @@ export class Match {
         // jogo.
         this.damagePlayer(target, { type: b.type, def: ANIM_TYPES[b.type] });
         b.endChase();
+        this.markBeastProgress('catch', 1);
       }
     }
   }
@@ -1650,6 +1691,15 @@ export class Match {
     if (ef.shutdown) this.shutdownMaestro();
     if (q.def.lore === 'tape') this.broadcast('fx', { type: 'lore', title: 'Fita do gerente', text: LORE.tape });
     this.broadcastQuests();
+    // Espelho exato de completeBeastQuest() pro lado humano (pedido: "quem
+    // terminar as missões primeiro ganha") — só no Modo Animatronic, e só
+    // conta missão OBRIGATÓRIA (optional fica de fora, senão vira ruído).
+    // Guard de lista vazia evita terminar a partida na hora em nights sem
+    // nenhuma missão não-opcional configurada.
+    if (this.mode === 'animatronic' && !this.ended) {
+      const required = this.quests.filter((x) => !x.def.optional);
+      if (required.length && required.every((x) => x.done)) this.endMatch('victory', 'missions');
+    }
   }
 
   questView() {
@@ -1664,6 +1714,46 @@ export class Match {
 
   broadcastQuests() {
     this.broadcast('quests', this.questView());
+  }
+
+  // ======================================================================
+  // Missões do lado animatrônico (ver this.beastQuests no constructor)
+  // ======================================================================
+  // Deliberadamente só chega pros jogadores-animatrônico (sendTo, nunca
+  // broadcast) — humanos não veem a lista de missões do outro lado, mesma
+  // filosofia de informação assimétrica do resto do modo.
+  beastQuestView() {
+    return (this.beastQuests || []).map((q) => ({
+      id: q.id, title: q.title, desc: q.desc, done: q.done, progress: q.progress, count: q.count,
+    }));
+  }
+
+  broadcastBeastQuests() {
+    const view = this.beastQuestView();
+    for (const p of this.players.values()) if (p.role === 'animatronic') this.sendTo(p, 'beastQuests', view);
+  }
+
+  markBeastProgress(id, amount = 1) {
+    const q = this.beastQuests?.find((x) => x.id === id);
+    if (!q || q.done) return;
+    q.progress = Math.min(q.count, q.progress + amount);
+    if (q.progress >= q.count) this.completeBeastQuest(q);
+    else this.broadcastBeastQuests();
+  }
+
+  completeBeastQuest(q) {
+    if (q.done) return;
+    q.done = true;
+    q.progress = q.count;
+    this.broadcastBeastQuests();
+    for (const p of this.players.values()) if (p.role === 'animatronic') this.notify(p, `✅ ${q.title}`, 'good');
+    // Todas as 4 concluídas: o lado animatrônico vence NA HORA, mesmo com
+    // humanos ainda vivos e sem esperar o amanhecer — espelha exatamente o
+    // que a missão humana tipo 'escape' já fazia pro lado humano (ver
+    // interactObject, case 'gate'). 'defeat' aqui é do ponto de vista dos
+    // humanos (payload.result já sempre foi assim, ver endMatch) — quem
+    // efetivamente "venceu" por papel é computado à parte em endMatch().
+    if (this.beastQuests.every((x) => x.done)) this.endMatch('defeat', 'missions');
   }
 
   // ======================================================================
@@ -2357,6 +2447,7 @@ export class Match {
           if (d < 15) heard.push([TYPE_LIST.indexOf(a.type), Math.round(d), Math.round((Math.atan2(a.y - p.y, a.x - p.x) / Math.PI) * 8), a.state === 'CHASE' ? 1 : 0]);
         }
       }
+      const sensedForMe = p.role === 'animatronic' && p.beast ? this.beastSenseFor(p) : null;
       const me = {
         hp: Math.max(0, Math.round(p.hp)), mhp: p.derived.maxHp,
         st: Math.round(p.stamina), mst: p.derived.maxStamina,
@@ -2381,8 +2472,15 @@ export class Match {
         // sobre os humanos (ver beastSenseFor) — não a lista de posições
         // prontas que os humanos trocam entre si.
         beast: p.role === 'animatronic' && p.beast ? p.beast.hud() : null,
-        sensed: p.role === 'animatronic' && p.beast ? this.beastSenseFor(p) : null,
+        sensed: sensedForMe,
       };
+      // Missão 'sense' do lado animatrônico: progride assim que a
+      // percepção de verdade (não uma checagem redundante) encontra QUALQUER
+      // humano visto ou ouvido — reaproveita o mesmo `sensedForMe` que já
+      // foi pro payload, não recalcula beastSenseFor() de novo.
+      if (sensedForMe && (sensedForMe.seen.length || sensedForMe.heard.length)) {
+        this.markBeastProgress('sense', 1);
+      }
       this.sendTo(p, 'snap', { ...base, ps, an, hr: heard, ey: eyes, me });
     }
   }
@@ -2409,6 +2507,11 @@ export class Match {
       containers: [...this.containers].filter(([, c]) => c.searched).map(([id]) => id),
       ground: [...this.ground.values()],
       quests: this.questView(),
+      // Espelho do 'quests' acima, mas só pro lado bestial — vem pronto no
+      // fullState (por-socket, ver comentário do `role` acima) igual o
+      // 'quests' humano, em vez de esperar o primeiro broadcastBeastQuests()
+      // pra não deixar o painel vazio no primeiro frame.
+      beastQuests: p.role === 'animatronic' ? this.beastQuestView() : [],
       flicker: [],
       progress: { level: p.level, xp: p.xp, xpToNext: xpToNext(p.level), money: p.money, xpGained: p.xpGained, moneyGained: p.moneyGained },
       inventory: { inventory: p.inv, equipment: p.equipment, attrs: p.attrs, derived: p.derived },
@@ -2512,6 +2615,20 @@ export class Match {
     }
   }
 
+  // `result` sempre foi, por convenção do resto do arquivo, do ponto de
+  // vista do time HUMANO — 'victory' = humanos venceram, 'defeat' = o lado
+  // bestial venceu (survive-to-dawn, escape, missions, wiped, tanto faz o
+  // motivo). Isso sempre bastou enquanto só existia IA caçadora. No Modo
+  // Animatronic, o jogador-animatrônico é uma PESSOA de verdade jogando
+  // pra vencer o time bestial — pra ELE o sentido é sempre o oposto do
+  // `result` literal. Sem isso, `result === 'defeat'` (o animatrônico
+  // VENCENDO ao concluir beastQuests ou zerar os humanos) dava tratamento
+  // de "consolação"/derrota justo pra quem tinha acabado de ganhar.
+  personalWon(p, result) {
+    if (this.mode !== 'animatronic' || p.role !== 'animatronic') return result === 'victory';
+    return result === 'defeat';
+  }
+
   endMatch(result, reason) {
     if (this.ended) return;
     this.ended = true;
@@ -2520,16 +2637,27 @@ export class Match {
     const trueEnding = won && this.night === FINAL_NIGHT && this.maestroDown;
     const summary = [];
     for (const p of this.players.values()) {
+      const personalWon = this.personalWon(p, result);
       if (!p.saved) {
-        if (result === 'defeat') { this.giveXp(p, 20); }
+        // Consolação de XP pra quem PERDEU de verdade — por papel, não por
+        // `result` literal (senão o jogador-animatrônico quando é ELE que
+        // venceu, ou o próprio animatrônico quando são os HUMANOS que
+        // venceram no Modo Animatronic, ficava do lado errado disso).
+        // 'aborted' nunca dá consolação nenhuma (não tem vencedor/perdedor
+        // de verdade) — igual sempre foi.
+        if (result !== 'aborted' && !personalWon) { this.giveXp(p, 20); }
         for (const id of Object.keys(p.inv)) if (ITEMS[id]?.type === 'quest') delete p.inv[id];
-        this.saveProgress(p, won, trueEnding);
+        // maxNight/trueEnding continuam sendo conceito de CAMPANHA humana
+        // (progressão de noite) — não existe "próxima noite" pro papel
+        // bestial, então só o won pessoal decide o `won` salvo, o resto
+        // (trueEnding) fica atrelado ao desfecho humano mesmo.
+        this.saveProgress(p, personalWon, trueEnding && p.role !== 'animatronic');
         p.saved = true;
       }
       summary.push({
         id: p.id, name: p.name, level: p.level, levelsGained: p.levelsGained, pointsGained: p.pointsGained,
         xpGained: p.xpGained, moneyGained: p.moneyGained, deaths: p.stats.deaths, missions: p.stats.missions,
-        itemsFound: p.stats.itemsFound, alive: p.alive,
+        itemsFound: p.stats.itemsFound, alive: p.alive, role: p.role, personalWon,
       });
     }
     const payload = {

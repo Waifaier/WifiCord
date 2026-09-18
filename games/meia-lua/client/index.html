@@ -277,6 +277,12 @@
         </div>
         <div class="hud-tr">
           <div class="quests" id="hud-quests"></div>
+          <!-- Missões do PRÓPRIO lado animatrônico (ver Match.beastQuests) —
+               ocupa o MESMO canto/slot das missões humanas em vez de
+               empilhar mais um painel na tela (pedido: menos poluição),
+               só aparece pro jogador-animatrônico (setupAnimHud alterna
+               qual dos dois fica visível) — nunca os dois ao mesmo tempo. -->
+          <div class="quests beast-quests" id="hud-beast-quests" hidden></div>
           <ul class="team" id="hud-team"></ul>
         </div>
         <div class="toasts" id="toasts"></div>
@@ -292,16 +298,20 @@
         <!-- Modo Animatronic: HUD só do jogador escolhido em segredo (ver
              Match.js/fullState) — energia, cooldowns e um botão por
              habilidade, cada um chamando o MESMO sistema de eventos real
-             do jogo (ver server/sockets/index.js, evento 'animAbility'). -->
-        <div id="anim-hud" hidden style="position:absolute;left:12px;bottom:90px;max-width:280px;background:rgba(10,6,14,.82);border:1px solid rgba(255,59,92,.35);border-radius:10px;padding:10px 12px;font:12px/1.3 sans-serif;color:#e9e3f0;pointer-events:auto;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-            <b id="anim-hud-label" style="letter-spacing:.03em;text-transform:uppercase;font-size:11px;color:#ffcf4a;">Animatronic</b>
-            <span id="anim-hud-chase" style="font-size:10px;color:#ff3b5c;"></span>
-          </div>
-          <div style="background:#221827;border-radius:6px;height:8px;overflow:hidden;margin-bottom:8px;">
-            <i id="anim-hud-energy" style="display:block;height:100%;background:#ff3b5c;width:100%;transition:width .2s;"></i>
-          </div>
-          <div id="anim-hud-abilities" style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;"></div>
+             do jogo (ver server/sockets/index.js, evento 'animAbility').
+             Dock próprio no canto DIREITO (nunca mais no mesmo canto do
+             chat — esse era o bug: os dois brigavam pelo bottom-left sem
+             z-index, ver style.css .anim-hud) e começa RECOLHIDO (só
+             energia+status), expandindo pra ver as 9 habilidades só quando
+             o próprio jogador toca — pedido: "muita informação na tela". -->
+        <div id="anim-hud" class="anim-hud" hidden>
+          <button type="button" id="anim-hud-toggle" class="anim-hud-head" aria-expanded="false">
+            <b id="anim-hud-label">Animatronic</b>
+            <span id="anim-hud-chase"></span>
+            <i class="anim-hud-chevron" aria-hidden="true">▾</i>
+          </button>
+          <div class="anim-hud-energybar"><i id="anim-hud-energy"></i></div>
+          <div id="anim-hud-abilities" class="anim-hud-abilities" hidden></div>
         </div>
         <div class="heard" id="hud-heard"></div>
         <div class="chat-hud" id="chat-hud">

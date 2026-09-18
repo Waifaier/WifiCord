@@ -13,6 +13,24 @@ const { autoUpdater } = require('electron-updater');
 // WIFICORD_URL sem precisar mexer no código (útil pra testar local x produção).
 const SERVER_URL = process.env.WIFICORD_URL || 'https://wificord.onrender.com';
 
+// O som de notificação (client/js/sounds.js, padrão "message"/"notification")
+// é sintetizado via Web Audio API (AudioContext) na própria página — não é
+// um <audio>/arquivo tocado pelo processo principal. Por padrão o Chromium
+// só libera esse AudioContext depois de um gesto real do usuário (clique)
+// NAQUELA janela. Numa aba de navegador normal isso quase nunca é
+// perceptível: a pessoa clica em algo (fazer login, abrir uma conversa)
+// bem antes de a aba ir pro segundo plano, o que já libera o áudio pro
+// resto da sessão. Já o app desktop é feito pra rodar sem nenhuma interação
+// — abre minimizado/na bandeja e fica só recebendo mensagens em segundo
+// plano (ver 'wificord-window-close' mais abaixo) — então o primeiro som de
+// notificação podia chegar antes de qualquer clique acontecer dentro da
+// janela, e o AudioContext nunca tinha sido liberado: o som simplesmente
+// não tocava (sem erro nenhum, silencioso). Esse switch tem que ser
+// aplicado ANTES de app.whenReady() e desliga essa exigência só pra esta
+// janela do Electron — não afeta o navegador normal, que continua com a
+// política padrão do Chrome.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
 let mainWindow = null;
 let tray = null;
 
@@ -70,6 +88,18 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Sem isso, o Chromium reduz drasticamente a frequência dos timers da
+      // página (setTimeout/setInterval) assim que a janela fica invisível —
+      // minimizada, escondida na bandeja (ver 'wificord-window-close' mais
+      // abaixo) ou noutra área de trabalho virtual. O client do Socket.IO
+      // depende desses timers pro ping/pong de keep-alive e pra reconectar;
+      // com eles jogados pra ~1x/minuto, a conexão em WebSocket cai (ou fica
+      // tempo demais sem responder ao ping do servidor) bem na hora em que
+      // "app em segundo plano" é justamente o cenário que as notificações
+      // precisam cobrir — daí mensagem nova chegar sem disparar nada. Manter
+      // os timers correndo normal mesmo escondida é o que garante o socket
+      // (e portanto as notificações) vivo o tempo todo.
+      backgroundThrottling: false,
     },
   });
 

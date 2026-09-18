@@ -259,6 +259,15 @@ export class Renderer {
         const sx2 = ox + p.x * scale, sy2 = oy + p.y * scale;
         ctx.fillStyle = 'rgba(0,0,0,.4)';
         ctx.beginPath(); ctx.ellipse(sx2, sy2 + scale * 0.35, scale * 0.3, scale * 0.12, 0, 0, TAU); ctx.fill();
+        // Percepção do jogador-animatrônico (ver buildEntities em game.js,
+        // `me.sensed.seen`) — anel pulsante deixa claro que é algo "sentido"
+        // à distância, não um aliado no mesmo time (o beast não tem aliados
+        // humanos, então essa marcação nunca aparece pra um jogador normal).
+        if (p.sensed) {
+          ctx.strokeStyle = `rgba(255,59,92,${0.45 + Math.sin(t * 4) * 0.25})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(sx2, sy2, scale * (0.55 + Math.sin(t * 4) * 0.05), 0, TAU); ctx.stroke();
+        }
         if (!this.playerSprite(ctx, p, sx2, sy2, scale, t)) {
           drawPlayer(ctx, sx2, sy2, scale, PLAYER_COLORS[p.color % PLAYER_COLORS.length], p.dir, t, { moving: p.moving, dead: !p.alive, flash: p.flash });
         }
