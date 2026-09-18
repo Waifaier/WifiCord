@@ -360,7 +360,35 @@ document.getElementById('settings-save-appearance')?.addEventListener('click',()
 document.getElementById('settings-save-advanced')?.addEventListener('click',()=>saveSettings({chatDensity:value('settings-chat-density'),fontSize:value('settings-font-size'),showTimestamps:checked('settings-show-timestamps'),showMemberList:checked('settings-show-member-list'),showEmbeds:checked('settings-show-embeds'),stickerAnimations:checked('settings-sticker-animations'),autoplayMedia:checked('settings-autoplay-media'),overlayEffects:checked('settings-overlay-effects'),superEmojiEffects:checked('settings-super-effects'),localNicknames:checked('settings-local-nicknames'),language:value('settings-language'),mediaQuality:value('settings-media-quality','auto'),animatedProfile:document.getElementById('settings-animated-profile')?.checked!==false,inlineMedia:document.getElementById('settings-inline-media')?.checked!==false,autoDownload:checked('settings-auto-download')}));
 document.getElementById('settings-save-accessibility')?.addEventListener('click',()=>saveSettings({reduceMotion:checked('settings-reduce-motion-2'),outputVolume:Number(value('settings-output-volume',100)),inputVolume:Number(value('settings-input-volume',100)),voiceInputSensitivity:Number(value('settings-voice-sensitivity',50))}));
 document.getElementById('settings-test-sound')?.addEventListener('click',()=>window.Sounds?.play('message'));
-document.getElementById('settings-save-profile-effects')?.addEventListener('click',()=>{const me=window.App?.getState?.()?.currentUser;if(!me?.wfna)return window.App?.toast('Os efeitos animados do perfil são exclusivos do WFNA.','error');saveSettings({profileEffect:value('settings-profile-effect','none'),profileEffectSpeed:value('settings-profile-effect-speed','normal'),profileEffectEnabled:checked('settings-profile-effect-enabled')},'Efeitos do perfil salvos.').catch(e=>window.App?.toast(e.message,'error'));});
+// BUG real (motivo de "a aura do avatar não funciona"): este botão só
+// mandava profileEffect/profileEffectSpeed/profileEffectEnabled (os 3
+// campos soltos do efeito de atmosfera antigo) — a aura do avatar
+// (window.__wcTempAura) fica dentro de profileCustomization, que esse
+// handler nunca incluía no PUT. Resultado: escolher uma aura bem aqui
+// nessa mesma aba e clicar em "Salvar efeitos" (o botão logo abaixo do
+// grid de auras) simplesmente não salvava nada — só "Salvar perfil" (a
+// OUTRA aba) gravava avatarAura de verdade, o que não é nada óbvio pra
+// quem só usa esta tela. Corrigido reaproveitando collectProfile() (o
+// MESMO helper que o botão "Salvar perfil" usa) pra montar o
+// profileCustomization completo — importante mandar o objeto INTEIRO, não
+// só {avatarAura:...}: User.updateSettings faz merge RASO (não recursivo),
+// então um profileCustomization parcial apagaria cor/moldura/nome etc. já
+// salvos antes.
+document.getElementById('settings-save-profile-effects')?.addEventListener('click',()=>{
+  const me=window.App?.getState?.()?.currentUser;
+  if(!me?.wfna)return window.App?.toast('Os efeitos animados do perfil são exclusivos do WFNA.','error');
+  const p=collectProfile();
+  p.avatarAura=window.__wcTempAura&&window.__wcTempAura!=='none'?window.__wcTempAura:'none';
+  saveSettings({
+    profileEffect:value('settings-profile-effect','none'),
+    profileEffectSpeed:value('settings-profile-effect-speed','normal'),
+    profileEffectEnabled:checked('settings-profile-effect-enabled'),
+    profileCustomization:p,
+  },'Efeitos do perfil salvos.').then(()=>{
+    window.__wcTempAura=undefined;
+    ProfileDesigner.refresh();
+  }).catch(e=>window.App?.toast(e.message,'error'));
+});
 })();
 // ---------------------------------------------------------------------
 // Autocomplete de @menção no composer
