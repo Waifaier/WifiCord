@@ -1,7 +1,7 @@
 // Aplicação: login, menus, lobby, perfil, inventário/loja, configurações e resultados.
 import { api, setToken, token } from './api.js';
 import { $, $$, el, showScreen, previousScreen, currentScreen, toast, modal, setupTabs, fmtTime, PLAYER_COLORS } from './ui.js';
-import { settings, isTouchDevice } from './settings.js';
+import { settings, isTouchDevice, onSettings } from './settings.js';
 import { audio } from './audio.js';
 import { Input } from './input.js';
 import { VoiceChat } from './voice.js';
@@ -27,7 +27,18 @@ class App {
     this.renderSettings();
     document.body.classList.toggle('no-crt', !settings.crt);
     document.addEventListener('pointerdown', () => audio.unlock(), { once: false });
+    // Tamanho/opacidade do analógico e "correr ao empurrar até o fim" (ver
+    // #settings-form abaixo) — aplica logo de cara e mantém em dia sempre
+    // que a preferência mudar, mesmo fora de uma partida.
+    this.applyTouchPrefs();
+    onSettings((k) => { if (['joySize', 'joyOpacity', 'joyAutoRun'].includes(k)) this.applyTouchPrefs(); });
     this.boot();
+  }
+
+  applyTouchPrefs() {
+    document.documentElement.style.setProperty('--joy-scale', settings.joySize);
+    document.documentElement.style.setProperty('--joy-opacity', settings.joyOpacity);
+    this.input.joyRun = settings.joyAutoRun;
   }
 
   async boot() {
@@ -147,7 +158,7 @@ class App {
     $('#form-create').addEventListener('submit', async (e) => {
       e.preventDefault();
       try {
-        const r = await this.emit('room:create', { night: Number($('#create-night').value), maxPlayers: Number($('#create-max').value), difficulty: $('#create-diff').value, isPublic: e.target.isPublic.checked });
+        const r = await this.emit('room:create', { night: Number($('#create-night').value), maxPlayers: Number($('#create-max').value), difficulty: $('#create-diff').value, mode: $('#create-mode').value, isPublic: e.target.isPublic.checked });
         this.onRoomUpdate(r.room);
         showScreen('lobby');
       } catch (err) { $('#create-error').textContent = err.message; }
@@ -195,6 +206,9 @@ class App {
       try { await this.emit('room:config', { difficulty: e.target.value }); } catch (err) { $('#lobby-error').textContent = err.message; this.onRoomUpdate(this.room); }
     });
     $('#create-diff').addEventListener('change', (e) => { settings.lastDifficulty = e.target.value; $('#create-diff-desc').textContent = DIFFICULTIES[e.target.value].desc; });
+    const MODE_DESC = { normal: 'A experiência de sempre.', animatronic: 'Um ou mais jogadores são escolhidos EM SEGREDO pelo servidor pra jogar como o animatrônico. Precisa de pelo menos 2 jogadores.' };
+    $('#create-mode').addEventListener('change', (e) => { $('#create-mode-desc').textContent = MODE_DESC[e.target.value] || ''; });
+    $('#create-mode-desc').textContent = MODE_DESC.normal;
     $('#lobby-public').addEventListener('change', async (e) => { try { await this.emit('room:config', { isPublic: e.target.checked }); } catch (err) { $('#lobby-error').textContent = err.message; } });
     $('#lobby-chat-form').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -477,7 +491,15 @@ class App {
       isTouchDevice()
         ? el('p', { class: 'hint' }, 'Efeitos de tela (shader): desligados no celular (correção de tela preta).')
         : select('fx', 'Efeitos de tela (shader)', [['high', 'Alto'], ['low', 'Leve'], ['off', 'Desligado']], () => this.game?.resize()),
-      select('quality', 'Qualidade gráfica', [['auto', 'Automática'], ['low', 'Baixa (PCs modestos)']], () => { if (this.game?.S) { this.game.S.lowQuality = settings.quality === 'low'; this.game.resize(); } }),
+      select('quality', 'Qualidade gráfica', [['auto', 'Automática (reduz sozinha se o FPS cair)'], ['low', 'Baixa (PCs/celulares modestos)']], () => { if (this.game?.S) { this.game.S.lowQuality = settings.quality === 'low'; this.game.resize(); } }),
+      // Tamanho/opacidade do analógico e "correr no limite" só fazem
+      // sentido em quem usa controle touch de verdade — escondidos no
+      // desktop pelo mesmo motivo do aviso de shader acima.
+      ...(isTouchDevice() ? [
+        el('label', {}, 'Tamanho do analógico', el('input', { type: 'range', min: 0.75, max: 1.4, step: 0.05, value: settings.joySize, oninput: (e) => { settings.joySize = Number(e.target.value); } })),
+        el('label', {}, 'Opacidade do analógico', el('input', { type: 'range', min: 0.3, max: 1, step: 0.05, value: settings.joyOpacity, oninput: (e) => { settings.joyOpacity = Number(e.target.value); } })),
+        check('joyAutoRun', 'Correr ao empurrar o analógico até o fim'),
+      ] : []),
       el('button', { class: 'btn tiny', type: 'button', text: 'Testar som', onclick: () => { audio.unlock(); audio.play('musicbox', { vol: 0.8 }); } }),
     );
   }

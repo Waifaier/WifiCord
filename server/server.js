@@ -199,6 +199,14 @@ async function bootstrap() {
   app.use('/api/meia-lua', createMeiaLuaBridgeRouter({ accounts: meiaLua.accounts }));
   app.use('/api/meia-lua', meiaLua.apiRouter);
 
+  // Painel Admin do Meia-Lua — rota própria FORA de /jogos/meia-lua (que é
+  // servida sem autenticação nenhuma pro jogo em si) e fora de /api/meia-
+  // lua (a API pública do jogo). Protegida por requireAuth+admin dentro do
+  // próprio router (ver server/routes/meiaLuaAdmin.js) — tanto a página
+  // quanto toda chamada de API exigem sessão de administrador de verdade.
+  const { createMeiaLuaAdminRouter } = require('./routes/meiaLuaAdmin');
+  app.use('/admin/meia-lua', createMeiaLuaAdminRouter({ adminBridge: meiaLua.admin }));
+
   // Usado pelo app desktop pra detectar quando uma nova versão foi
   // publicada (ver desktop-app/main.js). Sem cache nenhum de propósito.
   app.get('/api/version', (req, res) => {

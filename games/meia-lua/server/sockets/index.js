@@ -2,6 +2,7 @@
 import { accountIdFromToken, getAccount } from '../database/accounts.js';
 import { config } from '../config.js';
 import { DIFFICULTIES } from '../../shared/nights.js';
+import { GAME_MODES } from '../../shared/animatronicMode.js';
 
 // Limitador simples por socket/evento (token bucket)
 function limiter(ratePerSec, burst) {
@@ -77,7 +78,7 @@ export function registerSockets(io, rooms) {
 
     // ---------------- Salas ----------------
     on('room:create', 'room', (d) => {
-      const room = rooms.create(socket, account(), { night: d.night, maxPlayers: d.maxPlayers, isPublic: d.isPublic, difficulty: String(d.difficulty || '') });
+      const room = rooms.create(socket, account(), { night: d.night, maxPlayers: d.maxPlayers, isPublic: d.isPublic, difficulty: String(d.difficulty || ''), mode: String(d.mode || '') });
       return { room: room.view() };
     });
     on('room:join', 'room', (d) => {
@@ -110,6 +111,10 @@ export function registerSockets(io, rooms) {
       if (d.difficulty !== undefined) {
         if (!DIFFICULTIES[d.difficulty]) throw new Error('Dificuldade inválida.');
         r.difficulty = d.difficulty;
+      }
+      if (d.mode !== undefined) {
+        if (!GAME_MODES.includes(d.mode)) throw new Error('Modo de jogo inválido.');
+        r.mode = d.mode;
       }
       for (const m of r.members.values()) m.ready = false;
       r.broadcastState();
@@ -160,6 +165,12 @@ export function registerSockets(io, rooms) {
     on('unequip', 'action', (d) => { matchOf()?.unequip(accountId, String(d.slot || '')); });
     on('camera', 'action', (d) => { matchOf()?.setCamera(accountId, d.cam === null ? null : String(d.cam || '')); });
     on('remoteDoor', 'interact', (d) => { matchOf()?.remoteDoor(accountId, String(d.door || '')); });
+    // Modo Animatronic: uma habilidade do jogador-animatrônico — toda a
+    // validação (papel, energia, cooldown, alvo real) acontece dentro de
+    // Match.useAnimAbility, nunca aqui; isto só repassa a ação, com o
+    // mesmo balde de limite de taxa ('action') que flashlight/useItem/
+    // equip/câmera já usam.
+    on('animAbility', 'action', (d) => { matchOf()?.useAnimAbility(accountId, String(d.ability || ''), { targetId: d.targetId }); });
     on('match:leave', 'room', () => {
       const r = rooms.roomOf(accountId);
       const m = matchOf();

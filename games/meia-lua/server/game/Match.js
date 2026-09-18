@@ -16,6 +16,8 @@ import { saveMatchProgress } from '../database/accounts.js';
 import { TensionDirector } from './TensionDirector.js';
 import { areaProfile } from '../../shared/areaProfiles.js';
 import { EventChains } from './EventChains.js';
+import { PlayerAnimatronic } from './PlayerAnimatronic.js';
+import { animCountFor, pickAnimTypes, abilityDef, CHASE as ANIM_CHASE } from '../../shared/animatronicMode.js';
 
 const TICK_MS = 50;
 const SNAP_EVERY = 2; // 10 snapshots/s
@@ -39,10 +41,16 @@ const SHOW_STAGE_X2 = 38;
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 export class Match {
-  constructor(room, io, night, participants, difficulty = DEFAULT_DIFFICULTY) {
+  constructor(room, io, night, participants, difficulty = DEFAULT_DIFFICULTY, mode = 'normal') {
     this.room = room;
     this.io = io;
     this.night = night;
+    // Modo Animatronic (ver shared/animatronicMode.js): um ou mais
+    // jogadores viram, EM SEGREDO, o próprio animatrônico da partida em vez
+    // de sobreviventes humanos. 'normal' segue 100% como sempre era — todo
+    // código novo abaixo é guardado atrás de `this.mode === 'animatronic'`
+    // pra não mudar em nada o comportamento do modo padrão.
+    this.mode = mode === 'animatronic' ? 'animatronic' : 'normal';
     this.cfg = NIGHTS[night];
     this.difficulty = DIFFICULTIES[difficulty] ? difficulty : DEFAULT_DIFFICULTY;
     this.diff = DIFFICULTIES[this.difficulty];
@@ -150,33 +158,61 @@ export class Match {
     this.players = new Map();
     participants.forEach((pt, i) => this.players.set(pt.account.id, this.makePlayer(pt, i)));
 
-    // Animatrônicos — ativação escalonada ao longo da noite: cada "caçador"
-    // (não é armadilha nem começa dormente) liga numa hora diferente, na
-    // ordem em que aparece na lista da noite, em vez de todos começarem a
-    // andar quase junto nos primeiros segundos como era antes. Numa noite
-    // com 4, por exemplo, eles vêm à tona por volta de 1h, 2h20, 3h40 e
-    // 4h50 (com uma folga aleatória em cada um) — dá pra sentir a virada
-    // de clima crescendo em vez de já começar tudo de uma vez.
-    const hunterTypes = this.cfg.animatronics.filter((t) => !ANIM_TYPES[t].trap && !ANIM_TYPES[t].dormant);
-    const hourLen = this.duration / 6;
-    const spacing = Math.min(1.3, 4 / Math.max(1, hunterTypes.length - 1));
-    const activationAt = {};
-    // Faixa permitida em proporção da duração da noite (calibrada p/ os
-    // 20s..315s de uma noite padrão de 360s) — usar proporção em vez de
-    // segundos fixos evita que o teto (duration-45) fique menor que o piso
-    // (20) em noites curtas, o que colapsava todo mundo pro mesmo instante.
-    const activationLo = this.duration * (20 / 360);
-    const activationHi = this.duration * (315 / 360);
-    // A folga aleatória também escala com o tamanho da "hora" do jogo —
-    // numa noite padrão (hourLen=60s) isso é o rnd(-15,25) original; numa
-    // noite mais curta (config/testes), a folga encolhe junto pra não
-    // engolir o espaçamento entre um animatrônico e o outro.
-    hunterTypes.forEach((t, i) => {
-      const targetHour = 1 + i * spacing;
-      const secs = targetHour * hourLen + rnd(-hourLen * 0.25, hourLen * (25 / 60));
-      activationAt[t] = Math.max(activationLo, Math.min(activationHi, secs));
-    });
-    this.anims = this.cfg.animatronics.map((t) => new Animatronic(t, this, activationAt[t]));
+    if (this.mode === 'animatronic') {
+      // Seleção SECRETA e 100% no servidor (pedido explícito: nunca deixar
+      // o cliente decidir/saber quem foi escolhido) — embaralha os ids dos
+      // participantes e reserva os N primeiros pro papel de animatrônico,
+      // N vindo da tabela central (ver shared/animatronicMode.js,
+      // animCountFor — humanos sempre maioria). Nenhum broadcast acontece
+      // aqui; cada jogador só descobre o próprio papel via fullState(p)
+      // (que já É por-socket) quando a partida começa/reconecta.
+      const ids = shuffle([...this.players.keys()]);
+      const n = animCountFor(ids.length);
+      const types = pickAnimTypes(n);
+      ids.forEach((id, i) => {
+        const p = this.players.get(id);
+        if (i < n) { p.role = 'animatronic'; p.beast = new PlayerAnimatronic(types[i]); }
+        else p.role = 'funcionario';
+      });
+      // Sem IA "caçadora" nenhuma nesse modo — o único animatrônico de
+      // verdade é o(s) jogador(es) escolhido(s) acima. TensionDirector e
+      // TODO o sistema de eventos ambientais continuam rodando normal (ver
+      // updateWorld/runRandomEvent, sem nenhum guard novo neles) — é
+      // exatamente isso que preserva a ambiguidade pedida ("foi o jogo ou
+      // foi o animatronic?", regra final do pedido).
+      this.anims = [];
+    } else {
+      for (const p of this.players.values()) p.role = 'funcionario';
+      // Animatrônicos — ativação escalonada ao longo da noite: cada
+      // "caçador" (não é armadilha nem começa dormente) liga numa hora
+      // diferente, na ordem em que aparece na lista da noite, em vez de
+      // todos começarem a andar quase junto nos primeiros segundos como
+      // era antes. Numa noite com 4, por exemplo, eles vêm à tona por
+      // volta de 1h, 2h20, 3h40 e 4h50 (com uma folga aleatória em cada
+      // um) — dá pra sentir a virada de clima crescendo em vez de já
+      // começar tudo de uma vez.
+      const hunterTypes = this.cfg.animatronics.filter((t) => !ANIM_TYPES[t].trap && !ANIM_TYPES[t].dormant);
+      const hourLen = this.duration / 6;
+      const spacing = Math.min(1.3, 4 / Math.max(1, hunterTypes.length - 1));
+      const activationAt = {};
+      // Faixa permitida em proporção da duração da noite (calibrada p/ os
+      // 20s..315s de uma noite padrão de 360s) — usar proporção em vez de
+      // segundos fixos evita que o teto (duration-45) fique menor que o
+      // piso (20) em noites curtas, o que colapsava todo mundo pro mesmo
+      // instante.
+      const activationLo = this.duration * (20 / 360);
+      const activationHi = this.duration * (315 / 360);
+      // A folga aleatória também escala com o tamanho da "hora" do jogo —
+      // numa noite padrão (hourLen=60s) isso é o rnd(-15,25) original; numa
+      // noite mais curta (config/testes), a folga encolhe junto pra não
+      // engolir o espaçamento entre um animatrônico e o outro.
+      hunterTypes.forEach((t, i) => {
+        const targetHour = 1 + i * spacing;
+        const secs = targetHour * hourLen + rnd(-hourLen * 0.25, hourLen * (25 / 60));
+        activationAt[t] = Math.max(activationLo, Math.min(activationHi, secs));
+      });
+      this.anims = this.cfg.animatronics.map((t) => new Animatronic(t, this, activationAt[t]));
+    }
 
     this.interval = setInterval(() => this.tick(), TICK_MS);
   }
@@ -203,6 +239,7 @@ export class Match {
       noiseCd: 0, breathCd: 0, sprinting: false, moved: false, sneaking: false, breath: 100, holdBreath: false, threat: null,
       hints: [], hintCd: 0, color: i,
       stillSince: 0, flashOnSince: 0, // eventos da Marola (acampar) e da Lume (lanterna acesa demais)
+      role: 'funcionario', beast: null, // Modo Animatronic (ver constructor) — role/beast só viram outra coisa nesse modo.
     };
     this.recalcStats(p, true);
     return p;
@@ -301,10 +338,12 @@ export class Match {
     try {
       this.updatePlayers(dt);
       this.updateWorld(dt);
+      if (this.mode === 'animatronic') this.updateBeastChases(dt);
       if (this.time > GRACE_SECONDS) {
         for (const a of this.anims) a.update(dt);
       }
       for (const n of this.noises) for (const a of this.anims) a.hear(n);
+      if (this.mode === 'animatronic') this.feedBeastHearing();
       this.noises.length = 0;
       this.chains.update();
       this.checkEnd();
@@ -321,6 +360,7 @@ export class Match {
         if (this.time - p.offlineSince > OFFLINE_GRACE) this.removePlayer(p, 'timeout');
         continue;
       }
+      if (p.role === 'animatronic' && p.beast) p.beast.tick(dt);
       p.moved = false; p.sprinting = false; p.sneaking = false;
       p.budget = Math.min(4, p.budget + 1);
       while (p.inputs.length && p.budget >= 1) {
@@ -1256,6 +1296,100 @@ export class Match {
     this.addGround(g.item, pt.x, pt.y, g.amount, false);
   }
 
+  // ======================================================================
+  // Modo Animatronic — habilidades do jogador-animatrônico
+  // ======================================================================
+  // Validação 100% no servidor (pedido explícito: nunca confiar no
+  // cliente) — papel, vida, recurso e cooldown são conferidos aqui antes
+  // de QUALQUER efeito. Despacha pros MESMOS métodos fx* que o sorteio de
+  // eventos aleatórios usa (ver runRandomEvent logo abaixo) — não existe
+  // versão "fake" separada pro jogador-animatrônico, é o sistema de
+  // eventos de verdade, só que acionado por um jogador em vez de sorteado.
+  useAnimAbility(accountId, abilityId, opts = {}) {
+    const p = this.players.get(accountId);
+    if (!p || p.role !== 'animatronic' || !p.beast || !p.alive || p.saved) return false;
+    const def = abilityDef(abilityId);
+    if (!def) return false;
+    if (!p.beast.canUse(abilityId)) { this.notify(p, 'Sem energia/ainda em recarga.', 'warn'); return false; }
+
+    // Alvo: só jogadores humanos de verdade DESSA partida — nunca um id
+    // arbitrário mandado pelo cliente sem checagem (evita o jogador-
+    // animatrônico "mirar" em qualquer coisa que o cliente jure existir).
+    // 'chase' é tratado à parte (ver abaixo): perseguir exige que o
+    // animatrônico REALMENTE esteja vendo o alvo agora (mesma percepção
+    // limitada de beastSenseFor) — as habilidades ambientais (passos,
+    // respiração, vulto, presença, observando) continuam sem essa
+    // exigência de propósito, porque representam a criatura manipulando o
+    // PRÉDIO à distância, não um ataque físico — exatamente como os
+    // eventos aleatórios de sempre já escolhem qualquer jogador sem
+    // depender de proximidade de nenhum animatrônico de IA.
+    const resolveTarget = () => {
+      if (abilityId === 'chase') {
+        const sensed = this.beastSenseFor(p);
+        if (!sensed.seen.length) return null;
+        const wanted = opts.targetId != null ? sensed.seen.find((s) => String(s[0]) === String(opts.targetId)) : null;
+        const chosenId = (wanted || sensed.seen[0])[0];
+        return this.players.get(chosenId);
+      }
+      const wanted = opts.targetId != null ? this.players.get(String(opts.targetId)) ?? this.players.get(Number(opts.targetId)) : null;
+      if (wanted && wanted.role !== 'animatronic' && wanted.alive && !wanted.saved) return wanted;
+      const humans = [...this.alivePlayers()].filter((h) => h.role !== 'animatronic');
+      if (!humans.length) return null;
+      humans.sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y));
+      return humans[0];
+    };
+    const target = resolveTarget();
+    if (!target && abilityId !== 'flicker' && abilityId !== 'falsoAlarme') return false;
+
+    if (!p.beast.use(abilityId)) return false; // gasta recurso + cooldown (canUse já checou acima, mas revalida atômico)
+
+    switch (abilityId) {
+      case 'passosAtras': this.fxPassosAtras(target); break;
+      case 'respiracaoDistante': this.fxRespiracaoDistante(target); break;
+      case 'vultoRapido': this.fxVultoRapido(target); break;
+      case 'presenca': this.fxPresenca(target); break;
+      case 'flicker': this.fxFlicker(target ? areaAt(target.x, target.y) : pick(AREAS)); break;
+      case 'falsoAlarme': this.fxFalsoAlarme(); break;
+      case 'observando': this.fxObservando(target, p.beast); break;
+      case 'manifestar': this.fxManifestarBeast(p, p.beast, target); break;
+      case 'chase': this.beginPlayerChase(p, target); break;
+      default: break;
+    }
+    return true;
+  }
+
+  /** Perseguição limitada de um jogador-animatrônico (ver PlayerAnimatronic/CHASE). */
+  beginPlayerChase(beastPlayer, target) {
+    if (!target) return;
+    beastPlayer.beast.targetId = target.id;
+    beastPlayer.beastCatchCd = 0;
+    this.onAnimChase({ type: beastPlayer.beast.type, x: beastPlayer.x, y: beastPlayer.y, targetId: target.id });
+    this.emitSfx('steps', beastPlayer.x, beastPlayer.y, 24);
+  }
+
+  /** Chamado todo tick (só no modo Animatronic) — checa alcance de captura das perseguições ativas. */
+  updateBeastChases(dt) {
+    for (const p of this.players.values()) {
+      if (p.role !== 'animatronic' || !p.beast || p.saved || !p.alive) continue;
+      const b = p.beast;
+      if (b.chaseState !== 'active') continue;
+      p.beastCatchCd = (p.beastCatchCd || 0) - dt;
+      if (p.beastCatchCd > 0) continue;
+      p.beastCatchCd = ANIM_CHASE.catchCheckEvery;
+      const target = this.players.get(b.targetId);
+      if (!target || !target.alive || target.saved || !target.online) { b.targetId = null; continue; }
+      const d = Math.hypot(target.x - p.x, target.y - p.y);
+      if (d <= ANIM_CHASE.catchRadius) {
+        // Reaproveita damagePlayer tal e qual — um "anim" de mentira só com
+        // o campo type/def que ele já lê, pra não duplicar NENHUMA regra de
+        // dano/invulnerabilidade/empurrão/morte que já existe pro resto do
+        // jogo.
+        this.damagePlayer(target, { type: b.type, def: ANIM_TYPES[b.type] });
+        b.endChase();
+      }
+    }
+  }
+
   // Depois que um animatrônico acerta um jumpscare e teleporta pra longe
   // (ver Animatronic.teleportAfterAttack), quem estava perto ouve o
   // "sumiço" dele indo embora — reforça que ele já não está mais ali.
@@ -1465,25 +1599,14 @@ export class Match {
     this.eventLog.push({ t: ev.t, at: Math.round(this.time) });
 
     switch (ev.t) {
-      case 'flicker': {
-        const areaId = Math.random() < 0.6 && tArea ? tArea.id : pick(AREAS).id;
-        this.flicker.set(areaId, this.time + rnd(3, 7));
-        this.broadcast('fx', { type: 'flicker', area: areaId, until: rnd(3, 7) });
-        for (const p of players) if (areaAt(p.x, p.y)?.id === areaId) p.fear = Math.min(100, p.fear + 6 * p.derived.fearMult);
-        break;
-      }
+      case 'flicker': { this.fxFlicker(tArea); break; }
       case 'doorSlam': {
         const opts = DOORS.filter((d) => d.kind === 'normal' && this.doors.get(d.id).open && !this.doors.get(d.id).locked);
         const d = opts.length ? pick(opts) : null;
         if (d && this.setDoorOpen(d.id, false, null)) this.emitSfx('slam', d.x + 0.5, d.y + 0.5, 30);
         break;
       }
-      case 'camFail': {
-        const cam = pick(CAMERAS);
-        this.camFail.set(cam.id, this.time + rnd(12, 25));
-        this.broadcast('fx', { type: 'camFail', cam: cam.id });
-        break;
-      }
+      case 'camFail': { this.fxCamFail(); break; }
       case 'objectMove': {
         const g = [...this.ground.values()].find((x) => ITEMS[x.item]?.type !== 'quest');
         if (g) {
@@ -1584,86 +1707,12 @@ export class Match {
         this.emitSfx('static', target.x, target.y, 24);
         break;
       }
-      case 'silencio': {
-        const dur = rnd(4.5, 7.5);
-        this.broadcast('fx', { type: 'silence', dur: Math.round(dur * 10) / 10 });
-        break;
-      }
-      case 'presenca': {
-        // Só quem tem ouvido "ligado" no microfone é natural já estar
-        // prestando atenção em som — mas isso aqui é síntese pro cliente
-        // dele, não precisa de voz real; qualquer jogador vivo serve de
-        // alvo. Sempre um só (sendTo, não broadcast) — os outros na sala
-        // não ouvem nada, então nem dá pra comparar/confirmar com alguém.
-        this.sendTo(target, 'fx', { type: 'presence' });
-        target.fear = Math.min(100, target.fear + 8 * target.derived.fearMult);
-        break;
-      }
-      case 'passosAtras': {
-        // Passos ouvidos vindo de trás, na direção contrária de onde o
-        // jogador está olhando/andando (p.dir) — quando ele vira pra
-        // conferir, não tem nada lá. Só o alvo ouve (sendTo).
-        const ang = (target.dir || 0) + Math.PI + rnd(-0.4, 0.4);
-        const dist = rnd(2.5, 4);
-        this.sendTo(target, 'fx', {
-          type: 'sfx', s: 'stepsBehind',
-          x: r2(target.x + Math.cos(ang) * dist), y: r2(target.y + Math.sin(ang) * dist),
-        });
-        break;
-      }
-      case 'respiracaoDistante': {
-        // Respiração pesada vinda de algum ponto impreciso e distante —
-        // só som, nenhuma imagem, nenhum aumento de medo: a intenção é
-        // deixar a dúvida no ar, não confirmar perigo nenhum.
-        const ang = Math.random() * Math.PI * 2;
-        const dist = rnd(6, 10);
-        this.sendTo(target, 'fx', {
-          type: 'sfx', s: 'breathDistant',
-          x: r2(target.x + Math.cos(ang) * dist), y: r2(target.y + Math.sin(ang) * dist),
-        });
-        break;
-      }
-      case 'vultoRapido': {
-        // Reaproveita a mesma silhueta visual da apparition (ver
-        // 'glimpse' em client/js/game.js), só que bem mais curta e sem
-        // áudio/glitch/medo — às vezes o "monstro" só atravessa e some,
-        // nem todo vislumbre é um susto de verdade (pedido #5).
-        const ang = Math.random() * Math.PI * 2;
-        this.sendTo(target, 'fx', {
-          type: 'glimpse',
-          x: r2(target.x + Math.cos(ang) * rnd(4, 6)), y: r2(target.y + Math.sin(ang) * rnd(4, 6)),
-          kind: pick(TYPE_LIST.slice(0, 4)),
-        });
-        break;
-      }
-      case 'falsoAlarme': {
-        // Susto falso de VERDADE em 3 tempos (pedido #19: "não quero som
-        // assustador → nada acontece. Quero falsos alarmes que realmente
-        // criem expectativa"), usando EventChains pra espaçar os passos:
-        //   1. agora — porta "se prepara" (som + flicker + pulso de
-        //      tensão), constrói expectativa de verdade;
-        //   2. ~2.5s depois — resolve: a porta só... fecha nornal, sem
-        //      nada saindo dela. Nada aconteceu.
-        //   3. ~6s depois disso — um período de silêncio real (mesmo
-        //      mecanismo do evento 'silencio'), pra deixar a guarda baixar
-        //      antes de qualquer coisa seguinte — é isso que evita o
-        //      jogador aprender "porta = jumpscare" (o próximo evento,
-        //      quando vier, é sorteado normalmente, em outro lugar
-        //      qualquer, sem nenhuma relação com esta porta).
-        const d = pick(DOORS.filter((x) => x.kind === 'normal'));
-        if (!d) break;
-        const dArea = areaAt(d.x, d.y);
-        if (dArea) this.flicker.set(dArea.id, this.time + 2.4);
-        this.emitSfx('doorOpen', d.x + 0.5, d.y + 0.5, 22);
-        this.broadcast('fx', { type: 'tensionPulse', x: r2(d.x + 0.5), y: r2(d.y + 0.5) });
-        this.chains.schedule(rnd(2.2, 3.2), () => {
-          this.emitSfx('doorClose', d.x + 0.5, d.y + 0.5, 18);
-        });
-        this.chains.schedule(rnd(6, 9), () => {
-          this.broadcast('fx', { type: 'silence', dur: rnd(6, 9) });
-        });
-        break;
-      }
+      case 'silencio': { this.fxSilencio(); break; }
+      case 'presenca': { this.fxPresenca(target); break; }
+      case 'passosAtras': { this.fxPassosAtras(target); break; }
+      case 'respiracaoDistante': { this.fxRespiracaoDistante(target); break; }
+      case 'vultoRapido': { this.fxVultoRapido(target); break; }
+      case 'falsoAlarme': { this.fxFalsoAlarme(); break; }
       // Corrente assimétrica entre jogadores (pedido #17) — usa EventChains
       // pra espaçar os dois "lados" no tempo, exatamente como o exemplo
       // do pedido: A recebe um sinal só pra ele; alguns segundos depois,
@@ -1698,29 +1747,115 @@ export class Match {
         });
         break;
       }
-      case 'observando': {
-        // A criatura só observa de longe, sem se aproximar de verdade —
-        // usa um animatrônico real (sprite/tipo real), mas ele continua
-        // fazendo o que já estava fazendo no jogo; isso aqui é só a
-        // "aparição" que o jogador vê, não uma perseguição de verdade
-        // (pedido #5/#8: nem todo encontro termina em ataque).
-        const watching = this.anims.filter((a) => !['DISABLED', 'DORMANT', 'CHASE'].includes(a.state));
-        const anim = watching.length ? pick(watching) : pick(this.anims);
-        if (!anim) break;
-        const ang = Math.random() * Math.PI * 2;
-        this.sendTo(target, 'fx', {
-          type: 'sighting',
-          x: r2(target.x + Math.cos(ang) * rnd(7, 11)), y: r2(target.y + Math.sin(ang) * rnd(7, 11)),
-          kind: anim.type,
-        });
-        target.fear = Math.min(100, target.fear + 5 * target.derived.fearMult);
-        break;
-      }
+      case 'observando': { this.fxObservando(target); break; }
     }
     // Avisa o director o que de fato rodou — ele usa isso pra registrar
     // exposição (pedido #9) e, se foi um evento 'real', entrar no
     // período de recuperação pós-susto (pedido #12).
     this.director.notifyEventRan(ev.t, ev.cat);
+  }
+
+  // ========================================================================
+  // Efeitos reaproveitáveis (extraídos do switch acima) — MESMA
+  // implementação usada pelo sorteio de eventos aleatórios, pelo Painel
+  // Admin (ver adminBridge.js) e pelas habilidades do jogador-animatrônico
+  // (ver useAnimAbility acima). Nenhum dos dois sistemas novos tem uma
+  // versão "fake" própria — todos chamam exatamente isto aqui.
+  // ========================================================================
+  fxFlicker(area) {
+    const areaId = area ? area.id : pick(AREAS).id;
+    this.flicker.set(areaId, this.time + rnd(3, 7));
+    this.broadcast('fx', { type: 'flicker', area: areaId, until: rnd(3, 7) });
+    for (const p of this.alivePlayers()) if (areaAt(p.x, p.y)?.id === areaId) p.fear = Math.min(100, p.fear + 6 * p.derived.fearMult);
+  }
+
+  fxCamFail() {
+    const cam = pick(CAMERAS);
+    this.camFail.set(cam.id, this.time + rnd(12, 25));
+    this.broadcast('fx', { type: 'camFail', cam: cam.id });
+  }
+
+  fxSilencio() {
+    const dur = rnd(4.5, 7.5);
+    this.broadcast('fx', { type: 'silence', dur: Math.round(dur * 10) / 10 });
+  }
+
+  fxPresenca(target) {
+    if (!target) return;
+    // Só quem tem ouvido "ligado" no microfone é natural já estar
+    // prestando atenção em som — mas isso aqui é síntese pro cliente dele,
+    // não precisa de voz real; qualquer jogador vivo serve de alvo. Sempre
+    // um só (sendTo, não broadcast) — os outros na sala não ouvem nada,
+    // então nem dá pra comparar/confirmar com alguém.
+    this.sendTo(target, 'fx', { type: 'presence' });
+    target.fear = Math.min(100, target.fear + 8 * target.derived.fearMult);
+  }
+
+  fxPassosAtras(target) {
+    if (!target) return;
+    const ang = (target.dir || 0) + Math.PI + rnd(-0.4, 0.4);
+    const dist = rnd(2.5, 4);
+    this.sendTo(target, 'fx', {
+      type: 'sfx', s: 'stepsBehind',
+      x: r2(target.x + Math.cos(ang) * dist), y: r2(target.y + Math.sin(ang) * dist),
+    });
+  }
+
+  fxRespiracaoDistante(target) {
+    if (!target) return;
+    const ang = Math.random() * Math.PI * 2;
+    const dist = rnd(6, 10);
+    this.sendTo(target, 'fx', {
+      type: 'sfx', s: 'breathDistant',
+      x: r2(target.x + Math.cos(ang) * dist), y: r2(target.y + Math.sin(ang) * dist),
+    });
+  }
+
+  fxVultoRapido(target) {
+    if (!target) return;
+    const ang = Math.random() * Math.PI * 2;
+    this.sendTo(target, 'fx', {
+      type: 'glimpse',
+      x: r2(target.x + Math.cos(ang) * rnd(4, 6)), y: r2(target.y + Math.sin(ang) * rnd(4, 6)),
+      kind: pick(TYPE_LIST.slice(0, 4)),
+    });
+  }
+
+  fxFalsoAlarme() {
+    const d = pick(DOORS.filter((x) => x.kind === 'normal'));
+    if (!d) return;
+    const dArea = areaAt(d.x, d.y);
+    if (dArea) this.flicker.set(dArea.id, this.time + 2.4);
+    this.emitSfx('doorOpen', d.x + 0.5, d.y + 0.5, 22);
+    this.broadcast('fx', { type: 'tensionPulse', x: r2(d.x + 0.5), y: r2(d.y + 0.5) });
+    this.chains.schedule(rnd(2.2, 3.2), () => { this.emitSfx('doorClose', d.x + 0.5, d.y + 0.5, 18); });
+    this.chains.schedule(rnd(6, 9), () => { this.broadcast('fx', { type: 'silence', dur: rnd(6, 9) }); });
+  }
+
+  /** `beastOverride` (opcional): um jogador-animatrônico usando a habilidade — ver useAnimAbility. */
+  fxObservando(target, beastOverride) {
+    if (!target) return;
+    const watching = beastOverride ? null : this.anims.filter((a) => !['DISABLED', 'DORMANT', 'CHASE'].includes(a.state));
+    const anim = beastOverride || (watching && watching.length ? pick(watching) : pick(this.anims));
+    if (!anim) return;
+    const ang = Math.random() * Math.PI * 2;
+    this.sendTo(target, 'fx', {
+      type: 'sighting',
+      x: r2(target.x + Math.cos(ang) * rnd(7, 11)), y: r2(target.y + Math.sin(ang) * rnd(7, 11)),
+      kind: anim.type,
+    });
+    target.fear = Math.min(100, target.fear + 5 * target.derived.fearMult);
+  }
+
+  /** Aparição breve do jogador-animatrônico em outro ponto perto do alvo — mesma linguagem visual do 'vultoRapido'. */
+  fxManifestarBeast(beastPlayer, beast, target) {
+    if (!target) return;
+    const ang = Math.random() * Math.PI * 2;
+    this.sendTo(target, 'fx', {
+      type: 'glimpse',
+      x: r2(target.x + Math.cos(ang) * rnd(4, 6)), y: r2(target.y + Math.sin(ang) * rnd(4, 6)),
+      kind: beast.type,
+    });
   }
 
   // ========================================================================
@@ -1932,9 +2067,64 @@ export class Match {
   // ======================================================================
   // Snapshots
   // ======================================================================
+  // Percepção do jogador-animatrônico sobre os humanos (pedido: "NÃO pode
+  // saber exatamente onde todo mundo está... use audição de passos,
+  // sensação de atividade numa região, detecção de uso de porta,
+  // percepção de áreas iluminadas, observação por câmera") — reaproveita
+  // EXATAMENTE a mesma fórmula de alcance auditivo que um animatrônico de
+  // IA já usa (ver Animatronic.hear), só que alimentando um jogador em vez
+  // de uma máquina de estados. Nada aqui dá posição exata constante — som
+  // expira sozinho (buffer com validade curta) e visão exige linha de
+  // visão de verdade, igual a qualquer outro personagem do jogo.
+  feedBeastHearing() {
+    for (const p of this.players.values()) {
+      if (p.role !== 'animatronic' || !p.beast || p.saved) continue;
+      if (!p.beastHeard) p.beastHeard = [];
+      const hearing = ANIM_TYPES[p.beast.type].hearing;
+      for (const n of this.noises) {
+        if (n.source === 'voice') continue; // mesma regra do hearsVoice — sem microfone de verdade aqui, ignora
+        const d = Math.hypot(n.x - p.x, n.y - p.y);
+        const range = Math.min(n.radius * (hearing / 8), hearing);
+        if (d > range) continue;
+        p.beastHeard.push({ x: n.x, y: n.y, until: this.time + 2.6 });
+      }
+      if (p.beastHeard.length > 8) p.beastHeard.splice(0, p.beastHeard.length - 8);
+    }
+  }
+
+  /** Percepção atual (visão real + eco recente de audição) de um jogador-animatrônico sobre os humanos. */
+  beastSenseFor(p) {
+    const sight = ANIM_TYPES[p.beast.type].sight;
+    const seen = [];
+    for (const h of this.alivePlayers()) {
+      if (h.role === 'animatronic' || h.hidden) continue;
+      const d = Math.hypot(h.x - p.x, h.y - p.y);
+      if (d > sight) continue;
+      if (!lineOfSight(p.x, p.y, h.x, h.y, (id) => this.isDoorClosed(id))) continue;
+      seen.push([h.id, r2(h.x), r2(h.y)]);
+    }
+    const heard = (p.beastHeard || [])
+      .filter((n) => n.until > this.time)
+      // arredonda grosso (região, não ponto exato) — é "sentir atividade
+      // numa área", não um marcador GPS do humano que fez o barulho.
+      .map((n) => [Math.round(n.x / 2) * 2, Math.round(n.y / 2) * 2]);
+    return { seen, heard };
+  }
+
+  /** Entidades sintéticas (mesmo formato de Animatronic) pros jogadores-animatrônico ativos — ver Modo Animatronic. */
+  beastSnapEntities() {
+    const out = [];
+    for (const p of this.players.values()) {
+      if (p.role !== 'animatronic' || !p.beast || p.saved || !p.alive) continue;
+      if (!p.beast.isManifesting()) continue; // maior parte do tempo NÃO aparece pra ninguém — ver PlayerAnimatronic
+      out.push({ id: p.beast.id, type: p.beast.type, x: p.x, y: p.y, dir: p.dir, state: p.beast.chaseState === 'active' ? 'CHASE' : 'OBSERVE', moving: p.moved, def: { trap: false } });
+    }
+    return out;
+  }
+
   sendSnapshots() {
     const list = this.inGamePlayers().filter((p) => p.online);
-    const ps = this.inGamePlayers().map((p) => [
+    const psAll = this.inGamePlayers().map((p) => [
       p.id, r2(p.x), r2(p.y), Math.round(p.dir * 100) / 100,
       (p.alive ? 1 : 0) | (p.hidden ? 2 : 0) | (p.flash && p.battery > 0 ? 4 : 0) | (p.sprinting ? 8 : 0) | (p.online ? 16 : 0) | (p.cam ? 32 : 0) | (p.sneaking ? 64 : 0),
       Math.round((p.hp / p.derived.maxHp) * 100),
@@ -1947,14 +2137,34 @@ export class Match {
       bo: this.blackout ? 1 : 0,
       cb: this.camerasBroken ? 1 : 0,
       rs: this.respawnsLeft,
-      ps,
     };
+    // Modo Animatronic (pedido: "humanos NÃO devem receber informação tipo
+    // 'o animatronic está a 12 metros' — só através de áudio/ambiente/
+    // câmeras/comportamento") — a posição ao vivo do(s) jogador(es)-
+    // animatrônico NUNCA vai no `ps` de mais ninguém; eles só entram no
+    // `an` (a mesma lista dos animatrônicos de IA) quando estiverem
+    // "manifestando" de propósito (ver beastSnapEntities/isManifesting).
+    const beastEntities = this.mode === 'animatronic' ? this.beastSnapEntities() : [];
+    const animsForSnap = this.mode === 'animatronic' ? beastEntities : this.anims;
     for (const p of list) {
+      // Modo Animatronic — dois lados, duas regras de visibilidade
+      // diferentes, deliberadamente:
+      //  - Jogador HUMANO: vê todos os outros HUMANOS normalmente (igual
+      //    sempre foi — não existe "fog of war" entre colegas de equipe),
+      //    mas NUNCA a posição ao vivo de quem foi sorteado animatrônico.
+      //  - Jogador-ANIMATRÔNICO: NÃO recebe o `ps` cheio dos humanos —
+      //    "não pode saber exatamente onde todo mundo está" é uma regra
+      //    explícita do modo. Ele só vê a SI MESMO aqui; a percepção real
+      //    dos humanos vem de `me.sensed` (visão/audição limitada, ver
+      //    beastSenseFor() abaixo), nunca de uma lista de posições prontas.
+      const ps = this.mode !== 'animatronic' ? psAll
+        : p.role === 'animatronic' ? psAll.filter((row) => row[0] === p.id)
+          : psAll.filter((row) => row[0] === p.id || this.players.get(row[0])?.role !== 'animatronic');
       const an = [];
       const heard = [];
       const eyes = [];
       const cam = p.cam && this.cameraWorking(p.cam) ? CAMERA_BY_ID[p.cam] : null;
-      for (const a of this.anims) {
+      for (const a of animsForSnap) {
         if (a.state === 'DISABLED' && !this.playerSees(p, a.x, a.y)) continue;
         let visible = this.playerSees(p, a.x, a.y);
         if (!visible && cam && Math.abs(a.x - cam.cx) <= cam.vw / 2 && Math.abs(a.y - cam.cy) <= cam.vh / 2) visible = true;
@@ -1989,8 +2199,15 @@ export class Match {
         wt: (() => { const w = this.watchOf(p); return w.lvl > 0 ? [Math.round(w.lvl * 100) / 100, Math.round((Math.atan2(w.who.y - p.y, w.who.x - p.x) / Math.PI) * 8), TYPE_LIST.indexOf(w.who.type), r2(Math.hypot(w.who.x - p.x, w.who.y - p.y))] : null; })(),
         hb: p.holdBreath ? 1 : 0,
         thr: p.threat ? 1 : 0,
+        // HUD do jogador-animatrônico (energia/cooldowns/estado de
+        // perseguição) — só vai pro PRÓPRIO jogador (este objeto `me` já é
+        // por-socket), nunca pros humanos. `sensed` é a percepção limitada
+        // sobre os humanos (ver beastSenseFor) — não a lista de posições
+        // prontas que os humanos trocam entre si.
+        beast: p.role === 'animatronic' && p.beast ? p.beast.hud() : null,
+        sensed: p.role === 'animatronic' && p.beast ? this.beastSenseFor(p) : null,
       };
-      this.sendTo(p, 'snap', { ...base, an, hr: heard, ey: eyes, me });
+      this.sendTo(p, 'snap', { ...base, ps, an, hr: heard, ey: eyes, me });
     }
   }
 
@@ -2003,7 +2220,14 @@ export class Match {
       intro: this.cfg.intro,
       duration: this.duration,
       you: p.id,
-      animatronics: this.cfg.animatronics,
+      // Modo Animatronic: o papel de CADA jogador só é revelado a ELE
+      // MESMO, aqui, porque fullState(p) já é montado por-socket (sendTo,
+      // nunca broadcast) — nada no payload de mais ninguém entrega quem
+      // foi escolhido. `animatronics` (a lista de IA da noite) fica vazia
+      // nesse modo, já que os únicos animatrônicos são os jogadores.
+      mode: this.mode,
+      role: p.role,
+      animatronics: this.mode === 'animatronic' ? [] : this.cfg.animatronics,
       players: this.inGamePlayers().map((o) => ({ id: o.id, name: o.name, color: o.color, level: o.level })),
       doors: [...this.doors].map(([id, st]) => ({ id, open: st.open, locked: !!st.locked })),
       containers: [...this.containers].filter(([, c]) => c.searched).map(([id]) => id),
@@ -2081,6 +2305,27 @@ export class Match {
     const inGame = this.inGamePlayers();
     if (!inGame.length) return this.endMatch('aborted', 'empty');
     if (inGame.every((p) => !p.online) && this.time - Math.max(...inGame.map((p) => p.offlineSince)) > 15) return this.endMatch('aborted', 'offline');
+    // Modo Animatronic: condição de vitória/derrota conta só os jogadores
+    // HUMANOS — o jogador-animatrônico não "sobrevive"/"morre" pelas
+    // mesmas regras (ele nunca é alvo de dano, só quem ele mesmo captura
+    // via beginPlayerChase). Vitória mínima real: humanos aguentam até o
+    // amanhecer; derrota: todo humano foi pego e ninguém está respawnando.
+    // Objetivos/pontuação mais ricos pros dois lados ficam pro próximo
+    // ciclo (ver relatório) — isso aqui é o suficiente pra a partida ter
+    // um fim de verdade, não um placeholder que nunca termina.
+    if (this.mode === 'animatronic') {
+      const humans = inGame.filter((p) => p.role !== 'animatronic');
+      if (!humans.length) return; // não deveria acontecer (animCountFor sempre deixa maioria humana), mas não trava a partida se acontecer
+      const anyAliveH = humans.some((p) => p.alive);
+      const anyRespawningH = humans.some((p) => !p.alive && p.respawnAt);
+      if (!anyAliveH && !anyRespawningH) return this.endMatch('defeat', 'wiped');
+      if (this.time >= this.duration) {
+        const q = this.quests.find((x) => x.def.type === 'survive');
+        if (q && !q.done) this.completeQuest(q, null);
+        return this.endMatch('victory', 'dawn');
+      }
+      return;
+    }
     const anyAlive = inGame.some((p) => p.alive);
     const anyRespawning = inGame.some((p) => !p.alive && p.respawnAt);
     if (!anyAlive && !anyRespawning) return this.endMatch('defeat', 'wiped');

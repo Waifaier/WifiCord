@@ -45,6 +45,7 @@ export async function mountMeiaLua({ app, io, dbPath }) {
   const { RoomManager } = await import('./game/RoomManager.js');
   const { registerSockets } = await import('./sockets/index.js');
   const { apiRouter } = await import('./routes/api.js');
+  const { createAdminBridge } = await import('./adminBridge.js');
 
   // Namespace próprio no MESMO servidor Socket.IO do WifiCord — o chat e as
   // chamadas continuam exclusivamente no namespace padrão "/", sem
@@ -53,6 +54,11 @@ export async function mountMeiaLua({ app, io, dbPath }) {
   const namespace = io.of('/meia-lua');
   const rooms = new RoomManager(namespace);
   registerSockets(namespace, rooms);
+  // Painel Admin do Meia-Lua (ver server/adminBridge.js) — opera na MESMA
+  // instância viva de `rooms` de cima; devolvido pro WifiCord igual
+  // accounts/apiRouter já eram, pro router CJS novo (server/routes/
+  // meiaLuaAdmin.js) poder chamar essas funções sem outro import().
+  const admin = createAdminBridge(rooms);
 
   const clientDir = path.join(gameRoot, 'client');
   const sharedDir = path.join(gameRoot, 'shared');
@@ -86,5 +92,5 @@ export async function mountMeiaLua({ app, io, dbPath }) {
 
   console.log(`[meia-lua] montado em /jogos/meia-lua · API em /api/meia-lua · socket.io namespace /meia-lua · banco: ${dbPath}`);
 
-  return { rooms, config, accounts, apiRouter: apiRouterInstance, db };
+  return { rooms, config, accounts, apiRouter: apiRouterInstance, db, admin };
 }

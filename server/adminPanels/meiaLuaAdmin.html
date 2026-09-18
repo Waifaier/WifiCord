@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meia-Lua · Painel Admin</title>
+<style>
+  :root {
+    --bg: #0d0b10; --panel: #16121c; --panel2: #1d1826; --line: #2c2436;
+    --text: #e9e3f0; --muted: #9a8fae; --accent: #ff3b5c; --accent2: #ffcf4a;
+    --good: #55d992; --warn: #ffcf4a; --danger: #ff3b5c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 -apple-system, Segoe UI, Roboto, sans-serif; }
+  header { padding: 14px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: .3px; }
+  header .tag { color: var(--muted); font-size: 12px; }
+  .layout { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - 49px); }
+  aside { border-right: 1px solid var(--line); padding: 12px; overflow-y: auto; }
+  aside h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 4px 0 10px; }
+  .match-item { padding: 10px; border-radius: 8px; border: 1px solid var(--line); margin-bottom: 8px; cursor: pointer; background: var(--panel); }
+  .match-item:hover { border-color: var(--accent); }
+  .match-item.active { border-color: var(--accent); background: var(--panel2); }
+  .match-item .code { font-weight: 600; }
+  .match-item .meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  main { padding: 18px 22px; overflow-y: auto; }
+  .empty { color: var(--muted); padding: 40px; text-align: center; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .card h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .stat { font-size: 22px; font-weight: 700; }
+  .stat.small { font-size: 15px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+  tr.selected-target { background: rgba(255,59,92,.12); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; }
+  .pill.on { background: rgba(85,217,146,.18); color: var(--good); }
+  .pill.off { background: rgba(255,59,92,.18); color: var(--danger); }
+  .pill.role { background: rgba(255,207,74,.18); color: var(--accent2); }
+  section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 16px; }
+  section.panel h3 { margin: 0 0 10px; font-size: 13px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 7px 12px; cursor: pointer; font-size: 13px; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.warn { background: var(--warn); border-color: var(--warn); color: #241a02; font-weight: 600; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  select, input[type=text] { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 7px 10px; font-size: 13px; }
+  label.chk { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .log { max-height: 180px; overflow-y: auto; font-size: 12px; color: var(--muted); }
+  .log div { padding: 3px 0; border-bottom: 1px dashed var(--line); }
+  .msg { font-size: 12px; margin-top: 8px; min-height: 16px; }
+  .msg.err { color: var(--danger); }
+  .msg.ok { color: var(--good); }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎭 Meia-Lua — Painel Admin</h1>
+  <span class="tag" id="whoami">carregando…</span>
+</header>
+<div class="layout">
+  <aside>
+    <h2>Partidas ativas</h2>
+    <div id="matchList"><div class="hint">Carregando…</div></div>
+  </aside>
+  <main id="main">
+    <div class="empty">Selecione uma partida na lista ao lado.</div>
+  </main>
+</div>
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+let selectedCode = null;
+let selectedTarget = null;
+let matches = [];
+let detail = null;
+
+async function api(path, opts = {}) {
+  const res = await fetch('/admin/meia-lua/api' + path, {
+    method: opts.method || 'GET',
+    headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    credentials: 'include',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
+
+function fmtTime(s) {
+  s = Math.max(0, Math.round(s));
+  return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}
+
+async function refreshList() {
+  try {
+    const r = await api('/matches');
+    matches = r.matches;
+    $('#matchList').innerHTML = matches.length ? '' : '<div class="hint">Nenhuma partida em andamento agora.</div>';
+    for (const m of matches) {
+      const el = document.createElement('div');
+      el.className = 'match-item' + (m.code === selectedCode ? ' active' : '');
+      el.innerHTML = `<div class="code">${m.code}</div><div class="meta">Noite ${m.night} · ${m.mode === 'animatronic' ? 'Modo Animatronic' : 'Normal'} · ${m.playerCount} jogador(es) · ${fmtTime(m.time)}/${fmtTime(m.duration)}</div>`;
+      el.onclick = () => { selectedCode = m.code; refreshDetail(); };
+      $('#matchList').appendChild(el);
+    }
+    if (selectedCode && !matches.some((m) => m.code === selectedCode)) { selectedCode = null; detail = null; render(); }
+  } catch (err) { $('#matchList').innerHTML = `<div class="hint">Erro: ${err.message}</div>`; }
+}
+
+async function refreshDetail() {
+  if (!selectedCode) return;
+  try {
+    const r = await api('/matches/' + selectedCode);
+    detail = r.match;
+    render();
+  } catch (err) {
+    detail = null;
+    $('#main').innerHTML = `<div class="empty">Erro ao carregar partida: ${err.message}</div>`;
+  }
+}
+
+function setMsg(text, kind) {
+  const el = $('#msg');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'msg' + (kind ? ' ' + kind : '');
+}
+
+async function act(fn) {
+  try { await fn(); setMsg('Feito.', 'ok'); await refreshDetail(); await refreshList(); }
+  catch (err) { setMsg('Erro: ' + err.message, 'err'); }
+}
+
+const EVENT_LABELS = {
+  passosAtras: 'Passos atrás', respiracaoDistante: 'Respiração distante', vultoRapido: 'Vulto rápido',
+  presenca: 'Presença', flicker: 'Piscar de luz', falsoAlarme: 'Falso alarme', observando: 'Observando (sighting)',
+  silencio: 'Silêncio', camFail: 'Falha de câmera',
+};
+
+function render() {
+  const main = $('#main');
+  if (!selectedCode || !detail) { main.innerHTML = '<div class="empty">Selecione uma partida na lista ao lado.</div>'; return; }
+  const d = detail;
+  main.innerHTML = `
+    <div class="grid">
+      <div class="card"><h3>Relógio</h3><div class="stat">${fmtTime(d.time)} / ${fmtTime(d.duration)}</div><div class="hint">Noite ${d.night} · ${d.difficulty}</div></div>
+      <div class="card"><h3>Tensão</h3><div class="stat">${d.tension}</div><div class="hint">fase: ${d.phase}</div></div>
+      <div class="card"><h3>Energia</h3><div class="stat small">${d.power}% · ${d.lightsOn ? 'luz ligada' : 'apagado'}${d.blackout ? ' · APAGÃO' : ''}</div></div>
+      <div class="card"><h3>Modo</h3><div class="stat small">${d.mode === 'animatronic' ? 'Animatronic' : 'Normal'}</div><div class="hint">${d.playerCount} jogador(es) · Show ${d.showActive ? 'ATIVO' : 'inativo'}</div></div>
+    </div>
+
+    <section class="panel">
+      <h3>Jogadores</h3>
+      <table>
+        <thead><tr><th></th><th>Nome</th><th>Online</th><th>Vivo</th><th>HP</th><th>Posição</th>${d.mode === 'animatronic' ? '<th>Papel</th><th>Energia</th>' : ''}</tr></thead>
+        <tbody>
+          ${d.players.map((p) => `
+            <tr class="${p.id === selectedTarget ? 'selected-target' : ''}" data-id="${p.id}" style="cursor:pointer">
+              <td><input type="radio" name="target" ${p.id === selectedTarget ? 'checked' : ''} data-target="${p.id}"></td>
+              <td>${p.name}</td>
+              <td><span class="pill ${p.online ? 'on' : 'off'}">${p.online ? 'online' : 'offline'}</span></td>
+              <td><span class="pill ${p.alive ? 'on' : 'off'}">${p.alive ? 'vivo' : 'caído'}</span></td>
+              <td>${p.hp ?? '—'}%</td>
+              <td>${p.x}, ${p.y}</td>
+              ${d.mode === 'animatronic' ? `<td>${p.role === 'animatronic' ? '<span class="pill role">ANIMATRONIC</span>' : 'funcionário'}</td><td>${p.beast ? Math.round(p.beast.energy) + '/' + Math.round(p.beast.energyMax) : '—'}</td>` : ''}
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="hint">Selecione um jogador (rádio na primeira coluna) pra usar como alvo dos eventos abaixo. Sem seleção, dispara no jogador mais adequado automaticamente ou marque "todos".</div>
+    </section>
+
+    <section class="panel">
+      <h3>Disparar evento (sistema real do jogo)</h3>
+      <div class="row">
+        <select id="evType">${Object.entries(EVENT_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+        <label class="chk"><input type="checkbox" id="evBroadcast"> todos os jogadores</label>
+        <button class="primary" id="evFire">Disparar</button>
+      </div>
+      <div class="hint">Usa exatamente a mesma implementação do sorteio de eventos aleatórios e das habilidades do jogador-animatrônico — nenhuma versão simulada só pro painel.</div>
+    </section>
+
+    <section class="panel">
+      <h3>Tensão</h3>
+      <div class="row">
+        <button id="t10">+10</button>
+        <button id="t25">+25</button>
+        <button id="t50">+50</button>
+        <button class="warn" id="tReset">Resetar (0)</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Hora do Show</h3>
+      <div class="row">
+        <button class="primary" id="showForce" ${d.showActive ? 'disabled' : ''}>Forçar Hora do Show (sequência completa)</button>
+        <button id="showCancel" ${d.showActive ? '' : 'disabled'}>Cancelar Show em andamento</button>
+      </div>
+      <div class="hint">Dispara a sequência real (áudio sincronizado, palco, animatrônicos, portas, fases) — não é só tocar uma música.</div>
+    </section>
+
+    <section class="panel">
+      <h3>Debug</h3>
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="debugToggle" ${d.debug ? 'checked' : ''}> modo debug ativo nesta partida (dados extras só pro admin — nunca aparece pros jogadores)</label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Eventos recentes</h3>
+      <div class="log">${(d.recentEvents || []).slice().reverse().map((e) => `<div>${fmtTime(e.at)} — ${e.t}</div>`).join('') || '<div class="hint">Nenhum ainda.</div>'}</div>
+    </section>
+
+    <section class="panel">
+      <h3>Missões</h3>
+      <table>
+        <thead><tr><th>Título</th><th>Status</th><th>Progresso</th></tr></thead>
+        <tbody>${d.quests.map((q) => `<tr><td>${q.title}</td><td>${q.done ? '✅' : (q.active ? 'em andamento' : '—')}</td><td>${q.progress}/${q.count}</td></tr>`).join('')}</tbody>
+      </table>
+    </section>
+
+    <div class="msg" id="msg"></div>
+  `;
+
+  $$('input[name=target]', main).forEach((el) => { el.onchange = () => { selectedTarget = Number(el.dataset.target); render(); }; });
+  $$('tr[data-id]', main).forEach((el) => { el.onclick = (ev) => { if (ev.target.tagName === 'INPUT') return; selectedTarget = Number(el.dataset.id) || el.dataset.id; render(); }; });
+
+  $('#evFire').onclick = () => act(async () => {
+    const type = $('#evType').value;
+    const broadcast = $('#evBroadcast').checked;
+    await api('/matches/' + selectedCode + '/event', { method: 'POST', body: { type, targetId: broadcast ? undefined : selectedTarget, broadcast } });
+  });
+  $('#t10').onclick = () => act(() => api('/matches/' + selectedCode + '/tension', { method: 'POST', body: { delta: 10 } }));
+  $('#t25').onclick = () => act(() => api('/matches/' + selectedCode + '/tension', { method: 'POST', body: { delta: 25 } }));
+  $('#t50').onclick = () => act(() => api('/matches/' + selectedCode + '/tension', { method: 'POST', body: { delta: 50 } }));
+  $('#tReset').onclick = () => act(() => api('/matches/' + selectedCode + '/tension', { method: 'POST', body: { value: 0 } }));
+  $('#showForce').onclick = () => act(() => api('/matches/' + selectedCode + '/show', { method: 'POST' }));
+  $('#showCancel').onclick = () => act(() => api('/matches/' + selectedCode + '/show/cancel', { method: 'POST' }));
+  $('#debugToggle').onchange = (e) => act(() => api('/matches/' + selectedCode + '/debug', { method: 'POST', body: { on: e.target.checked } }));
+}
+
+refreshList();
+setInterval(refreshList, 4000);
+setInterval(() => { if (selectedCode) refreshDetail(); }, 3000);
+</script>
+</body>
+</html>

@@ -19,6 +19,12 @@ export class Room {
     this.night = opts.night;
     this.isPublic = !!opts.isPublic;
     this.difficulty = DIFFICULTIES[opts.difficulty] ? opts.difficulty : DEFAULT_DIFFICULTY;
+    // Modo de jogo (pedido #28: seletor de modo na criação de sala) —
+    // 'normal' (padrão, o jogo de sempre) ou 'animatronic' (ver
+    // shared/animatronicMode.js e Match.js). Qualquer outro valor cai em
+    // 'normal' por segurança — nunca confiar cegamente no que o cliente
+    // manda em opts.mode.
+    this.mode = opts.mode === 'animatronic' ? 'animatronic' : 'normal';
     this.state = 'lobby';
     this.members = new Map(); // accountId -> { id, name, level, maxNight, ready, socketId, online }
     this.chat = [];
@@ -44,6 +50,7 @@ export class Room {
         inMatch: !!this.match?.hasPlayer(m.id),
       })),
       hostMaxNight: this.members.get(this.hostId)?.maxNight || 1,
+      mode: this.mode,
     };
   }
 
@@ -119,6 +126,7 @@ export class Room {
     const online = [...this.members.values()].filter((m) => m.online);
     const notReady = online.filter((m) => m.id !== this.hostId && !m.ready);
     if (notReady.length) throw new Error(`Aguardando: ${notReady.map((m) => m.name).join(', ')}`);
+    if (this.mode === 'animatronic' && online.length < 2) throw new Error('Modo Animatronic precisa de pelo menos 2 jogadores.');
     const participants = [];
     for (const m of online) {
       const account = getAccount(m.id);
@@ -126,7 +134,7 @@ export class Room {
     }
     if (!participants.length) throw new Error('Nenhum jogador.');
     this.state = 'playing';
-    this.match = new Match(this, this.io, this.night, participants, this.difficulty);
+    this.match = new Match(this, this.io, this.night, participants, this.difficulty, this.mode);
     for (const pt of participants) {
       const p = this.match.players.get(pt.account.id);
       this.io.to(pt.socketId).emit('match:start', this.match.fullState(p));
@@ -182,7 +190,7 @@ export class RoomManager {
     this.leave(account.id);
     const night = Math.max(1, Math.min(account.maxNight, Math.floor(Number(opts?.night) || 1), FINAL_NIGHT));
     const maxPlayers = Math.max(1, Math.min(config.maxPlayersPerRoom, Math.floor(Number(opts?.maxPlayers) || config.maxPlayersPerRoom)));
-    const room = new Room(this, this.generateCode(), account, { night, maxPlayers, isPublic: !!opts?.isPublic, difficulty: opts?.difficulty });
+    const room = new Room(this, this.generateCode(), account, { night, maxPlayers, isPublic: !!opts?.isPublic, difficulty: opts?.difficulty, mode: opts?.mode });
     this.rooms.set(room.code, room);
     this.accountRoom.set(account.id, room.code);
     room.addMember(socket, account);

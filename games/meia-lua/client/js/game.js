@@ -10,7 +10,7 @@ import { Renderer, ANIM_TYPES, STATES } from './render.js';
 import { PostFX } from './postfx.js';
 import { audio } from './audio.js';
 import { settings, isTouchDevice } from './settings.js';
-import { $, el, toast, showScreen, PLAYER_COLORS } from './ui.js';
+import { $, $$, el, toast, showScreen, PLAYER_COLORS } from './ui.js';
 import { fala } from '/jogos/meia-lua/shared/falas.js';
 
 const INPUT_MS = 50;
@@ -143,6 +143,14 @@ export class Game {
     this.noticeToastAt = 0;
     this.beatAt = 0;
 
+    // Modo Animatronic (ver Match.js) — `data.role` só existe/é verdadeiro
+    // pro PRÓPRIO jogador escolhido em segredo; pra todo mundo mais o HUD
+    // simplesmente nunca aparece. Nenhuma informação sobre quem é quem
+    // chega no cliente além disso.
+    this.animMode = data.mode === 'animatronic';
+    this.animRole = data.role || 'funcionario';
+    this.setupAnimHud();
+
     showScreen('game', { push: false });
     document.body.classList.add('in-game');
     document.body.classList.toggle('touch', isTouchDevice());
@@ -179,6 +187,7 @@ export class Game {
     if ($('#show-overlay')) $('#show-overlay').hidden = true;
     $('#show-blackout')?.classList.remove('active');
     if ($('#show-blackout')) $('#show-blackout').hidden = true;
+    if ($('#anim-hud')) $('#anim-hud').hidden = true;
   }
 
   showIntro() {
@@ -1123,10 +1132,43 @@ export class Game {
     return `${h === 0 ? 12 : h}:${String(m).padStart(2, '0')} AM`;
   }
 
+  // ================================================================== Modo Animatronic
+  ABILITY_LABELS = {
+    passosAtras: 'Passos', respiracaoDistante: 'Respiração', vultoRapido: 'Vulto',
+    presenca: 'Presença', flicker: 'Piscar luz', falsoAlarme: 'Falso alarme',
+    observando: 'Observar', manifestar: 'Manifestar', chase: 'Perseguir',
+  };
+
+  setupAnimHud() {
+    const box = $('#anim-hud');
+    if (!box) return;
+    box.hidden = this.animRole !== 'animatronic';
+    if (this.animRole !== 'animatronic') return;
+    $('#anim-hud-abilities').replaceChildren(...Object.entries(this.ABILITY_LABELS).map(([id, label]) =>
+      el('button', {
+        class: 'btn tiny', 'data-ability': id, text: label,
+        onclick: () => this.socket.emit('animAbility', { ability: id }),
+      })));
+  }
+
+  updateAnimHud() {
+    if (this.animRole !== 'animatronic' || !this.me?.beast) return;
+    const b = this.me.beast;
+    $('#anim-hud-energy').style.width = `${Math.max(0, Math.min(100, (b.energy / b.energyMax) * 100))}%`;
+    $('#anim-hud-chase').textContent = b.chaseState === 'active' ? `PERSEGUINDO (${b.chaseTimeLeft}s)` : b.chaseState === 'cooldown' ? `recarga (${Math.ceil(b.chaseCooldownLeft)}s)` : '';
+    for (const btn of $$('#anim-hud-abilities button')) {
+      const id = btn.dataset.ability;
+      const cd = b.cooldowns[id];
+      btn.disabled = !!cd;
+      btn.title = cd ? `Recarregando (${cd}s)` : '';
+    }
+  }
+
   // ================================================================== HUD
   updateHud() {
     const me = this.me, m = this.last;
     if (!m) return;
+    if (this.animMode) this.updateAnimHud();
     const pct = (v, max) => `${Math.max(0, Math.min(100, (v / max) * 100))}%`;
     $('#hud-hp').style.width = pct(me.hp, me.mhp);
     $('#hud-hp-t').textContent = `${me.hp}`;
