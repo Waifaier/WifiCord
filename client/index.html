@@ -509,15 +509,9 @@
 
       <section class="wc-editor-section">
         <div class="wc-editor-section-title"><span>Decoração</span><small>Detalhes visuais</small></div>
-        <div class="wc-preset-row" id="wc-frame-presets">
-          <button type="button" data-frame="none">Sem moldura</button>
-          <button type="button" data-frame="neon">💜 Neon</button>
-          <button type="button" data-frame="galactic">🪐 Galactic</button>
-          <button type="button" data-frame="chrome">◈ Chrome</button>
-          <button type="button" data-frame="holographic">◇ Holographic</button>
-        </div>
+        <div class="wc-cosmetic-grid wc-cosmetic-grid-compact" id="wc-frame-presets" data-none="none"></div>
         <div class="wc-select-grid">
-          <label>Decoração<select id="settings-profile-decoration"><option value="none">Nenhuma</option><option value="stars">✦ Estrelas</option><option value="orbit">🪐 Órbita</option><option value="spark">✨ Spark</option><option value="cyber">⚡ Cyber</option></select></label>
+          <label>Decoração<select id="settings-profile-decoration"><option value="none">Nenhuma</option><option value="stars">✦ Estrelas</option><option value="hearts">♥ Corações</option><option value="lightning">⚡ Raios</option><option value="snow">❄ Neve</option><option value="particles">✧ Partículas</option></select></label>
           <label>Emblema<select id="settings-profile-badge"><option value="none">Nenhum</option><option value="star">⭐ Estrela</option><option value="fire">🔥 Fogo</option><option value="rocket">🚀 Foguete</option><option value="crown">👑 Coroa</option></select></label>
           <label>Placa de nome<select id="settings-nameplate"><option value="none">Nenhuma</option><option value="minimal">Minimal</option><option value="neon">Neon</option><option value="cyber">Cyber</option><option value="galaxy">Galaxy</option><option value="chrome">Chrome</option></select></label><label>Tag<input id="settings-profile-tag" maxlength="16" placeholder="DEV"></label>
         </div>
@@ -589,13 +583,36 @@
   </div>
 </div>
 <div class="settings-pane" data-settings-pane="profile-effects">
-          <h4>✨ Efeitos animados do perfil</h4><p class="text-muted">Recursos premium do WFNA. Escolha como seu perfil aparece para outras pessoas.</p>
-          <div class="profile-effects-grid">
-            <label>Efeito<select id="settings-profile-effect"><option value="none">Nenhum</option><option value="float">🌌 Flutuar</option><option value="particles">✦ Partículas</option><option value="orbit">🪐 Órbita</option><option value="neon">💠 Neon pulsante</option><option value="rainbow">🌈 Arco-íris</option><option value="fire">🔥 Chamas</option><option value="snow">❄️ Neve</option><option value="hologram">🧬 Holograma</option><option value="glitch">📺 Glitch</option><option value="aurora">🌌 Aurora</option><option value="matrix">🟩 Matrix</option><option value="electric">⚡ Elétrico</option><option value="galaxy">🌠 Galáxia</option><option value="sakura">🌸 Sakura</option><option value="bolhas">🫧 Bolhas</option><option value="meteoros">☄️ Meteoros</option><option value="lava">🌋 Lava</option><option value="gelo">🧊 Gelo</option><option value="confete">🎊 Confete</option><option value="sonar">📡 Sonar</option><option value="tempestade">🌩️ Tempestade</option><option value="nebulosa">🔮 Nebulosa</option><option value="ouro">🪙 Ouro</option><option value="veneno">☠️ Veneno</option><option value="fantasma">👻 Fantasma</option><option value="circuito">🔌 Circuito</option><option value="diamante">💎 Diamante</option><option value="oceano">🌊 Oceano</option><option value="entardecer">🌇 Entardecer</option></select></label>
-            <label>Velocidade<select id="settings-profile-effect-speed"><option value="slow">Lenta</option><option value="normal">Normal</option><option value="fast">Rápida</option></select></label>
-            <label class="settings-toggle"><input type="checkbox" id="settings-profile-effect-enabled"> Ativar efeito animado</label>
-          </div>
+          <h4>✨ Efeitos animados do perfil</h4><p class="text-muted">Recursos premium do WFNA. Monte a atmosfera do seu perfil e a aura do seu avatar — a prévia ao lado atualiza na hora.</p>
           <p id="settings-wfna-effect-status" class="text-muted">O WFNA libera estes efeitos.</p>
+
+          <div class="wc-cosmetic-presets" id="wc-cosmetic-presets"></div>
+          <button type="button" id="wc-cosmetic-surprise" class="btn btn-small">🎲 Surpreenda-me</button>
+          <!-- Mantido escondido só pra compatibilidade com o código que já lia/
+               gravava settings.profileEffect por um <select> — o grid abaixo
+               (#wc-atmosphere-grid) escreve aqui, e é daqui que o botão
+               "Salvar efeitos" e o preview ao vivo continuam lendo. -->
+          <select id="settings-profile-effect" class="wc-hidden-field" aria-hidden="true"><option value="none">Nenhum</option><option value="float">Flutuar</option><option value="particles">Partículas</option><option value="orbit">Órbita</option><option value="neon">Neon pulsante</option><option value="rainbow">Arco-íris</option><option value="fire">Chamas</option><option value="snow">Neve</option><option value="hologram">Holograma</option><option value="glitch">Glitch</option><option value="aurora">Aurora</option><option value="matrix">Matrix</option><option value="electric">Elétrico</option><option value="galaxy">Galáxia</option><option value="sakura">Sakura</option><option value="bolhas">Bolhas</option><option value="meteoros">Meteoros</option><option value="lava">Lava</option><option value="gelo">Gelo</option><option value="confete">Confete</option><option value="sonar">Sonar</option><option value="tempestade">Tempestade</option><option value="nebulosa">Nebulosa</option><option value="ouro">Ouro</option><option value="veneno">Veneno</option><option value="fantasma">Fantasma</option><option value="circuito">Circuito</option><option value="diamante">Diamante</option><option value="oceano">Oceano</option><option value="entardecer">Entardecer</option></select>
+
+          <div class="wc-cosmetic-toolbar">
+            <input type="search" id="wc-cosmetic-search" placeholder="Buscar efeito por nome, categoria ou vibe...">
+            <div class="wc-cosmetic-chips" id="wc-cosmetic-chips"></div>
+          </div>
+
+          <div class="wc-cosmetic-section">
+            <div class="wc-editor-section-title"><span>Atmosfera do perfil</span><small>Camada grande, aparece no cartão de perfil inteiro</small></div>
+            <div class="wc-cosmetic-grid" id="wc-atmosphere-grid" data-empty="Nenhum efeito encontrado."></div>
+            <div class="wc-select-grid" style="margin-top:10px">
+              <label>Velocidade<select id="settings-profile-effect-speed"><option value="slow">Lenta</option><option value="normal">Normal</option><option value="fast">Rápida</option></select></label>
+              <label class="settings-toggle"><input type="checkbox" id="settings-profile-effect-enabled"> Ativar atmosfera</label>
+            </div>
+          </div>
+
+          <div class="wc-cosmetic-section">
+            <div class="wc-editor-section-title"><span>Aura do avatar</span><small>Camada nova — essa é a que aparece no chat, listas e chamadas</small></div>
+            <div class="wc-cosmetic-grid" id="wc-aura-grid" data-empty="Nenhuma aura encontrada."></div>
+          </div>
+
           <button type="button" id="settings-save-profile-effects" class="btn btn-primary">Salvar efeitos</button>
         </div>
         <div class="settings-pane" data-settings-pane="appearance">
@@ -612,7 +629,10 @@
             <button type="button" class="theme-preset-swatch" data-theme="quartzo"><i style="background:linear-gradient(135deg,#FF5C8A,#FFB199)"></i><span>Quartzo</span></button>
             <button type="button" class="theme-preset-swatch" data-theme="mono"><i style="background:linear-gradient(135deg,#9AA0AE,#D8DBE3)"></i><span>Mono</span></button>
           </div>
-          <label>Cor de destaque <input type="color" id="settings-accent" value="#5865F2"></label><label class="settings-toggle"><input type="checkbox" id="settings-compact"> Modo compacto</label><label class="settings-toggle"><input type="checkbox" id="settings-reduce-motion"> Reduzir animações</label><button type="button" id="settings-save-appearance" class="btn btn-primary">Salvar aparência</button>
+          <label>Cor de destaque <input type="color" id="settings-accent" value="#5865F2"></label><label class="settings-toggle"><input type="checkbox" id="settings-compact"> Modo compacto</label><label class="settings-toggle"><input type="checkbox" id="settings-reduce-motion"> Reduzir animações</label>
+          <label>Efeitos de perfil (aura/atmosfera)<select id="settings-cosmetics-quality"><option value="auto">Automático</option><option value="high">Alto</option><option value="medium">Médio</option><option value="low">Baixo</option><option value="off">Desligado</option></select></label>
+          <p class="text-muted" style="margin-top:-6px;font-size:12px">Controla só o que VOCÊ vê (auras, partículas do perfil). Não muda o que os outros veem de você.</p>
+          <button type="button" id="settings-save-appearance" class="btn btn-primary">Salvar aparência</button>
         </div>
         <div class="settings-pane" data-settings-pane="notifications">
           <h4>Notificações</h4>
@@ -934,6 +954,15 @@
      de antes. Isso reduz bastante o tempo até o app ficar interativo,
      principalmente em conexões móveis/wifi mais lentas. -->
 <script src="/js/titlebar.js" defer></script>
+<!-- Cosméticos de perfil: dados (nomes/categoria/raridade), motor de
+     partículas compartilhado e o renderizador único de avatar — nessa
+     ordem porque identity.js e o picker em extras.js leem
+     window.WCCosmeticsData, e identity.js liga o canvas via
+     window.WCParticles. Têm que vir antes de extras.js/features.js/
+     app.js/call.js, que são quem efetivamente desenha avatares. -->
+<script src="/js/cosmetics-data.js" defer></script>
+<script src="/js/particle-engine.js" defer></script>
+<script src="/js/identity.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
 <script src="/js/auth-3d.js" defer></script>

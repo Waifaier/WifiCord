@@ -20,9 +20,25 @@ function cleanProfileCustomization(input) {
     layout:['classic','compact','banner','glass'], nameFont:['modern','elegant','pixel','retro','cyber','gothic','bold','rounded'],
     nameColorMode:['solid','gradient'], nameEffect:['none','neon','glow','shimmer','rainbow','gold','ice','holographic','glitch'],
     nameAnimation:['none','shimmer','pulse','flow','glitch'], nameWeight:['600','700','800'],
-    frame:['none','neon','galactic','chrome','holographic'], decoration:['none','stars','orbit','spark','cyber'],
+    // 'frame' e 'decoration' abaixo: antes aceitavam nomes que não tinham
+    // NENHUMA regra de CSS correspondente ('galactic'/'chrome'/
+    // 'holographic' pra moldura; 'orbit'/'spark'/'cyber' pra decoração —
+    // escolher qualquer um desses no editor gratuito salvava um valor que
+    // nunca aparecia visualmente em lugar nenhum) e recusavam valores que
+    // TINHAM CSS de verdade ('hearts'/'lightning'/'particles' de
+    // decoração, e vários nomes de moldura que a lojinha de pontos já
+    // vende). A lista agora é exatamente o conjunto de classes que
+    // style.css sabe desenhar — ver client/js/cosmetics-data.js (FRAMES/
+    // DECORATIONS), a mesma fonte usada pelo novo seletor em cards.
+    frame:['none','neon','cyber','gold','fire','rainbow','void','glitch','aurora','electric','galaxy','hologram','glass','crystal','minimal'],
+    decoration:['none','stars','hearts','lightning','snow','particles'],
     badge:['none','star','fire','rocket','crown'], nameplate:['none','minimal','neon','cyber','galaxy','chrome'],
-    avatarFx:['none','pirouette','hover-burst','pet-cat','pet-bird']
+    avatarFx:['none','pirouette','hover-burst','pet-cat','pet-bird'],
+    // avatarAura: camada NOVA e independente do efeito de fundo — não
+    // existe valor antigo pra migrar (todo usuário existente simplesmente
+    // não tinha esse campo), então o default 'none' já é retrocompatível
+    // sem precisar de nenhuma migração de dado.
+    avatarAura:['none','halo','energy','crystal','shadowwisp','hologram','arc','emberdrift','stardust','prism','wifi-signal','wifi-pulse','wifi-data','wifi-orbit']
   };
   for (const [k, values] of Object.entries(enums)) {
     const v = String(src[k] ?? '');
@@ -277,7 +293,11 @@ router.put('/status', requireAuth, (req,res)=>{
 });
 
 router.put('/settings', requireAuth, (req,res)=>{
-  const allowed=['accent','compact','reduceMotion','notifications','sound','messageSound','privacy','theme','fontSize','chatDensity','showTimestamps','showMemberList','animations','autoplayMedia','showEmbeds','desktopNotifications','mentionNotifications','friendRequests','voiceInputSensitivity','echoCancellation','noiseSuppression','autoGainControl','inputVolume','outputVolume','overlayEffects','stickerAnimations','superEmojiEffects','localNicknames','language','profileEffect','profileEffectSpeed','profileEffectEnabled','profileColor','profileLayout','profileGlow','profileBadge','animatedProfile','inlineMedia','autoDownload','mediaQuality','profileCustomization'];
+  // cosmeticsQuality: preferência PESSOAL de quem está vendo (não afeta o
+  // que os outros veem de você) — quanto motor de aura/partícula rodar
+  // no seu próprio cliente. Ver client/js/identity.js (syncPerfTier) e
+  // particle-engine.js (perfCount).
+  const allowed=['accent','compact','reduceMotion','notifications','sound','messageSound','privacy','theme','fontSize','chatDensity','showTimestamps','showMemberList','animations','autoplayMedia','showEmbeds','desktopNotifications','mentionNotifications','friendRequests','voiceInputSensitivity','echoCancellation','noiseSuppression','autoGainControl','inputVolume','outputVolume','overlayEffects','stickerAnimations','superEmojiEffects','localNicknames','language','profileEffect','profileEffectSpeed','profileEffectEnabled','profileColor','profileLayout','profileGlow','profileBadge','animatedProfile','inlineMedia','autoDownload','mediaQuality','profileCustomization','cosmeticsQuality'];
   const incoming=req.body && typeof req.body==='object'?req.body:{};
   const clean={};
   for(const key of allowed) if(Object.prototype.hasOwnProperty.call(incoming,key)) clean[key]=key==='profileCustomization'?cleanProfileCustomization(incoming[key]):incoming[key];
@@ -290,11 +310,25 @@ router.get('/profile/:id', requireAuth, (req,res)=>{
   const user=User.findById(id);
   if(!user) return res.status(404).json({error:'Usuário não encontrado.'});
 
-  // "settings" guarda preferências pessoais (idioma, sensibilidade do
-  // microfone, densidade do chat, etc.) — não deve vazar pra quem visita o
-  // perfil de outra pessoa, só o próprio dono vê as suas.
+  // "settings" mistura DOIS tipos de coisa bem diferentes: preferências
+  // pessoais (idioma, sensibilidade do microfone, densidade do chat...)
+  // que realmente não deveriam vazar pra quem visita o perfil de outra
+  // pessoa, e a identidade visual (profileCustomization e os campos
+  // antigos de efeito de perfil) que é exatamente o contrário — TEM que
+  // aparecer pra quem visita, ou a pessoa nunca vê a personalização de
+  // ninguém além da própria. O código antigo apagava "settings" inteiro
+  // pra quem não era o dono, o que também apagava a parte pública —
+  // era por isso que nenhum efeito/aura/cor de perfil aparecia pra
+  // ninguém além do próprio dono, em lugar nenhum do app (a causa raiz
+  // do "funciona só na minha tela" que motivou esse arquivo inteiro a
+  // ser revisado). Agora só as chaves genuinamente pessoais somem.
+  const PRIVATE_SETTINGS_KEYS = ['accent','compact','reduceMotion','notifications','sound','messageSound','chatDensity','showTimestamps','showMemberList','animations','autoplayMedia','showEmbeds','desktopNotifications','mentionNotifications','friendRequests','voiceInputSensitivity','echoCancellation','noiseSuppression','autoGainControl','inputVolume','outputVolume','overlayEffects','stickerAnimations','superEmojiEffects','localNicknames','language','inlineMedia','autoDownload','mediaQuality','cosmeticsQuality'];
   const publicUser = User.toPublic(user);
-  if (id !== Number(req.session.userId)) delete publicUser.settings;
+  if (id !== Number(req.session.userId) && publicUser.settings) {
+    const s = { ...publicUser.settings };
+    for (const k of PRIVATE_SETTINGS_KEYS) delete s[k];
+    publicUser.settings = s;
+  }
 
   const commonServers = db.prepare(`
     SELECT s.id,s.name,s.icon_url,s.owner_id
