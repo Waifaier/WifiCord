@@ -18,6 +18,7 @@ import { areaProfile } from '../../shared/areaProfiles.js';
 import { EventChains } from './EventChains.js';
 import { PlayerAnimatronic } from './PlayerAnimatronic.js';
 import { animCountFor, pickAnimTypes, abilityDef, CHASE as ANIM_CHASE } from '../../shared/animatronicMode.js';
+import { resolveEncounter as pickEncounterOutcome } from '../ai/EncounterResolver.js';
 
 const TICK_MS = 50;
 const SNAP_EVERY = 2; // 10 snapshots/s
@@ -29,6 +30,17 @@ const OFFLINE_GRACE = 60;
 const r2 = (v) => Math.round(v * 100) / 100;
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+// Cooldown do EncounterResolver por desfecho (ver Animatronic.encounterCd e
+// Match.resolveEncounter) — cada tipo de desfecho "descansa" por um tempo
+// diferente antes do MESMO animatrônico poder ser sorteado de novo contra
+// qualquer alvo. 'chase' não precisa (o estado CHASE já impede sense() de
+// rechamar resolveEncounter enquanto durar).
+const ENCOUNTER_COOLDOWN = {
+  nothing: [3, 6], observe: [6, 10], vanish: [5, 9], environmental: [4, 8],
+  block: [6, 11], doorManipulate: [7, 13], manifest: [5, 9], relocate: [10, 18],
+  chase: [0, 0], flee: [8, 14], inexplicable: [4, 8],
+};
 
 // Formação do evento "O Show" (ver runShowEvent) — sempre a mesma ordem da
 // esquerda pra direita, como uma banda de verdade parada no palco (em vez
@@ -1239,6 +1251,170 @@ export class Match {
       this.firstEncounterAt = this.time;
     }
     return false;
+  }
+
+  // ======================================================================
+  // EncounterResolver — REGRA FUNDAMENTAL da reformulação de terror: "o
+  // animatrônico apareceu" nunca mais decide sozinho "vai perseguir". Ver
+  // server/ai/EncounterResolver.js pro sorteio em si (puro, testado
+  // isoladamente) — aqui é só o despacho pra implementação, reaproveitando
+  // técnicas que já existiam (fxVultoRapido, startObserve, o algoritmo de
+  // reposicionamento de teleportAfterAttack, os fx* dos eventos aleatórios)
+  // em vez de duplicar nada. Os 3 lugares que antes chamavam requestChase()
+  // direto (Animatronic.update()/sense, updateAlert(), startBlackoutHunt())
+  // agora chamam isto.
+  resolveEncounter(anim, target, trigger) {
+    const ctx = {
+      tension: this.director?.intensity01 ?? 0.3,
+      trigger,
+      isolated: this.isolationOf(target),
+      recent: this.director?.recentOutcomes(anim.id) ?? [],
+    };
+    const outcome = pickEncounterOutcome(anim.type, ctx, Math.random);
+    this.director?.recordOutcome(anim.id, outcome);
+    anim.encounterCd = rnd(...(ENCOUNTER_COOLDOWN[outcome] || [3, 6]));
+    switch (outcome) {
+      case 'chase': {
+        // Continua passando pelo MESMO portão de sempre (firstChaseUnlocked)
+        // — se ainda travado, requestChase já rebaixa isso pra uma
+        // aparição calma sozinho, então o desfecho real acaba sendo
+        // 'observe' de qualquer forma (registrado como tal pra história de
+        // anti-repetição não ficar mentindo pro director).
+        const started = this.requestChase(anim, target);
+        if (!started) this.director?.recordOutcome(anim.id, 'observe');
+        return started ? 'chase' : 'observe';
+      }
+      case 'observe':
+        if (!anim.def.trap) anim.startObserve(target);
+        return 'observe';
+      case 'vanish':
+        anim.quietRelocate(6, target);
+        anim.setState('SEARCH', rnd(3, 6));
+        return 'vanish';
+      case 'environmental':
+        this.encounterEnvironmental(target);
+        return 'environmental';
+      case 'block':
+        this.encounterBlock(anim, target);
+        return 'block';
+      case 'doorManipulate':
+        this.encounterDoorManipulate(target);
+        return 'doorManipulate';
+      case 'manifest':
+        this.fxVultoRapido(target);
+        return 'manifest';
+      case 'relocate':
+        this.encounterRelocate(anim, target);
+        return 'relocate';
+      case 'flee':
+        this.encounterFlee(anim, target);
+        return 'flee';
+      case 'inexplicable':
+        this.encounterInexplicable(target);
+        return 'inexplicable';
+      case 'nothing':
+      default:
+        return 'nothing';
+    }
+  }
+
+  /** Verdadeiro se ninguém mais (vivo, não escondido) estiver por perto de `p` — pedido #17. */
+  isolationOf(p) {
+    for (const o of this.alivePlayers()) {
+      if (o === p || o.hidden) continue;
+      if (Math.hypot(o.x - p.x, o.y - p.y) < 10) return false;
+    }
+    return true;
+  }
+
+  nearestDoorTo(x, y, maxDist = 12) {
+    let best = null, bestD = Infinity;
+    for (const d of DOORS) {
+      const st = this.doors.get(d.id);
+      if (!st || st.locked) continue;
+      const dist = Math.hypot(d.x - x, d.y - y);
+      if (dist < bestD) { best = d; bestD = dist; }
+    }
+    return bestD <= maxDist ? best : null;
+  }
+
+  // O próprio animatrônico foge do encontro (regra #1: "fuga do próprio
+  // animatronic" é um desfecho válido, não só o jogador fugindo dele).
+  // Passos rápidos se afastando (dá pra perceber que foi embora, diferente
+  // do silêncio total de 'vanish') + o mesmo reposicionamento silencioso.
+  encounterFlee(anim, target) {
+    this.emitSfx('steps', anim.x, anim.y, 14);
+    anim.quietRelocate(9, target);
+    anim.setState('RETURN');
+  }
+
+  // Sinal contraditório (regra #1: "comportamento inexplicável"): um som
+  // vem de ONDE O ANIMATRÔNICO NÃO ESTÁ — ele continua fazendo o que já
+  // estava fazendo de verdade, mas o jogador ouve algo que não bate com
+  // nada visível. Só o alvo ouve (pedido #17: eventos individuais).
+  encounterInexplicable(target) {
+    const ang = Math.random() * Math.PI * 2;
+    const dist = rnd(3, 6);
+    const x = target.x + Math.cos(ang) * dist, y = target.y + Math.sin(ang) * dist;
+    const s = pick(['whisper', 'metal', 'child', 'drag']);
+    this.sendTo(target, 'fx', { type: 'sfx', s, x: r2(x), y: r2(y) });
+  }
+
+  // Reaproveita o vocabulário de eventos ambientais/falsos que já existia
+  // (mesmos fx* do sorteio aleatório) — a "presença sem aparição" some no
+  // meio dos outros eventos do jogo, não vira uma categoria óbvia à parte.
+  encounterEnvironmental(target) {
+    const area = areaAt(target.x, target.y);
+    const fn = pick([
+      () => this.fxFlicker(area),
+      () => this.fxPresenca(target),
+      () => this.fxFalsoAlarme(),
+      () => this.fxCamFail(),
+    ]);
+    fn();
+  }
+
+  // Não persegue — corta caminho: vai até a porta mais perto do alvo e
+  // "segura" ali um tempo. Reaproveita INVESTIGATE (pathing de verdade, já
+  // testado), não teleporta pra lá.
+  encounterBlock(anim, target) {
+    const d = this.nearestDoorTo(target.x, target.y);
+    if (!d) { anim.investigate(target.x, target.y); return; }
+    anim.investigate(d.x + 0.5, d.y + 0.5);
+  }
+
+  // Porta perto do alvo se mexe sozinha — abre e depois fecha (ou fecha de
+  // supetão, se já estava aberta), sem ninguém visível por perto. Mesmo
+  // par de funções que qualquer jogador abrindo/fechando porta já usa.
+  encounterDoorManipulate(target) {
+    const d = this.nearestDoorTo(target.x, target.y, 9);
+    if (!d) return;
+    const st = this.doors.get(d.id);
+    if (!st || st.locked) return;
+    if (st.open) {
+      this.setDoorOpen(d.id, false, null);
+      this.emitSfx('slam', d.x + 0.5, d.y + 0.5, 26);
+    } else {
+      this.setDoorOpen(d.id, true, null);
+      this.chains.schedule(rnd(2, 3.5), () => { this.emitSfx('doorClose', d.x + 0.5, d.y + 0.5, 18); });
+    }
+  }
+
+  // Deslocamento anômalo (pedido #6): nunca na frente do jogador
+  // (quietRelocate já exige "fora da linha de visão de qualquer um"),
+  // sempre com cooldown PRÓPRIO (encounterRelocateCd) — sem isso viraria
+  // um botão de teleporte disfarçado, exatamente o que o pedido pediu pra
+  // evitar. Enquanto em cooldown, ainda reposiciona (o resolver já decidiu
+  // que este não é o momento de aparecer), só não reinicia o cooldown.
+  encounterRelocate(anim, target) {
+    if (this.time < (anim.encounterRelocateCd || 0)) {
+      anim.quietRelocate(6, target);
+      anim.setState('SEARCH', rnd(2, 4));
+      return;
+    }
+    anim.encounterRelocateCd = this.time + rnd(20, 35);
+    anim.quietRelocate(8, target);
+    anim.setState('SEARCH', rnd(2, 4));
   }
 
   // Sequência de contexto (regra #17: "o jogador tem medo porque sabe que

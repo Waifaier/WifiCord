@@ -49,6 +49,10 @@ export const ANIM_TYPES = {
     blackoutStalker: true, // evento: quando a energia acaba, ele para de
     // rondar normal e vem caçando por audição (ver Animatronic.startBlackoutHunt) —
     // só dá pra ver os olhos brilhando dele no escuro até a luz voltar.
+    // "O Implacável" (pedido #3/#4): só ele força porta COMUM em estágios
+    // durante perseguição (ver Animatronic.forceDoorSequence) — os outros
+    // 4 continuam abrindo porta comum do jeito de sempre, silencioso.
+    doorBreaker: true,
     chaseLimit: 8, tiredTime: 4, observant: true,
   },
   maestro: {

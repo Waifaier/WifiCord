@@ -46,6 +46,27 @@ export class TensionDirector {
     this.matchTime = 0;
     this.recoveryUntil = 0; // enquanto > matchTime, só 'ambient' e 'sempre' passam
     this.exposure = new Map(); // tipo do evento -> quantas vezes já rodou nessa partida
+    // Histórico curto de desfechos do EncounterResolver, POR animatrônico
+    // (id -> array, mais recente primeiro) — pedido #21 ("sistema de
+    // surpresa": evitar repetir o mesmo tipo de coisa em sequência). Cada
+    // animatrônico tem o próprio histórico porque o Gregório repetir
+    // 'block' duas vezes seguidas não deveria suprimir o 'observe' da Lume
+    // do outro lado do mapa — a variedade é por criatura, não global.
+    this.encounterHistory = new Map();
+  }
+
+  // Chamado por Match.resolveEncounter logo depois de cada sorteio —
+  // guarda só os últimos 3 (o suficiente pro EncounterResolver.contextMult
+  // olhar os 2 mais recentes, ver ctx.recent).
+  recordOutcome(animId, outcome) {
+    const list = this.encounterHistory.get(animId) || [];
+    list.unshift(outcome);
+    if (list.length > 3) list.length = 3;
+    this.encounterHistory.set(animId, list);
+  }
+
+  recentOutcomes(animId) {
+    return this.encounterHistory.get(animId) || [];
   }
 
   // Chamado todo tick do Match (ver Match.tick()). `signals` é só leitura

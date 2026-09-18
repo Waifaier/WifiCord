@@ -40,6 +40,20 @@ export class Animatronic {
     this.stepAcc = 0;
     this.blackoutHunt = false;
     this.blackoutTrackCd = 0;
+    // Cooldown do EncounterResolver (ver server/ai/EncounterResolver.js e
+    // Match.resolveEncounter) — sem isso, sense() rodando 5x/s reamostraria
+    // o sorteio a cada 0.2s enquanto o jogador continuasse visível, o que
+    // na prática anularia desfechos como 'nothing' (virariam só um atraso
+    // de 1 tick em vez de um "não aconteceu nada" de verdade).
+    this.encounterCd = 0;
+    // Cooldown próprio do desfecho 'relocate' (pedido #6: deslocamento
+    // anômalo precisa de cooldown — nunca virar um botão de teleporte).
+    // Nome deliberadamente DIFERENTE do `relocateCd` que a Pipoca (armadilha,
+    // ver def.trap) já usa pra própria mecânica de "só some se ninguém
+    // vir" — são caminhos de código mutuamente exclusivos (Pipoca nunca
+    // passa por sense()/updateAlert()/startBlackoutHunt(), só por
+    // updateTrap()), mas reaproveitar o mesmo nome ia confundir leitura.
+    this.encounterRelocateCd = 0;
     // Evento "O Show" (ver Match.runShowEvent) — enquanto true, a IA
     // normal fica pausada e ele só balança no palco, sem perceber nem
     // atacar ninguém (ver o early-return em update()).
@@ -79,6 +93,7 @@ export class Animatronic {
     this.path = null;
     this.doorWait = null;
     this.bash = null;
+    this.doorForce = null;
     if (s !== 'CHASE') this.chaseTime = 0;
     if (s === 'CHASE' && prev !== 'CHASE') {
       this.match.onAnimChase(this);
@@ -121,11 +136,16 @@ export class Animatronic {
     if (this.blackoutHunt || this.state === 'DISABLED') return;
     const target = this.pickNearestPlayer();
     if (!target) return;
-    // Passa pelo mesmo portão de qualquer outra perseguição (ver
-    // Match.requestChase) — mesmo um apagão não pula a "primeira
-    // perseguição precisa ter contexto" (regra #17). Enquanto travado, o
-    // apagão vira só mais uma aparição calma vinda da escuridão.
-    if (!this.match.requestChase(this, target)) return;
+    // Passa pelo EncounterResolver com o gatilho 'blackout' — que pesa MUITO
+    // mais chase que um relance normal (o apagão do Gregório precisa
+    // continuar genuinamente perigoso), mas ainda não é garantido: às vezes
+    // vira bloqueio de rota, porta se mexendo sozinha no escuro, um som
+    // inexplicável — sem nunca deixar de passar pelo mesmo portão de
+    // qualquer outra perseguição (firstChaseUnlocked, ver
+    // Match.requestChase, chamado por dentro de resolveEncounter quando o
+    // sorteio realmente dá 'chase').
+    const outcome = this.match.resolveEncounter(this, target, 'blackout');
+    if (outcome !== 'chase') return;
     this.blackoutHunt = true;
     this.blackoutTrackCd = 0;
     this.lastSeen = { x: target.x, y: target.y };
@@ -234,6 +254,7 @@ export class Animatronic {
     this.stateTime += dt;
     this.attackCd -= dt;
     this.alertCd -= dt;
+    this.encounterCd -= dt;
 
     if (this.state === 'STUNNED') {
       this.moving = false;
@@ -258,7 +279,19 @@ export class Animatronic {
           const d = Math.hypot(seen.x - this.x, seen.y - this.y);
           const instant = d < 2.3 || (m.blackout && d < 4) || (this.state === 'SEARCH' && d < 3.5);
           if (instant) {
-            m.requestChase(this, seen); // ver Match.requestChase — vira aparição calma se a 1ª perseguição ainda não foi liberada
+            // ANTES: chamava m.requestChase() direto — "viu de perto" SEMPRE
+            // virava perseguição (ou aparição calma, antes do 1º chase
+            // liberado). Isso era exatamente a regra fundamental que o
+            // pedido de reformulação queria eliminar ("animatronic
+            // apareceu = vai perseguir"). Agora passa pelo
+            // EncounterResolver (ver Match.resolveEncounter) — só ELE pode
+            // decidir chamar requestChase de verdade, entre 10 outras
+            // possibilidades (nada acontece, observa, some, evento
+            // ambiental, bloqueia rota, mexe na porta, aparição rápida,
+            // desloca, foge, ou algo inexplicável). encounterCd evita
+            // reamostrar isso a cada 0.2s enquanto o jogador continuar à
+            // vista.
+            if (this.encounterCd <= 0) m.resolveEncounter(this, seen, 'sense');
           } else {
             // percebeu algo: para, encara e a suspeita vai enchendo
             const wasInvestigating = this.state === 'INVESTIGATE';
@@ -409,7 +442,15 @@ export class Animatronic {
       rate *= 0.75 + 0.25 * this.aggression;
       this.notice += rate * dt;
       this.lastSeen = { x: t.x, y: t.y };
-      if (this.notice >= 1) { this.notice = 0; m.requestChase(this, t); }
+      if (this.notice >= 1) {
+        this.notice = 0;
+        // Mesma troca da percepção instantânea acima: a suspeita encheu,
+        // mas o que acontece a seguir não é mais garantidamente uma
+        // perseguição — passa pelo mesmo resolver (trigger 'alert' pesa
+        // diferente de 'sense': já ficou de olho por um tempo, "nada
+        // aconteceu" fica bem mais raro, mas ainda não impossível).
+        if (this.encounterCd <= 0) m.resolveEncounter(this, t, 'alert');
+      }
     } else {
       this.notice -= dt * 0.4;
       if (this.notice <= 0) {
@@ -546,6 +587,12 @@ export class Animatronic {
         if (this.def.bashDoors) return this.bashDoor(door, dt);
         this.path = null; this.moving = false; return true;
       }
+      // Gregório perseguindo e a porta comum é a única coisa entre ele e o
+      // alvo: sequência em estágios (pedido #4), não uma espera silenciosa
+      // de fração de segundo — ver forceDoorSequence() acima. Fora de
+      // perseguição (rondando, investigando) ele continua abrindo do jeito
+      // de sempre logo abaixo, sem drama nenhum.
+      if (this.def.doorBreaker && this.state === 'CHASE') return this.forceDoorSequence(door, dt);
       // abrir porta normal
       this.moving = false;
       if (!this.doorWait || this.doorWait.id !== door.id) this.doorWait = { id: door.id, t: 0 };
@@ -722,6 +769,87 @@ export class Animatronic {
     this.stateTime = 0;
     this.tiredUntil = m.time + 1.2; // recuo após atacar
     m.onAnimTeleportAway(this, target, ox, oy);
+  }
+
+  // ---------- reposicionamento silencioso (EncounterResolver) ----------
+  // Mesmo algoritmo de busca de ponto que teleportAfterAttack/endObserve já
+  // usavam (área da própria rota de patrulha, longe o bastante de quem se
+  // quer evitar, fora da linha de visão de QUALQUER jogador) — extraído
+  // aqui pra ser reaproveitado pelos desfechos 'vanish'/'flee'/'relocate'
+  // do resolver (ver Match.resolveEncounter) sem duplicar a busca em cada
+  // um. Só reposiciona — quem chama decide o estado/som depois.
+  quietRelocate(minDist = 6, avoidTarget = null) {
+    const m = this.match;
+    const areas = this.def.patrol.length ? this.def.patrol : [areaAt(this.x, this.y)?.id].filter(Boolean);
+    for (let tries = 0; tries < 14; tries++) {
+      const areaId = pick(areas);
+      if (!m.areaAccessible(areaId)) continue;
+      const pt = randomFloorInArea(areaId);
+      if (!pt) continue;
+      if (avoidTarget && Math.hypot(pt.x - avoidTarget.x, pt.y - avoidTarget.y) < minDist) continue;
+      const seen = [...m.alivePlayers()].some((p) => !p.hidden && m.playerSees(p, pt.x, pt.y));
+      if (seen) continue;
+      this.x = pt.x; this.y = pt.y;
+      break;
+    }
+    this.path = null;
+    this.goal = null;
+    this.dir = Math.random() * Math.PI * 2;
+  }
+
+  // ---------- Gregório: forçar uma porta comum durante perseguição ----------
+  // Pedido #4 explícito: NÃO instantâneo. Antes, doorTime do Gregório (0.4s
+  // em types.js) fazia ele abrir qualquer porta comum quase sem o jogador
+  // perceber — a "porta fechada" nunca chegava a parecer um obstáculo de
+  // verdade. Isso só entra em ação quando ele está de fato perseguindo
+  // (`this.state === 'CHASE'`) e tem a flag `doorBreaker` (só o Gregório,
+  // ver types.js) — fora de perseguição ele continua abrindo portas comuns
+  // do jeito antigo (silencioso, sem drama, porque não faria sentido rondar
+  // arrombando toda porta fechada da pizzaria à toa).
+  //
+  // Estágios, cada um com um som PRÓPRIO (ver client/js/audio.js — todos já
+  // existiam, nenhum som novo precisou ser inventado):
+  //   1) silêncio total (~1-2s) — ele parou, o jogador só sabe disso pela
+  //      ausência de qualquer outro som;
+  //   2) 'locked' — um teste rápido, baixo, quase nada;
+  //   3) 'drag'/'metal' repetidos — ele está pressionando/forçando de
+  //      verdade, o som cresce;
+  //   4) depois de tempo suficiente (~8-11s no total), 'doorBreak' de
+  //      verdade via forceDoorOpen (mesma função que já existia).
+  forceDoorSequence(door, dt) {
+    const m = this.match;
+    this.moving = false;
+    this.face(door.x, door.y);
+    if (!this.doorForce || this.doorForce.id !== door.id) {
+      this.doorForce = { id: door.id, t: 0, stage: 0, hits: 0 };
+    }
+    const f = this.doorForce;
+    f.t += dt;
+    switch (f.stage) {
+      case 0: // silêncio — o jogador só ouve o próprio coração
+        if (f.t >= rnd(1.2, 2)) { f.stage = 1; f.t = 0; m.emitSfx('locked', door.x + 0.5, door.y + 0.5, 10); }
+        break;
+      case 1: // teste — pequeno movimento, som contido
+        if (f.t >= rnd(1, 1.8)) {
+          f.stage = 2; f.t = 0;
+          m.emitSfx('drag', door.x + 0.5, door.y + 0.5, 16);
+          m.addNoise(door.x + 0.5, door.y + 0.5, 8, 'forceDoor');
+        }
+        break;
+      case 2: // forçando de verdade — cada golpe é mais alto que o anterior
+        if (f.t >= 1.3) {
+          f.t = 0;
+          f.hits++;
+          m.emitSfx('metal', door.x + 0.5, door.y + 0.5, 20);
+          m.addNoise(door.x + 0.5, door.y + 0.5, 10, 'forceDoor');
+          if (f.hits >= 3) {
+            m.forceDoorOpen(door.id, 10);
+            this.doorForce = null;
+          }
+        }
+        break;
+    }
+    return false;
   }
 }
 
