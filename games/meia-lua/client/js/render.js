@@ -13,7 +13,10 @@ import { PLAYER_COLORS } from './ui.js';
 
 const BASE = 32; // px por tile no cache
 const ANIM_TYPES = ['tonho', 'marola', 'lume', 'gregorio', 'maestro', 'pipoca'];
-const STATES = ['IDLE', 'PATROL', 'INVESTIGATE', 'CHASE', 'SEARCH', 'RETURN', 'STUNNED', 'DORMANT', 'DISABLED', 'ALERT'];
+// Mantenha em sincronia com STATES em server/ai/types.js (mesma ordem,
+// mesmo índice — é assim que o snapshot da rede decodifica o estado, ver
+// STATE_CODE em Match.js e o uso de STATES[row[5]] em game.js).
+const STATES = ['IDLE', 'PATROL', 'INVESTIGATE', 'CHASE', 'SEARCH', 'RETURN', 'STUNNED', 'DORMANT', 'DISABLED', 'ALERT', 'OBSERVE'];
 const POSES = ['idle0', 'idle1', 'walk0', 'walk1', 'walk2', 'walk3', 'chase0', 'chase1', 'stun'];
 const TAU = Math.PI * 2;
 

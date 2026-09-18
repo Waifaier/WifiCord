@@ -5,6 +5,7 @@ import {
 import { ITEMS, EQUIP_SLOTS, SLOT_NAMES } from '/jogos/meia-lua/shared/items.js';
 import { ANIMATRONIC_INFO, NIGHTS, DIFFICULTIES } from '/jogos/meia-lua/shared/nights.js';
 import { ATTRIBUTES, ATTR_NAMES } from '/jogos/meia-lua/shared/rpg.js';
+import { areaProfile, AREA_AMBIENCE_LOOPS } from '/jogos/meia-lua/shared/areaProfiles.js';
 import { Renderer, ANIM_TYPES, STATES } from './render.js';
 import { PostFX } from './postfx.js';
 import { audio } from './audio.js';
@@ -49,10 +50,37 @@ export class Game {
     this.basicsDone = new Set();
     this.lastRenderErrorAt = 0;
     this.renderErrorStreak = 0;
+    // Qualidade automática (ver watchAutoQuality() em frame()): fica ligada
+    // só quando settings.quality === 'auto' e o FPS fica ruim por um tempo
+    // sustentado — nunca mexe na escolha manual ('low' já força baixa
+    // qualidade de qualquer jeito, ver resize()/frame()).
+    this.autoLow = false;
+    this._lowSince = 0;
+    this._okSince = 0;
     this.bindSocket();
     this.bindInput();
     this.bindUi();
-    window.addEventListener('resize', () => this.resize());
+    const onResize = () => this.resize();
+    window.addEventListener('resize', onResize);
+    // Girar o celular (ou a barra de endereço do navegador
+    // aparecer/sumir) às vezes não dispara um 'resize' a tempo — ou
+    // dispara com innerHeight ainda desatualizado, um problema conhecido
+    // em navegadores mobile enquanto a UI do navegador termina de
+    // acomodar. Reforça com orientationchange + visualViewport, e mais
+    // uma leitura um instante depois pra pegar o valor já assentado.
+    window.addEventListener('orientationchange', () => { onResize(); setTimeout(onResize, 250); });
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', onResize);
+    // Aba/app em segundo plano: suspende o áudio (silêncio "de verdade" em
+    // vez do ambiente/loops continuarem consumindo bateria e CPU sem
+    // ninguém ouvindo) e, ao voltar, religa e força um resize (a tela pode
+    // ter mudado de tamanho enquanto estava em segundo plano). Não pausa o
+    // resto do jogo: o rAF do loop de desenho já para sozinho em aba
+    // oculta (comportamento padrão do navegador), e o servidor continua
+    // sendo a fonte da verdade de qualquer forma.
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { if (audio.ctx?.state === 'running') audio.ctx.suspend(); }
+      else { audio.unlock(); if (this.running) this.resize(); }
+    });
   }
 
   // ================================================================== ciclo de vida
@@ -74,6 +102,9 @@ export class Game {
       flicker: new Map(), lightsOn: true, blackout: false, phoneRinging: false, flash: 0, myHide: null,
       lowQuality: settings.quality === 'low',
     };
+    this.autoLow = false;
+    this._lowSince = 0;
+    this._okSince = 0;
     this.snaps = [];
     this.offset = null;
     this.me = { hp: 100, mhp: 100, st: 100, mst: 100, fe: 0, bat: 100, seq: data.seq, alive: true, br: 100 };
@@ -326,6 +357,18 @@ export class Game {
       case 'powerRestored': audio.play('powerOn', { vol: 0.8 }); toast(fala('energiaVoltou'), 'good'); break;
       case 'lights': audio.play('breaker', { vol: 0.5 }); break;
       case 'camFail': if (this.camOpen && this.camId === f.cam) { audio.play('static', { vol: 0.8 }); this.glitch = 1; } break;
+      // Câmera "de verdade" (ver o bloco de p.camGlanceCd em Match.js,
+      // server) — a maior parte das vezes o servidor nem manda isso; a
+      // câmera já mostra o mundo de verdade (animatrônicos de verdade
+      // passando ali de vez em quando, ver render.js drawCamera), então
+      // aqui só entra uma pitada sonora, nada visual forçado.
+      case 'camGlitch':
+        if (this.camOpen && this.camId === f.cam) {
+          if (f.variant === 'flicker') audio.play('static', { vol: 0.32 });
+          else if (f.variant === 'staticBlip') audio.play('static', { vol: 0.2 });
+          else audio.play('breathDistant', { vol: 0.22 });
+        }
+        break;
       case 'camerasFixed': toast(fala('camerasOk'), 'good'); break;
       case 'camClose': this.closeCams(false); break;
       case 'openCams': this.openCams(); break;
@@ -344,6 +387,29 @@ export class Game {
       // broadcast), sem nenhuma imagem/aparição acompanhando: a
       // ambiguidade de "será que teve alguém aí?" é o ponto.
       case 'presence': audio.play('presence', { vol: 0.9 }); this.glitch = Math.max(this.glitch, 0.4); break;
+      // Vulto rápido no limite da visão (ver o case 'vultoRapido' em
+      // Match.js, server) — mesma técnica visual da apparition (silhueta
+      // em S.hallu), só que bem mais curta e sem som/glitch/medo: às
+      // vezes o "monstro" só passa e some, sem virar um susto de verdade.
+      case 'glimpse':
+        this.S.hallu.push({ kind: 'figure', type: f.kind, x: f.x, y: f.y, dir: Math.random() * 6, start: nowS, dur: 0.35 });
+        break;
+      // A criatura observando de longe, sem se aproximar (ver o case
+      // 'observando' em Match.js) — usa o tipo real do animatrônico e
+      // fica visível bem mais tempo que o glimpse acima, mas discreta:
+      // nem todo encontro termina em ataque.
+      case 'sighting':
+        this.S.hallu.push({ kind: 'figure', type: f.kind, x: f.x, y: f.y, dir: Math.random() * 6, start: nowS, dur: 1.8 });
+        audio.play('breathDistant', { vol: 0.3 });
+        this.glitch = Math.max(this.glitch, 0.2);
+        break;
+      // Pulso de um susto falso (ver o case 'falsoAlarme' em Match.js) —
+      // a tensão sobe e às vezes não dá em nada mesmo; o evento de
+      // verdade, se vier, chega bem depois disso.
+      case 'tensionPulse':
+        audio.play('tensionPulse', spatial(f.x, f.y, 26));
+        this.glitch = Math.max(this.glitch, 0.25);
+        break;
       case 'questDone': toast(`${f.line || f.title}  (+${f.xp} XP, +$${f.money})`, 'quest', 5500); audio.play('quest', { vol: 0.8 }); break;
       case 'levelup': toast(fala('nivel', { n: f.level }), 'quest', 5000); audio.play('levelup', { vol: 0.8 }); break;
       case 'lore': this.showLore(f.title, f.text); break;
@@ -376,6 +442,30 @@ export class Game {
       case 'show':
         if (f.phase === 'start') this.startShowEvent(f.dur);
         else if (f.phase === 'end') this.endShowEvent();
+        break;
+      // Fases de verdade da "Hora do Show" (ver runShowEvent em Match.js)
+      // — antes era só "começou/terminou"; agora cada fase intermediária
+      // chega aqui com nome próprio, e é o que faz o show parecer uma
+      // sequência (contexto → preparação → expectativa → evento → reação
+      // → consequência → silêncio) em vez de um "liga/desliga".
+      case 'showPhase':
+        if (f.phase === 'atuacao' && f.feature) {
+          this.showFeature = f.feature;
+          const motif = { tonho: 'showFeatureTonho', marola: 'showFeatureMarola', lume: 'showFeatureLume', gregorio: 'showFeatureGregorio', maestro: 'showFeatureMaestro' }[f.feature];
+          if (motif) audio.play(motif, { vol: this.showMusicVol ?? 0.6 });
+        } else if (f.phase === 'falhaSutil') {
+          // só a luz pisca (já tratado pelo fx 'flicker' que o servidor
+          // manda junto) — nenhuma reação extra aqui de propósito, é pra
+          // "ninguém perceber".
+        } else if (f.phase === 'estranho') {
+          audio.play('showGlitch', { vol: 0.5 });
+          this.glitch = Math.max(this.glitch, 0.18);
+        }
+        // 'quebra' não precisa de reação própria aqui — o cliente já tem
+        // seu próprio timer local pra esse instante (showBreakAt, ver
+        // startShowEvent), que dispara a quebra visual/sonora sozinho.
+        // Este fx existe só pra manter a narrativa de fases consistente
+        // caso algo no futuro precise reagir a ela também.
         break;
       case 'choir':
         audio.play('choir', { vol: 0.7 });
@@ -410,7 +500,7 @@ export class Game {
     clearInterval(this.showLoopTimer);
     // o loop de música (showtimeLoop) dura ~4s de fato (ver audio.js) —
     // reencadeia um pouco antes de terminar pra não deixar buraco de silêncio.
-    this.showLoopTimer = setInterval(() => { if (this.showActive) audio.play('showtimeLoop', { vol: 0.7 }); }, 3700);
+    this.showLoopTimer = setInterval(() => { if (this.showActive) audio.play('showtimeLoop', { vol: this.showMusicVol ?? 0.7 }); }, 3700);
     clearTimeout(this._showBreakSfx);
     this._showBreakSfx = setTimeout(() => {
       if (!this.showActive) return;
@@ -675,6 +765,21 @@ export class Game {
     this.socket.emit('interact', { target: c?.id });
   }
 
+  // Reduz efeitos sozinho se o FPS ficar ruim por um tempo sustentado, e só
+  // volta a subir depois de ficar bom por bem mais tempo ainda — essa
+  // assimetria (histerese) é de propósito, pra não ficar oscilando entre
+  // qualidade alta/baixa quadro a quadro perto do limiar. Só age quando a
+  // pessoa deixou em "Automática"; a escolha manual ('low') nunca é
+  // sobrescrita por isto aqui.
+  watchAutoQuality(now) {
+    if (settings.quality !== 'auto') { this.autoLow = false; this._lowSince = 0; this._okSince = 0; return; }
+    if (this.fps < 40) { this._okSince = 0; if (!this._lowSince) this._lowSince = now; if (now - this._lowSince > 2500) this.autoLow = true; }
+    else { this._lowSince = 0; }
+    if (this.fps > 52) { this._lowSince = 0; if (!this._okSince) this._okSince = now; if (now - this._okSince > 5000) this.autoLow = false; }
+    else { this._okSince = 0; }
+    if (this.S) this.S.lowQuality = settings.quality === 'low' || this.autoLow;
+  }
+
   // ================================================================== render loop
   frame() {
     if (!this.running) return;
@@ -683,6 +788,7 @@ export class Game {
     const dt = Math.min(0.1, (now - (this.lastFrame || now)) / 1000);
     this.lastFrame = now;
     this.fps = this.fps * 0.95 + (1 / Math.max(dt, 0.001)) * 0.05;
+    this.watchAutoQuality(now);
     const S = this.S;
     S.t = now / 1000;
     S.flash = Math.max(0, S.flash - dt * 2.2);
@@ -836,7 +942,9 @@ export class Game {
         blackout: S.blackout ? 1 : 0,
         cam: this.camOpen ? 1 : 0,
         flash: S.flash,
-        high: settings.fx === 'high' ? 1 : 0,
+        // autoLow (ver watchAutoQuality) também baixa o nível do shader,
+        // não só o resto do jogo — é o efeito mais caro de todos.
+        high: settings.fx === 'high' && !this.autoLow ? 1 : 0,
         dark: lit ? 0 : 1,
       });
     }
@@ -933,8 +1041,30 @@ export class Game {
     const near = (x, y, r) => Math.max(0, 1 - Math.hypot(x - p.x, y - p.y) / r);
     const area = areaAt(p.x, p.y);
     audio.setLoop('ambient', 0.55);
-    audio.setLoop('hum', this.S.lightsOn && !this.S.blackout && area && !area.outdoor && !area.dark ? 0.22 : 0);
+    // Paisagem sonora por área (ver shared/areaProfiles.js): antes 'hum'
+    // era o único loop indoor e tocava igual em toda sala — agora cada
+    // área liga só os loops do próprio perfil, com volume próprio; zera
+    // primeiro todos os nomes conhecidos e depois só sobe os que a área
+    // atual pede, então trocar de sala já crossfada sozinho (setLoop usa
+    // rampa, não corte seco — ver AREA_AMBIENCE_LOOPS/setTargetAtTime).
+    const powered = this.S.lightsOn && !this.S.blackout; // sem luz, a paisagem sonora quase some — o silêncio é parte do susto
+    for (const name of AREA_AMBIENCE_LOOPS) audio.setLoop(name, 0);
+    if (area && !area.outdoor && powered) {
+      const prof = areaProfile(area.id);
+      for (const [name, vol] of prof?.ambience || []) audio.setLoop(name, vol);
+    }
     audio.setLoop('generator', near(40.5, 4.5, 14) * 0.6);
+    // "Hora do Show" (pedido #11): o som precisa parecer vir do
+    // palco/alto-falantes — mais presente perto, mais distante longe. A
+    // fonte re-toca a cada ~3.7s (ver startShowEvent), então recalcular o
+    // volume aqui todo frame já garante que o PRÓXIMO disparo saia no
+    // volume certo pra onde a pessoa está AGORA, sem precisar de um nó de
+    // ganho contínuo à parte.
+    if (this.showActive) {
+      const stage = AREA_BY_ID.palco;
+      const scx = (stage.x1 + stage.x2 + 1) / 2, scy = (stage.y1 + stage.y2 + 1) / 2;
+      this.showMusicVol = Math.max(0.08, near(scx, scy, 34)) * 0.75;
+    }
     audio.setLoop('freezer', near(66.5, 34.5, 8) * 0.5);
     audio.setLoop('wind', area?.outdoor ? 0.3 : 0.04);
     audio.setLoop('rain', area?.outdoor ? 0.5 : Math.max(0.03, near(32, 40, 10) * 0.25));

@@ -44,6 +44,11 @@ export class Animatronic {
     // normal fica pausada e ele só balança no palco, sem perceber nem
     // atacar ninguém (ver o early-return em update()).
     this.performing = false;
+    // "Observante" (ver def.observant em types.js e OBSERVE abaixo):
+    // cooldown antes da próxima tentativa, pra não ficar tentando entrar
+    // em OBSERVE toda hora — e quem ele está observando agora, se algum.
+    this.observeCd = rnd(10, 25);
+    this.observeTargetId = null;
     // "Ligando": ficam desligados no palco até a hora combinada (ver
     // Match.js, que escalona cada um deles pra uma hora diferente da
     // noite em vez de todo mundo começar a andar quase junto). Se por
@@ -239,7 +244,14 @@ export class Animatronic {
       this.senseCd = 0.2;
       const seen = this.sense();
       if (seen) {
-        if (this.state !== 'CHASE' && this.state !== 'ALERT' && m.time >= this.tiredUntil) {
+        // OBSERVE fica de fora dessa escalada automática de propósito —
+        // enquanto ele está observando, "ver" o jogador é exatamente o
+        // que está fazendo, não motivo pra virar ALERT/CHASE sozinho
+        // (isso é decidido por updateObserve(), que só reage a distância
+        // de verdade — ver lá embaixo). Sem essa exclusão, todo OBSERVE
+        // viraria uma perseguição real quase na mesma hora, o que
+        // contradiz o pedido de "presença sem ataque".
+        if (this.state !== 'CHASE' && this.state !== 'ALERT' && this.state !== 'OBSERVE' && m.time >= this.tiredUntil) {
           const d = Math.hypot(seen.x - this.x, seen.y - this.y);
           const instant = d < 2.3 || (m.blackout && d < 4) || (this.state === 'SEARCH' && d < 3.5);
           if (instant) {
@@ -275,6 +287,19 @@ export class Animatronic {
       return;
     }
 
+    // Tentativa de entrar em OBSERVE (ver types.js def.observant e
+    // updateObserve() abaixo) — só a partir de PATROL/IDLE, só quem tem a
+    // flag, com um cooldown entre tentativas e a chance vindo do
+    // TensionDirector (mais provável quanto mais tensa a partida — ver
+    // TensionDirector.observeBias, pedido #25).
+    if (this.def.observant && (this.state === 'PATROL' || this.state === 'IDLE')) {
+      this.observeCd -= dt;
+      if (this.observeCd <= 0) {
+        this.observeCd = rnd(14, 26);
+        this.tryObserve();
+      }
+    }
+
     // Evento do apagão (Gregório): enquanto durar, ele atualiza a posição
     // "ouvida" do alvo direto (sem precisar de linha de visão), com uma
     // pequena folga pra não ficar oniscente — dá pra despistar se esconder.
@@ -297,6 +322,7 @@ export class Animatronic {
       case 'SEARCH': this.updateSearch(dt); break;
       case 'RETURN': this.updateReturn(dt); break;
       case 'ALERT': this.updateAlert(dt); break;
+      case 'OBSERVE': this.updateObserve(dt); break;
     }
 
     // Maestro: pisca para perto dos jogadores quando está entediado
@@ -391,6 +417,81 @@ export class Animatronic {
         else this.startPatrol();
       }
     }
+  }
+
+  // ---------- OBSERVE: presença sem ataque, com animatrônico de verdade ----------
+  // Ver def.observant (types.js), o gatilho em update() e
+  // TensionDirector.observeBias(). Reaproveita o mesmo fx 'sighting' que
+  // o evento 'observando' de Match.js já manda quando NÃO tem bicho real
+  // por trás — de propósito: o jogador nunca consegue diferenciar "isso é
+  // de verdade" de "isso é só um efeito" só pelo que aparece na tela, e é
+  // exatamente esse o ponto (pedido: "Eu realmente vi aquilo?").
+  tryObserve() {
+    const m = this.match;
+    const bias = m.director?.observeBias() ?? 0;
+    if (bias <= 0 || Math.random() > bias * 0.5) return;
+    let best = null, bestD = Infinity;
+    for (const p of m.alivePlayers()) {
+      if (p.hidden) continue;
+      const d = Math.hypot(p.x - this.x, p.y - this.y);
+      if (d < 7 || d > 15) continue;
+      if (!lineOfSight(this.x, this.y, p.x, p.y, (id) => m.isDoorClosed(id))) continue;
+      if (d < bestD) { best = p; bestD = d; }
+    }
+    if (best) this.startObserve(best);
+  }
+
+  startObserve(target) {
+    this.setState('OBSERVE', rnd(3.5, 7));
+    this.observeTargetId = target.id;
+    this.path = null; this.goal = null;
+    this.face(target.x, target.y);
+    this.moving = false;
+    // Só quem está sendo observado recebe o aviso — quem estiver em outra
+    // sala não vê, não ouve, não sabe de nada (pedido #17: usar o
+    // multiplayer como ferramenta de terror, eventos diferentes pra
+    // jogadores diferentes).
+    this.match.sendTo(target, 'fx', { type: 'sighting', x: this.x, y: this.y, kind: this.type });
+  }
+
+  updateObserve(dt) {
+    const m = this.match;
+    this.moving = false;
+    const t = m.players.get(this.observeTargetId);
+    if (!t || !t.alive || t.hidden) { this.endObserve(); return; }
+    const d = Math.hypot(t.x - this.x, t.y - this.y);
+    // Chegou perto demais: foge, não ataca — "presença sem ataque" de
+    // verdade, nunca vira susto (pedido #15: nenhum jumpscare, nenhum
+    // ataque, só a dúvida).
+    if (d < 3) { this.endObserve(); return; }
+    if (!lineOfSight(this.x, this.y, t.x, t.y, (id) => m.isDoorClosed(id))) { this.endObserve(); return; }
+    this.face(t.x, t.y);
+    if (this.stateTime >= this.stateDur) this.endObserve();
+  }
+
+  // Some sem ninguém ver pra onde foi — mesma técnica de
+  // teleportAfterAttack (ponto longe de todo mundo, fora de linha de
+  // visão de qualquer jogador), mas sem nenhuma das penalidades de "acabou
+  // de atacar" (sem tiredUntil, sem susto pra ninguém).
+  endObserve() {
+    const m = this.match;
+    const t = m.players.get(this.observeTargetId);
+    this.observeTargetId = null;
+    const areas = this.def.patrol.length ? this.def.patrol : [areaAt(this.x, this.y)?.id].filter(Boolean);
+    for (let tries = 0; tries < 10; tries++) {
+      const areaId = pick(areas);
+      if (!m.areaAccessible(areaId)) continue;
+      const pt = randomFloorInArea(areaId);
+      if (!pt) continue;
+      if (t && Math.hypot(pt.x - t.x, pt.y - t.y) < 5) continue;
+      const seen = [...m.alivePlayers()].some((p) => !p.hidden && m.playerSees(p, pt.x, pt.y));
+      if (seen) continue;
+      this.x = pt.x; this.y = pt.y;
+      break;
+    }
+    this.path = null; this.goal = null;
+    this.dir = Math.random() * Math.PI * 2;
+    this.setState('SEARCH', rnd(2, 4));
   }
 
   startPatrol() {

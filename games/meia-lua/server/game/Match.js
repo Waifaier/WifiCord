@@ -13,6 +13,9 @@ import { STATE_CODE, TYPE_LIST, ANIM_TYPES } from '../ai/types.js';
 import { rollLoot } from './loot.js';
 import { fala } from '../../shared/falas.js';
 import { saveMatchProgress } from '../database/accounts.js';
+import { TensionDirector } from './TensionDirector.js';
+import { areaProfile } from '../../shared/areaProfiles.js';
+import { EventChains } from './EventChains.js';
 
 const TICK_MS = 50;
 const SNAP_EVERY = 2; // 10 snapshots/s
@@ -66,6 +69,16 @@ export class Match {
     this.nextEventAt = rnd(...this.cfg.eventInterval) * 0.6 * this.diff.events;
     this.lastEventType = null;
     this.eventLog = [];
+    // Ritmo do terror (ver TensionDirector.js) — decide só a CATEGORIA de
+    // evento permitida a cada momento (fases calma/estranheza/tensão/...);
+    // o sorteio e a execução de cada evento continuam 100% aqui no Match.
+    this.director = new TensionDirector();
+    // Sequências de passos ao longo do tempo (ver EventChains.js) — falso
+    // alarme com resolução tardia, correntes assimétricas entre
+    // jogadores, etc. Passo por passo continua tudo decidido aqui no
+    // Match (chains.js só guarda "quando"), então não duplica nenhuma
+    // regra de jogo em outro lugar.
+    this.chains = new EventChains(this);
     // Evento "O Show" (ver runShowEvent/endShowEvent) — susto raro: quando
     // alguém tá perto do palco, todos os animatrônicos se teleportam pra
     // lá e as portas ao redor selam até a música parar.
@@ -269,6 +282,7 @@ export class Match {
       }
       for (const n of this.noises) for (const a of this.anims) a.hear(n);
       this.noises.length = 0;
+      this.chains.update();
       this.checkEnd();
       if (this.tickCount % SNAP_EVERY === 0) this.sendSnapshots();
     } catch (err) {
@@ -361,6 +375,24 @@ export class Match {
       // câmera: validar se ainda pode usar
       if (p.cam && !this.canUseCameras(p)) { p.cam = null; this.sendTo(p, 'fx', { type: 'camClose' }); }
 
+      // Câmeras "de verdade" (pedido #6): olhar pra uma câmera raramente
+      // deve resultar em alguma coisa — a maior parte do tempo o jogador
+      // só olha e não acontece nada, e É ISSO que faz a câmera parecer
+      // real em vez de "gerador de susto". Roda só enquanto p.cam está
+      // ativo, num relógio próprio, e NÃO usa o sorteio de eventos nem
+      // mexe em medo/tensão — é textura, não um evento de verdade.
+      if (p.cam && this.cameraWorking(p.cam)) {
+        p.camGlanceCd = (p.camGlanceCd == null ? rnd(6, 14) : p.camGlanceCd) - dt;
+        if (p.camGlanceCd <= 0) {
+          p.camGlanceCd = rnd(11, 24);
+          if (Math.random() < 0.3) {
+            this.sendTo(p, 'fx', { type: 'camGlitch', cam: p.cam, variant: pick(['flicker', 'staticBlip', 'shadowPass']) });
+          }
+        }
+      } else {
+        p.camGlanceCd = null;
+      }
+
       // dicas de investigação
       p.hintCd -= dt;
       if (p.hintCd <= 0) {
@@ -399,6 +431,19 @@ export class Match {
 
     // evento final
     if (this.cfg.finalEventHour && !this.finalTriggered && hour >= this.cfg.finalEventHour) this.triggerFinal();
+
+    // Ritmo do terror — sinais de leitura pura (o director não mexe em
+    // nada do mundo) que alimentam o TensionDirector: ele sobe mais rápido
+    // no escuro, perto de perigo de verdade e sozinho, e recua um pouco
+    // quando o grupo está junto e tudo calmo (ver TensionDirector.js).
+    const aliveList = [...this.alivePlayers()];
+    const darkness = !this.lightsOn || this.blackout || this.flicker.size > 0;
+    const nearDanger = this.anims.some((a) => !['DISABLED', 'DORMANT'].includes(a.state)
+      && aliveList.some((p) => Math.hypot(a.x - p.x, a.y - p.y) < 7));
+    const soloPlayer = aliveList.length <= 1;
+    const togetherCalm = aliveList.length > 1 && !nearDanger && !darkness
+      && aliveList.every((p) => aliveList.every((q) => Math.hypot(p.x - q.x, p.y - q.y) < 12));
+    this.director.update(dt, { darkness, nearDanger, alone: soloPlayer, togetherCalm });
 
     // eventos aleatórios
     if (this.time >= this.nextEventAt && this.time > GRACE_SECONDS + 10) {
@@ -1187,29 +1232,44 @@ export class Match {
     const players = [...this.alivePlayers()];
     if (!players.length) return;
     const n = this.night;
+    // Escolhe o alvo/referência ANTES de montar os pesos (era escolhido
+    // só depois, olhando pra ele só pra decidir ONDE alguns eventos
+    // aconteciam) — agora também serve pra enviesar QUAL CATEGORIA é mais
+    // provável de acordo com a área onde ele está (pedido #16: "os
+    // eventos precisam saber onde o jogador está" — ver
+    // shared/areaProfiles.js, AREA_PROFILE.<id>.bias).
+    const target = pick(players);
+    const tArea = areaAt(target.x, target.y);
+    const areaBias = areaProfile(tArea?.id)?.bias || {};
+    // Cada evento carrega uma categoria (ver TensionDirector.js):
+    // 'ambient'  — estranheza discreta, quase nunca "gasta" um susto de verdade;
+    // 'falso'    — prepara tensão e às vezes não dá em nada (pedido #6);
+    // 'presenca' — a criatura se mostra, mas sem necessariamente atacar (pedido #5);
+    // 'real'     — o evento grande de verdade (hoje só "O Show");
+    // 'sempre'   — economia/utilidade (telefone, dinheiro), nunca faz parte do terror em si.
     const events = [
-      { t: 'flicker', w: 16 },
-      { t: 'doorSlam', w: 10 },
-      { t: 'camFail', w: this.camerasBroken ? 0 : 9 },
-      { t: 'objectMove', w: 7 },
-      { t: 'sound', w: 13 },
-      { t: 'apparition', w: 7 + n },
-      { t: 'routeChange', w: 8 + n },
-      { t: 'whisper', w: 8 },
-      { t: 'phone', w: this.phoneUntil ? 0 : 4 },
-      { t: 'coin', w: 3 },
-      { t: 'surge', w: this.power > 20 ? 5 : 0 },
-      { t: 'thunder', w: 10 },
+      { t: 'flicker', cat: 'ambient', w: 16 },
+      { t: 'doorSlam', cat: 'falso', w: 10 },
+      { t: 'camFail', cat: 'ambient', w: this.camerasBroken ? 0 : 9 },
+      { t: 'objectMove', cat: 'ambient', w: 7 },
+      { t: 'sound', cat: 'falso', w: 13 },
+      { t: 'apparition', cat: 'presenca', w: 7 + n },
+      { t: 'routeChange', cat: 'ambient', w: 8 + n },
+      { t: 'whisper', cat: 'falso', w: 8 },
+      { t: 'phone', cat: 'sempre', w: this.phoneUntil ? 0 : 4 },
+      { t: 'coin', cat: 'sempre', w: 3 },
+      { t: 'surge', cat: 'falso', w: this.power > 20 ? 5 : 0 },
+      { t: 'thunder', cat: 'ambient', w: 10 },
       // "O Show": só entra no sorteio quando dá pra acontecer de verdade —
       // alguém no palco/salão pra prender, nenhum show já rolando, e um
       // intervalo mínimo desde o último (pra não virar rotina, tem que
       // continuar sendo um susto raro e "do nada" como foi pedido).
-      { t: 'show', w: (() => {
+      { t: 'show', cat: 'real', w: (() => {
         const near = players.filter((p) => ['palco', 'salao'].includes(areaAt(p.x, p.y)?.id));
         return !this.showActive && this.time - this.lastShowAt > 150 ? (near.length ? 24 : 0) : 0;
       })() },
-      { t: 'coro', w: 9 },
-      { t: 'relogioTrava', w: 6 },
+      { t: 'coro', cat: 'presenca', w: 9 },
+      { t: 'relogioTrava', cat: 'ambient', w: 6 },
       // "Silêncio": não soma nada, TIRA — ver o case abaixo e
       // AudioSystem.duckAmbient em client/js/audio.js. É a técnica
       // oposta de todos os outros eventos daqui (que sempre ADICIONAM som
@@ -1218,23 +1278,61 @@ export class Match {
       // tensão, não um susto de verdade. Não entra durante uma perseguição
       // de verdade (abafar o áudio bem na hora que alguém precisa ouvir
       // os passos de quem está caçando seria só irritante, não assustador).
-      { t: 'silencio', w: this.anims.some((a) => a.state === 'CHASE') ? 0 : 11 },
+      { t: 'silencio', cat: 'ambient', w: this.anims.some((a) => a.state === 'CHASE') ? 0 : 11 },
       // "Presença": um único jogador (não todo mundo) ouve uma respiração
       // pesada bem perto do próprio ouvido, sem direção nem imagem — sem
       // NENHUM animatrônico de verdade vindo até ele. A ambiguidade é o
       // ponto: a pessoa nunca sabe se foi alguma coisa de verdade ou não,
       // o que é mais perturbador do que uma aparição visual confirmada
       // (ver 'apparition' acima, que já cobre esse caso "eu vi algo").
-      { t: 'presenca', w: 10 },
-    ].filter((e) => e.w > 0 && e.t !== this.lastEventType);
+      { t: 'presenca', cat: 'presenca', w: 10 },
+      // ---- Novos eventos (terror por antecipação, ver TensionDirector.js) ----
+      // Passos atrás do jogador que somem quando ele vira pra olhar —
+      // puramente sonoro, ninguém está lá de verdade (pedido #1/#4).
+      { t: 'passosAtras', cat: 'ambient', w: 12 },
+      // Respiração pesada vinda de algum lugar distante e impreciso.
+      { t: 'respiracaoDistante', cat: 'ambient', w: 9 },
+      // Silhueta que atravessa o canto da visão e some — às vezes o
+      // "monstro" nem chega a ser um susto de verdade (pedido #5).
+      { t: 'vultoRapido', cat: 'ambient', w: 8 },
+      // Susto falso "completo" (porta se preparando + áudio subindo) que
+      // pode não resultar em nada — a tensão de verdade vem depois,
+      // quando a guarda já baixou (pedido #6).
+      { t: 'falsoAlarme', cat: 'falso', w: 9 },
+      // A criatura observa de longe, sem se aproximar — nem todo encontro
+      // termina em ataque (pedido #5/#8).
+      { t: 'observando', cat: 'presenca', w: 8 },
+      // Corrente assimétrica entre jogadores (pedido #17, o próprio
+      // exemplo dado: "jogador A ouve passos atrás dele, jogador B não
+      // ouve nada... alguns segundos depois o jogador B vê um vulto em
+      // outro ponto"). Só entra no sorteio com 2+ jogadores vivos — ver
+      // startAsymmetricChain() e EventChains.js.
+      { t: 'ecoEntreJogadores', cat: 'falso', w: players.length >= 2 ? 11 : 0 },
+    ]
+      .filter((e) => e.w > 0 && e.t !== this.lastEventType)
+      // Só deixa passar a categoria que a fase atual do terror libera
+      // (ver TensionDirector.allowedCategories) — eventos utilitários
+      // ('sempre') não fazem parte do ritmo de terror e passam sempre.
+      .filter((e) => e.cat === 'sempre' || this.director.allowedCategories().includes(e.cat))
+      // Peso adaptativo: cada tipo específico fica proporcionalmente mais
+      // raro depois de já ter acontecido nessa partida, pra ninguém
+      // conseguir "decorar" os sinais (pedido #9).
+      .map((e) => ({ ...e, w: e.w * this.director.exposureFactor(e.t) }))
+      // Viés por área (pedido #16) — 'sempre' fica de fora, não é parte
+      // do ritmo de terror.
+      .map((e) => ({ ...e, w: e.cat === 'sempre' ? e.w : e.w * (areaBias[e.cat] || 1) }))
+      // A tensão também empurra especificamente os eventos de luz (pedido
+      // #25: a tensão deve influenciar iluminação, não só categoria) —
+      // ver TensionDirector.flickerBias(), com teto pra nunca virar
+      // "toda luz pisca sempre".
+      .map((e) => ({ ...e, w: ['flicker', 'surge'].includes(e.t) ? e.w * this.director.flickerBias() : e.w }));
+    if (!events.length) return; // fase atual não libera nada agora — tenta de novo no próximo intervalo
     const total = events.reduce((s, e) => s + e.w, 0);
     let r = Math.random() * total, ev = events[0];
     for (const e of events) { if ((r -= e.w) <= 0) { ev = e; break; } }
     this.lastEventType = ev.t;
     this.eventLog.push({ t: ev.t, at: Math.round(this.time) });
 
-    const target = pick(players);
-    const tArea = areaAt(target.x, target.y);
     switch (ev.t) {
       case 'flicker': {
         const areaId = Math.random() < 0.6 && tArea ? tArea.id : pick(AREAS).id;
@@ -1370,7 +1468,128 @@ export class Match {
         target.fear = Math.min(100, target.fear + 8 * target.derived.fearMult);
         break;
       }
+      case 'passosAtras': {
+        // Passos ouvidos vindo de trás, na direção contrária de onde o
+        // jogador está olhando/andando (p.dir) — quando ele vira pra
+        // conferir, não tem nada lá. Só o alvo ouve (sendTo).
+        const ang = (target.dir || 0) + Math.PI + rnd(-0.4, 0.4);
+        const dist = rnd(2.5, 4);
+        this.sendTo(target, 'fx', {
+          type: 'sfx', s: 'stepsBehind',
+          x: r2(target.x + Math.cos(ang) * dist), y: r2(target.y + Math.sin(ang) * dist),
+        });
+        break;
+      }
+      case 'respiracaoDistante': {
+        // Respiração pesada vinda de algum ponto impreciso e distante —
+        // só som, nenhuma imagem, nenhum aumento de medo: a intenção é
+        // deixar a dúvida no ar, não confirmar perigo nenhum.
+        const ang = Math.random() * Math.PI * 2;
+        const dist = rnd(6, 10);
+        this.sendTo(target, 'fx', {
+          type: 'sfx', s: 'breathDistant',
+          x: r2(target.x + Math.cos(ang) * dist), y: r2(target.y + Math.sin(ang) * dist),
+        });
+        break;
+      }
+      case 'vultoRapido': {
+        // Reaproveita a mesma silhueta visual da apparition (ver
+        // 'glimpse' em client/js/game.js), só que bem mais curta e sem
+        // áudio/glitch/medo — às vezes o "monstro" só atravessa e some,
+        // nem todo vislumbre é um susto de verdade (pedido #5).
+        const ang = Math.random() * Math.PI * 2;
+        this.sendTo(target, 'fx', {
+          type: 'glimpse',
+          x: r2(target.x + Math.cos(ang) * rnd(4, 6)), y: r2(target.y + Math.sin(ang) * rnd(4, 6)),
+          kind: pick(TYPE_LIST.slice(0, 4)),
+        });
+        break;
+      }
+      case 'falsoAlarme': {
+        // Susto falso de VERDADE em 3 tempos (pedido #19: "não quero som
+        // assustador → nada acontece. Quero falsos alarmes que realmente
+        // criem expectativa"), usando EventChains pra espaçar os passos:
+        //   1. agora — porta "se prepara" (som + flicker + pulso de
+        //      tensão), constrói expectativa de verdade;
+        //   2. ~2.5s depois — resolve: a porta só... fecha nornal, sem
+        //      nada saindo dela. Nada aconteceu.
+        //   3. ~6s depois disso — um período de silêncio real (mesmo
+        //      mecanismo do evento 'silencio'), pra deixar a guarda baixar
+        //      antes de qualquer coisa seguinte — é isso que evita o
+        //      jogador aprender "porta = jumpscare" (o próximo evento,
+        //      quando vier, é sorteado normalmente, em outro lugar
+        //      qualquer, sem nenhuma relação com esta porta).
+        const d = pick(DOORS.filter((x) => x.kind === 'normal'));
+        if (!d) break;
+        const dArea = areaAt(d.x, d.y);
+        if (dArea) this.flicker.set(dArea.id, this.time + 2.4);
+        this.emitSfx('doorOpen', d.x + 0.5, d.y + 0.5, 22);
+        this.broadcast('fx', { type: 'tensionPulse', x: r2(d.x + 0.5), y: r2(d.y + 0.5) });
+        this.chains.schedule(rnd(2.2, 3.2), () => {
+          this.emitSfx('doorClose', d.x + 0.5, d.y + 0.5, 18);
+        });
+        this.chains.schedule(rnd(6, 9), () => {
+          this.broadcast('fx', { type: 'silence', dur: rnd(6, 9) });
+        });
+        break;
+      }
+      // Corrente assimétrica entre jogadores (pedido #17) — usa EventChains
+      // pra espaçar os dois "lados" no tempo, exatamente como o exemplo
+      // do pedido: A recebe um sinal só pra ele; alguns segundos depois,
+      // OUTRO jogador (que pode estar numa sala totalmente diferente)
+      // recebe um sinal diferente, sem relação óbvia nenhuma com o que A
+      // recebeu — quem não é A nem B não percebe nada disso acontecendo.
+      case 'ecoEntreJogadores': {
+        const a = target;
+        const others = players.filter((p) => p.id !== a.id);
+        if (!others.length) break;
+        const b = pick(others);
+        // Passo 1 (agora): A ouve passos atrás — mesma apresentação do
+        // evento 'passosAtras' solo, mas aqui é o PRIMEIRO tempo de uma
+        // corrente, não o evento inteiro.
+        const ang1 = (a.dir || 0) + Math.PI + rnd(-0.4, 0.4);
+        this.sendTo(a, 'fx', {
+          type: 'sfx', s: 'stepsBehind',
+          x: r2(a.x + Math.cos(ang1) * rnd(2.5, 4)), y: r2(a.y + Math.sin(ang1) * rnd(2.5, 4)),
+        });
+        // Passo 2 (8-16s depois): B — se ainda estiver vivo e jogando —
+        // vislumbra alguma coisa onde ELE estiver naquele momento (não
+        // onde A está), sem nenhum aviso pra A de que isso aconteceu.
+        this.chains.schedule(rnd(8, 16), () => {
+          const bNow = this.players.get(b.id);
+          if (!bNow || !bNow.alive || bNow.hidden) return;
+          const ang2 = Math.random() * Math.PI * 2;
+          this.sendTo(bNow, 'fx', {
+            type: 'glimpse',
+            x: r2(bNow.x + Math.cos(ang2) * rnd(4, 6)), y: r2(bNow.y + Math.sin(ang2) * rnd(4, 6)),
+            kind: pick(TYPE_LIST.slice(0, 4)),
+          });
+        });
+        break;
+      }
+      case 'observando': {
+        // A criatura só observa de longe, sem se aproximar de verdade —
+        // usa um animatrônico real (sprite/tipo real), mas ele continua
+        // fazendo o que já estava fazendo no jogo; isso aqui é só a
+        // "aparição" que o jogador vê, não uma perseguição de verdade
+        // (pedido #5/#8: nem todo encontro termina em ataque).
+        const watching = this.anims.filter((a) => !['DISABLED', 'DORMANT', 'CHASE'].includes(a.state));
+        const anim = watching.length ? pick(watching) : pick(this.anims);
+        if (!anim) break;
+        const ang = Math.random() * Math.PI * 2;
+        this.sendTo(target, 'fx', {
+          type: 'sighting',
+          x: r2(target.x + Math.cos(ang) * rnd(7, 11)), y: r2(target.y + Math.sin(ang) * rnd(7, 11)),
+          kind: anim.type,
+        });
+        target.fear = Math.min(100, target.fear + 5 * target.derived.fearMult);
+        break;
+      }
     }
+    // Avisa o director o que de fato rodou — ele usa isso pra registrar
+    // exposição (pedido #9) e, se foi um evento 'real', entrar no
+    // período de recuperação pós-susto (pedido #12).
+    this.director.notifyEventRan(ev.t, ev.cat);
   }
 
   // ========================================================================
@@ -1382,11 +1601,18 @@ export class Match {
   // música por alguns segundos. No fim: tela preta, some tudo, energia
   // cai e as portas destrancam — alguém precisa ir resetar no
   // gerador/painel mais perto (ver 'campanel'/'generator' em interactObject).
+  // Reconstruído como uma sequência de VERDADE (pedido #9/#12/#27), não
+  // "show começou → animação → show terminou": começa normal de propósito
+  // (o jogador pensa "finalmente um momento tranquilo") e só depois
+  // pequenos detalhes começam a ficar errados — cada fase é anunciada por
+  // fx próprio (ver client/js/game.js onFx 'showPhase') e agendada com
+  // EventChains, então o timing todo mora aqui, num lugar só, em vez de
+  // espalhado em vários setTimeout do cliente como era antes.
   runShowEvent(trappedPlayers) {
     if (this.showActive || !trappedPlayers.length) return;
     this.showActive = true;
     this.lastShowAt = this.time;
-    const dur = rnd(15, 19);
+    const dur = rnd(19, 25);
     this.showEndAt = this.time + dur;
 
     // Sela as únicas passagens entre palco+salão e o resto do mapa —
@@ -1426,6 +1652,55 @@ export class Match {
     for (const p of trappedPlayers) p.fear = Math.min(100, p.fear + 22 * p.derived.fearMult);
     this.system(fala('showComeca'));
     this.system(fala('rShow', { nome: pick(trappedPlayers).name }));
+
+    // ---- resto da sequência (pedido #10/#12: música de verdade, com
+    // cada personagem "cantando" seu trecho, e as coisas só começando a
+    // ficar erradas depois de um tempo normal) ----
+    if (!ordered.length) return;
+    const featureEvery = Math.max(1.6, (dur - 4) / (ordered.length + 1));
+    let tCursor = 2.4; // pequeno silêncio antes da música começar de verdade — dá tempo do "vai começar" assentar
+    ordered.forEach((a, i) => {
+      this.chains.schedule(tCursor, () => {
+        if (!this.showActive || !a.performing) return;
+        this.broadcast('fx', { type: 'showPhase', phase: 'atuacao', feature: a.type, idx: i, of: ordered.length });
+      });
+      tCursor += featureEvery;
+    });
+
+    // Fase "pequena falha" (pedido #12): uma luz falha por um instante,
+    // a música continua — ninguém "percebe" (nenhum efeito de medo).
+    const glitch1At = Math.min(dur - 5, tCursor + 0.6);
+    this.chains.schedule(glitch1At, () => {
+      if (!this.showActive) return;
+      this.flicker.set('palco', this.time + 1.1);
+      this.broadcast('fx', { type: 'showPhase', phase: 'falhaSutil' });
+    });
+
+    // Fase "estranho" (pedido #12): UM animatrônico específico — sempre
+    // que possível o Maestro, senão outro qualquer do elenco — demora uma
+    // fração de segundo pra acompanhar e olha pra direção errada por um
+    // instante, depois volta. É só um dir diferente por 1.4s (o mesmo
+    // campo que já rege pra onde o sprite olha — não precisa de nenhuma
+    // animação nova no cliente pra isso aparecer).
+    const oddAt = Math.min(dur - 3.2, glitch1At + rnd(2.5, 4));
+    this.chains.schedule(oddAt, () => {
+      if (!this.showActive) return;
+      const off = ordered.find((a) => a.type === 'maestro' && a.performing) || pick(ordered.filter((a) => a.performing));
+      if (!off) return;
+      const savedDir = off.dir;
+      off.dir = savedDir + Math.PI * (0.4 + Math.random() * 0.3) * (Math.random() < 0.5 ? 1 : -1);
+      this.broadcast('fx', { type: 'showPhase', phase: 'estranho', anim: off.id });
+      this.chains.schedule(1.4, () => { if (off.performing) off.dir = savedDir; });
+    });
+
+    // Fase "quebra" (existente — o próprio Match/cliente já tratam o
+    // 1.8s final como a hora do "susto de verdade" saindo do palco; aqui
+    // só avisamos o cliente do nome da fase pra ele conseguir reagir de
+    // forma consistente com as fases anteriores em vez de um timer solto).
+    this.chains.schedule(Math.max(0, dur - 1.8), () => {
+      if (!this.showActive) return;
+      this.broadcast('fx', { type: 'showPhase', phase: 'quebra' });
+    });
   }
 
   endShowEvent() {

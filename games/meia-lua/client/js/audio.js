@@ -19,6 +19,12 @@ class AudioSystem {
     this.ctx = null;
     this.ready = false;
     this.loops = new Map();
+    // Funções chamadas a cada frame (ver update() lá embaixo) pros loops
+    // de ambiente que têm um "evento" esparso e irregular dentro deles —
+    // faísca da sala elétrica, pingo do porão, tilintar da cozinha (ver
+    // createLoop) — de propósito NÃO usam um LFO regular, porque um
+    // padrão regular vira previsível/mecânico rápido demais pro ouvido.
+    this.ambientTickers = [];
     this.heartbeatUntil = 0;
     this.nextBeat = 0;
     this.nextCreak = 0;
@@ -366,6 +372,48 @@ class AudioSystem {
         this.tone(o, t, tt - t, { type: 'sine', freq: 233.08 * Math.SQRT2, vol: 0.025 });
         break;
       }
+      // Motivo vocal/instrumental de cada personagem durante "Hora do
+      // Show" (ver o fx 'showPhase' phase:'atuacao' — Match.js escala o
+      // holofote entre os animatrônicos do elenco, um de cada vez, e o
+      // cliente toca o motivo correspondente aqui). Curto de propósito
+      // (a "fala" de cada um no meio da música, não uma música inteira) e
+      // no mesmo espírito tímbrico de JUMPSCARE_VOICES (grave e gutural /
+      // molhado / agudo insetóide / metálico / dissonante-musical), só
+      // que em registro de "cantando", não de "gritando".
+      case 'showFeatureTonho':
+        [98, 110, 87.3].forEach((f, i) => this.tone(o, t + i * 0.22, 0.5, { type: 'triangle', freq: f, vol: 0.22, attack: 0.04 }));
+        break;
+      case 'showFeatureMarola': {
+        const lfo = this.ctx.createOscillator(); lfo.frequency.value = 5.5;
+        const lg = this.ctx.createGain(); lg.gain.value = 8; lfo.connect(lg); lfo.start(t); lfo.stop(t + 0.9);
+        [174.6, 196, 220].forEach((f, i) => {
+          const oo = this.ctx.createOscillator(); oo.type = 'sine'; oo.frequency.setValueAtTime(f, t + i * 0.24);
+          lg.connect(oo.detune);
+          const gg = this.ctx.createGain(); gg.gain.setValueAtTime(0.0001, t + i * 0.24);
+          gg.gain.exponentialRampToValueAtTime(0.2, t + i * 0.24 + 0.05);
+          gg.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.24 + 0.3);
+          oo.connect(gg); gg.connect(o); oo.start(t + i * 0.24); oo.stop(t + i * 0.24 + 0.35);
+        });
+        break;
+      }
+      case 'showFeatureLume':
+        [880, 1046, 1318, 1046].forEach((f, i) => this.tone(o, t + i * 0.1, 0.14, { type: 'square', freq: f, vol: 0.1, attack: 0.005 }));
+        break;
+      case 'showFeatureGregorio':
+        this.ringMod(o, t, 0.7, { type: 'sawtooth', freq: 78, mod: 24, vol: 0.28, attack: 0.02 });
+        this.tone(o, t, 0.6, { type: 'square', freq: 78, vol: 0.12 });
+        break;
+      case 'showFeatureMaestro':
+        // Um acorde só (ele é "o maestro" — não canta uma frase, marca o
+        // compasso), quase musical mesmo sendo dissonante.
+        [261.6, 311.1, 392, 466.2].forEach((f) => this.tone(o, t, 1.1, { type: 'sawtooth', freq: f, vol: 0.09, attack: 0.06 }));
+        break;
+      // Fase "estranho" (ver Match.js runShowEvent) — um soluço bem curto
+      // no áudio, quase como se a faixa tivesse pulado um instante.
+      case 'showGlitch':
+        this.duck(0.18);
+        this.noise(o, t, 0.15, { type: 'highpass', freq: 3500, vol: 0.2 });
+        break;
       case 'static': this.noise(o, t, 0.4, { type: 'highpass', freq: 2500, vol: 0.4 }); break;
       case 'flare': this.noise(o, t, 1.4, { type: 'highpass', freq: 1500, vol: 0.6, attack: 0.05 }); this.tone(o, t, 0.2, { type: 'square', freq: 90, vol: 0.4 }); break;
       case 'tired': this.noise(o, t, 0.9, { type: 'bandpass', freq: 700, q: 3, vol: 0.4, attack: 0.2 }); break;
@@ -381,6 +429,30 @@ class AudioSystem {
         this.noise(o, t, 1.15, { type: 'bandpass', freq: 220, q: 1.1, vol: 0.55, attack: 0.5 });
         this.noise(o, t + 0.08, 0.95, { type: 'lowpass', freq: 340, vol: 0.32, attack: 0.6 });
         this.tone(o, t, 1.2, { type: 'sine', freq: 62, freqEnd: 46, vol: 0.26, attack: 0.5 });
+        break;
+      // Passos atrás do jogador que somem quando ele vira (ver o case
+      // 'passosAtras' em Match.js, server) — só 2-3 passadas curtas e
+      // abafadas, nunca uma caminhada completa; ninguém está lá de verdade.
+      case 'stepsBehind':
+        for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) {
+          this.noise(o, t + i * (0.3 + Math.random() * 0.12), 0.12, { type: 'lowpass', freq: 260, vol: 0.4, attack: 0.01 });
+        }
+        break;
+      // Respiração distante e ambígua (ver o case 'respiracaoDistante' em
+      // Match.js) — parecida com 'presence' só que mais fraca e sem
+      // crescimento/corte abrupto, porque dessa vez não é bem perto do
+      // ouvido, é alguma coisa "lá longe".
+      case 'breathDistant':
+        this.noise(o, t, 1.4, { type: 'bandpass', freq: 180, q: 1, vol: 0.22, attack: 0.4 });
+        this.tone(o, t, 1.4, { type: 'sine', freq: 55, vol: 0.1, attack: 0.4 });
+        break;
+      // Pulso de tensão de um susto falso (ver o case 'falsoAlarme' em
+      // Match.js): a mesma "subida" sonora de um jumpscare de verdade, só
+      // que cortada bem antes de explodir — o alívio de "não era nada" é
+      // proposital (pedido #6).
+      case 'tensionPulse':
+        this.tone(o, t, 0.9, { type: 'sawtooth', freq: 70, freqEnd: 130, vol: 0.14, attack: 0.1 });
+        this.noise(o, t + 0.15, 0.5, { type: 'highpass', freq: 1800, vol: 0.15, attack: 0.1 });
         break;
       case 'hurt': this.tone(o, t, 0.3, { type: 'square', freq: 150, freqEnd: 60, vol: 0.3 }); break;
       case 'wings': for (let i = 0; i < 8; i++) this.noise(o, t + i * 0.06, 0.05, { type: 'bandpass', freq: 400, q: 1, vol: 0.4 }); break;
@@ -502,6 +574,60 @@ class AudioSystem {
       const g2 = ctx.createGain(); g2.gain.value = 0.3;
       lfo.connect(lg); lg.connect(g2.gain); lfo.start(); nodes.push(lfo);
       n.connect(g2); g2.connect(gain);
+    // ---- paisagens sonoras por área (ver shared/areaProfiles.js —
+    // AREA_PROFILE.<id>.ambience aponta pra um desses nomes) — cada uma
+    // com um timbre bem diferente das outras, de propósito (pedido: "não
+    // use o mesmo loop de áudio em todas as salas").
+    } else if (name === 'engine') {
+      // Sala de Máquinas: motor pesado grave + batida mecânica irregular.
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 260;
+      osc('sawtooth', 41, 0.22).connect(lp);
+      osc('square', 41.6, 0.1, 5).connect(lp);
+      lp.connect(gain);
+      const beatLfo = ctx.createOscillator(); beatLfo.type = 'square'; beatLfo.frequency.value = 2.1;
+      const beatGain = ctx.createGain(); beatGain.gain.value = 0.06;
+      beatLfo.connect(beatGain); beatGain.connect(gain); beatLfo.start(); nodes.push(beatLfo);
+      noise('lowpass', 220, 0.08).connect(gain);
+    } else if (name === 'buzz') {
+      // Sala Elétrica: zumbido de 60Hz + faíscas de alta frequência que
+      // entram e saem sem ritmo fixo (Math.random no lugar de um LFO
+      // regular, pra não virar um padrão previsível).
+      osc('sawtooth', 60, 0.09).connect(gain);
+      osc('square', 120, 0.03).connect(gain);
+      const spark = noise('highpass', 4200, 0.0001, 4);
+      this.ambientTickers.push(() => {
+        if (Math.random() < 0.02) spark.gain.setTargetAtTime(0.12, ctx.currentTime, 0.005);
+        else spark.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.08);
+      });
+      spark.connect(gain);
+    } else if (name === 'drip') {
+      // Porão/banheiros/manutenção: ressonância de água + pingos
+      // espaçados de forma irregular (mesma técnica do 'buzz' acima).
+      noise('bandpass', 900, 0.05, 3).connect(gain);
+      const drop = noise('bandpass', 2200, 0.0001, 8);
+      this.ambientTickers.push(() => {
+        if (Math.random() < 0.012) drop.gain.setTargetAtTime(0.18, ctx.currentTime, 0.002);
+        else drop.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.25);
+      });
+      drop.connect(gain);
+    } else if (name === 'radio') {
+      // Segurança/Sala de Controle/Sala Secreta: chiado de rádio com uma
+      // portadora fraca por baixo — nunca chega a formar uma frase, só
+      // sugere que "tem um sinal ali" (ambiguidade proposital).
+      noise('bandpass', 2600, 0.06, 1.4).connect(gain);
+      const carrier = ctx.createOscillator(); carrier.type = 'sine'; carrier.frequency.value = 1000;
+      const cg = ctx.createGain(); cg.gain.value = 0.015;
+      carrier.connect(cg); cg.connect(gain); carrier.start(); nodes.push(carrier);
+    } else if (name === 'kitchen') {
+      // Cozinha: zumbido de refrigeração + tilintar metálico esparso.
+      osc('sine', 150, 0.07).connect(gain);
+      noise('bandpass', 3000, 0.02, 2).connect(gain);
+      const clink = noise('bandpass', 3800, 0.0001, 12);
+      this.ambientTickers.push(() => {
+        if (Math.random() < 0.008) clink.gain.setTargetAtTime(0.1, ctx.currentTime, 0.003);
+        else clink.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.2);
+      });
+      clink.connect(gain);
     }
     return { gain, nodes };
   }
@@ -523,6 +649,10 @@ class AudioSystem {
       if (Math.random() < 0.5) this.tone(o, t, 1.3, { type: 'sawtooth', freq: 300 + Math.random() * 200, freqEnd: 200, vol: 0.05 });
       else this.noise(o, t, 1.5, { type: 'bandpass', freq: 200 + Math.random() * 400, q: 8, vol: 0.3, attack: 0.4 });
     }
+    // só roda o ticker de um loop de ambiente se ele já foi criado (ver
+    // createLoop) — senão é trabalho à toa pra um loop que está mudo/nem
+    // existe ainda.
+    for (const fn of this.ambientTickers) fn();
   }
 
   stopAll() {

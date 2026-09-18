@@ -14,6 +14,14 @@ export const ANIM_TYPES = {
     doorTime: 1.4, home: { x: 26.5, y: 16.5 },
     patrol: ['palco', 'salao', 'corredor_oeste', 'corredor_norte', 'corredor_leste', 'escritorio', 'seguranca'],
     idle: [4, 9], shyOnCamera: true, rolls: true, chaseLimit: 7, tiredTime: 4.5,
+    // "Observante": de vez em quando, em vez de rondar normal, ele para a
+    // uma certa distância e só fica ali, encarando — sem se aproximar,
+    // sem atacar (ver OBSERVE em Animatronic.js) — e depois some. Só os
+    // 3 com essa flag entram nesse comportamento; os outros dois (Marola,
+    // Lume) são mais sobre velocidade/perseguição do que sobre presença
+    // silenciosa (pedido #14: "cada animatronic deve possuir
+    // personalidade comportamental").
+    observant: true,
   },
   marola: {
     speed: 1.45, chase: 4.6, sight: 9, fov: 95, hearing: 8, damage: 30,
@@ -41,13 +49,13 @@ export const ANIM_TYPES = {
     blackoutStalker: true, // evento: quando a energia acaba, ele para de
     // rondar normal e vem caçando por audição (ver Animatronic.startBlackoutHunt) —
     // só dá pra ver os olhos brilhando dele no escuro até a luz voltar.
-    chaseLimit: 8, tiredTime: 4,
+    chaseLimit: 8, tiredTime: 4, observant: true,
   },
   maestro: {
     speed: 1.35, chase: 2.9, sight: 12, fov: 360, hearing: 18, damage: 75,
     doorTime: 0.8, home: { x: 31.5, y: 14.5 },
     patrol: ['palco', 'salao', 'corredor_norte', 'corredor_leste', 'corredor_oeste', 'cozinha', 'banheiros', 'porao', 'sala_secreta', 'deposito', 'escritorio', 'seguranca'],
-    idle: [2, 5], conductor: true, blinks: true, dormant: true, chaseLimit: 9, tiredTime: 3.5,
+    idle: [2, 5], conductor: true, blinks: true, dormant: true, chaseLimit: 9, tiredTime: 3.5, observant: true,
   },
   pipoca: {
     speed: 0, chase: 0, sight: 6, fov: 360, hearing: 0, damage: 0,
@@ -57,6 +65,12 @@ export const ANIM_TYPES = {
   },
 };
 
-export const STATES = ['IDLE', 'PATROL', 'INVESTIGATE', 'CHASE', 'SEARCH', 'RETURN', 'STUNNED', 'DORMANT', 'DISABLED', 'ALERT'];
+// OBSERVE adicionado no FIM da lista de propósito (índice 10) — o código
+// de estado (STATE_CODE) vai pro snapshot da rede como número (ver
+// Match.js ~linha 1633), e o cliente decodifica de volta pelo MESMO índice
+// numa cópia própria dessa lista (ver STATES em client/js/render.js) —
+// adicionar no fim em vez de no meio não muda o índice de nenhum estado
+// que já existia.
+export const STATES = ['IDLE', 'PATROL', 'INVESTIGATE', 'CHASE', 'SEARCH', 'RETURN', 'STUNNED', 'DORMANT', 'DISABLED', 'ALERT', 'OBSERVE'];
 export const STATE_CODE = Object.fromEntries(STATES.map((s, i) => [s, i]));
 export const TYPE_LIST = Object.keys(ANIM_TYPES);

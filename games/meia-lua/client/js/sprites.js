@@ -279,6 +279,13 @@ export const FLOOR_COLORS = {
   azulejo: ['#6f7a79', '#636d6c'],
   cozinha: ['#67645d', '#5a5751'],
   externo: ['#1c1d1f', '#18191b'],
+  // Ala de Serviço — três paletas novas, cada uma com sua própria
+  // personalidade (pedido: "cada área precisa possuir... identidade
+  // visual"), evitando reaproveitar concreto/carpete pras 3 salas que
+  // mais precisam parecer diferentes de tudo que já existia.
+  maquinas: ['#2a2c24', '#232520'], // sala de máquinas: verde-oliva sujo de óleo
+  manutencao: ['#33302a', '#2b2822'], // manutenção: marrom-cinza poeirento
+  eletrica: ['#2a2f1a', '#232714'], // sala elétrica: amarelo-oliva de aviso, mais escuro
 };
 
 export function drawFloorTile(c, floor, px, py, T, tx, ty) {

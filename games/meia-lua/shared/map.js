@@ -3,7 +3,13 @@
 
 export const TILE = { FLOOR: 0, WALL: 1, SOLID: 2 };
 export const MAP_W = 72;
-export const MAP_H = 48;
+// Era 48 — a "ala de serviço" nova (ver bloco de AREAS logo abaixo, depois
+// do comentário "ALA DE SERVIÇO") vive inteiramente em linhas y48-63, que
+// não existiam antes. Crescer só pra baixo (em vez de reencaixar o mapa
+// antigo) foi de propósito: zero coordenada de sala/porta/câmera/animatrônico
+// já existente mudou de lugar, então nada do que já funcionava e já foi
+// testado corre risco de ter sido quebrado por essa expansão.
+export const MAP_H = 64;
 
 export const AREAS = [
   { id: 'deposito', name: 'Depósito', x1: 1, y1: 1, x2: 11, y2: 10, floor: 'concreto' },
@@ -19,6 +25,23 @@ export const AREAS = [
   { id: 'banheiros', name: 'Banheiros', x1: 52, y1: 12, x2: 62, y2: 20, floor: 'azulejo' },
   { id: 'cozinha', name: 'Cozinha', x1: 52, y1: 22, x2: 68, y2: 36, floor: 'cozinha' },
   { id: 'exterior', name: 'Área Externa', x1: 1, y1: 38, x2: 70, y2: 46, floor: 'externo', outdoor: true },
+
+  // ---- ALA DE SERVIÇO (pedido de mapa maior/com função própria) ----
+  // Só acessível de um jeito: pela Área Externa, pela porta d_ala_servico
+  // (ver DOORS) — é um puxadinho de manutenção nos fundos do prédio, não
+  // outra ala "principal". Sala de Máquinas é a entrada; dali um corredor
+  // de serviço distribui pras outras 5 salas, cada uma com identidade e
+  // função própria (não é só corredor comprido, ver PROPS/OBJECTS abaixo).
+  { id: 'sala_maquinas', name: 'Sala de Máquinas', x1: 28, y1: 48, x2: 42, y2: 53, floor: 'maquinas', dark: true },
+  { id: 'corredor_servico', name: 'Corredor de Serviço', x1: 5, y1: 55, x2: 69, y2: 56, floor: 'ladrilho' },
+  { id: 'manutencao', name: 'Manutenção', x1: 5, y1: 58, x2: 16, y2: 63, floor: 'manutencao' },
+  { id: 'sala_eletrica', name: 'Sala Elétrica', x1: 18, y1: 58, x2: 29, y2: 63, floor: 'eletrica' },
+  { id: 'estoque', name: 'Estoque', x1: 31, y1: 58, x2: 44, y2: 63, floor: 'concreto' },
+  { id: 'area_funcionarios', name: 'Área dos Funcionários', x1: 46, y1: 58, x2: 57, y2: 63, floor: 'carpete' },
+  // Sala de Controle secundária: única área do mapa SEM câmera nenhuma
+  // apontada pra ela (ver CAMERAS abaixo) — o próprio painel de câmeras
+  // não alcança essa sala, de propósito.
+  { id: 'sala_controle', name: 'Sala de Controle', x1: 59, y1: 58, x2: 68, y2: 63, floor: 'secreta', safeLight: true },
 ];
 export const AREA_BY_ID = Object.fromEntries(AREAS.map((a, i) => [a.id, { ...a, index: i }]));
 
@@ -41,6 +64,23 @@ export const DOORS = [
   { id: 'd_cozinha', x: 51, y: 28, kind: 'normal', name: 'Porta da Cozinha' },
   { id: 'd_secreta', x: 57, y: 11, kind: 'normal', name: 'Porta Selada' },
   { id: 'd_fundos', x: 60, y: 37, kind: 'normal', name: 'Porta dos Fundos' },
+
+  // Segunda porta da Sala de Segurança (pedido: sala de segurança com duas
+  // entradas, uma de cada lado — a existente d_seguranca já dá pro
+  // Corredor Oeste a leste; essa aqui abre direto pro Depósito ao norte).
+  // Dá pra perceber som vindo de UM lado específico sem ver o outro — é
+  // essa assimetria que cria a tensão espacial pedida (ver TensionDirector
+  // e os eventos 'passosAtras'/'somAssimetrico' em Match.js).
+  { id: 'd_seguranca_norte', x: 6, y: 11, kind: 'normal', name: 'Porta Norte da Segurança' },
+
+  // ---- Ala de Serviço ----
+  { id: 'd_ala_servico', x: 35, y: 47, kind: 'normal', name: 'Porta da Ala de Serviço' },
+  { id: 'd_maquinas_corredor', x: 35, y: 54, kind: 'normal', name: 'Porta da Sala de Máquinas' },
+  { id: 'd_manutencao', x: 10, y: 57, kind: 'normal', name: 'Porta da Manutenção' },
+  { id: 'd_eletrica', x: 23, y: 57, kind: 'power', name: 'Porta da Sala Elétrica' },
+  { id: 'd_estoque', x: 37, y: 57, kind: 'normal', name: 'Porta do Estoque' },
+  { id: 'd_funcionarios', x: 51, y: 57, kind: 'normal', name: 'Porta da Área dos Funcionários' },
+  { id: 'd_controle', x: 63, y: 57, kind: 'normal', name: 'Porta da Sala de Controle' },
 ];
 export const DOOR_BY_ID = Object.fromEntries(DOORS.map((d) => [d.id, d]));
 
@@ -93,6 +133,29 @@ prop('pecas', 35, 3, false, 3, 1);
 prop('pecas', 54, 5, false, 2, 2);
 prop('pecas', 59, 6, false, 2, 1);
 prop('cabos', 52, 1, false, 11, 1);
+// Ala de Serviço — reaproveita o mesmo vocabulário visual de porão/cozinha/
+// segurança (não inventa tipo de prop novo sem sprite: ver PROP_SPRITE em
+// client/js/render.js e o switch em client/js/sprites.js drawProp — um tipo
+// sem case ali não desenha nada, então reaproveitar é o que garante que
+// essas salas não fiquem vazias).
+prop('caldeira', 30, 49, true, 2, 2);
+prop('caldeira', 38, 51, true, 2, 2);
+prop('canos', 28, 48, false, 15, 1);
+prop('pecas', 33, 52, false, 3, 1);
+prop('prateleira', 6, 59, true, 7, 1);
+prop('prateleira', 6, 62, true, 7, 1);
+prop('caixotes', 13, 62, true, 2, 1);
+prop('cabos', 18, 58, false, 11, 1);
+prop('pecas', 22, 61, false, 3, 1);
+prop('prateleira', 32, 59, true, 8, 1);
+prop('caixotes', 32, 61, true, 2, 2);
+prop('caixotes', 40, 61, true, 2, 1);
+prop('mesa', 49, 60, false);
+prop('mesa', 53, 60, false);
+prop('cadeiras', 49, 62, true);
+prop('quadro', 46, 58, false);
+prop('mesa_monitores', 60, 59, true, 6, 1);
+prop('fitas', 66, 61, true, 2, 1);
 // Exterior
 prop('carro', 8, 41, true, 3, 2);
 prop('carro', 50, 42, true, 3, 2);
@@ -167,6 +230,30 @@ export const OBJECTS = [
   { id: 'o_doc3', type: 'document', x: 53, y: 9, name: 'Diário do Gerente' },
   { id: 'o_mural', type: 'lore', x: 31, y: 23, name: 'Mural de Aniversários' },
   { id: 'o_portao', type: 'gate', x: 35, y: 45, name: 'Portão de Saída' },
+
+  // ---- Ala de Serviço ----
+  // Só tipos 100% genéricos aqui (container/hide/console/breaker) — nenhum
+  // deles depende de nenhuma quest/id pré-cadastrado em outro arquivo (ver
+  // interactObject() em Match.js: 'document'/'investigate'/'campanel'/
+  // 'generator' são amarrados a quests específicas e um objeto novo desses
+  // sem uma quest cadastrada pra ele ficaria mudo — por isso não usei
+  // nenhum desses tipos aqui).
+  { id: 'c_maquinas', type: 'container', x: 41, y: 50, name: 'Caixa de Ferramentas Pesadas' },
+  { id: 'c_kit_manutencao', type: 'container', x: 15, y: 59, name: 'Kit de Manutenção' },
+  { id: 'c_estoque_ala', type: 'container', x: 43, y: 59, name: 'Caixa de Estoque' },
+  { id: 'c_funcionarios_ala', type: 'container', x: 56, y: 61, name: 'Armário dos Funcionários' },
+  { id: 'c_controle', type: 'container', x: 67, y: 62, name: 'Gaveta da Sala de Controle' },
+  { id: 'h_maquinas', type: 'hide', x: 29, y: 52, name: 'Atrás da Caldeira' },
+  { id: 'h_eletrica', type: 'hide', x: 19, y: 62, name: 'Atrás dos Painéis' },
+  // Segundo disjuntor físico: reaproveita o mesmo type 'breaker' do
+  // o_disjuntor original — interactObject() só olha o.type, então isso já
+  // funciona como um segundo interruptor de verdade pras mesmas luzes
+  // (ver o case 'breaker' em Match.js), sem precisar de nenhuma lógica nova.
+  { id: 'o_disjuntor2', type: 'breaker', x: 20, y: 60, name: 'Disjuntor Auxiliar' },
+  // Segundo painel de câmeras: mesmo raciocínio, o case 'console' só abre
+  // o painel de câmeras de todo mundo — não é um console "da sala", é só
+  // mais um jeito de acessar o mesmo sistema.
+  { id: 'o_console_controle', type: 'console', x: 61, y: 61, name: 'Console de Controle' },
 ];
 export const OBJECT_BY_ID = Object.fromEntries(OBJECTS.map((o) => [o.id, o]));
 
@@ -183,6 +270,14 @@ export const CAMERAS = [
   { id: 'cam9', name: 'CAM 09 · Porão', area: 'porao', cx: 31.5, cy: 5, vw: 30, vh: 10 },
   { id: 'cam10', name: 'CAM 10 · Área Externa', area: 'exterior', cx: 35, cy: 42, vw: 40, vh: 12 },
   { id: 'cam11', name: 'CAM 11 · Sala Secreta', area: 'sala_secreta', cx: 57, cy: 5.5, vw: 14, vh: 12 },
+  // Ala de Serviço — 5 câmeras novas cobrem 5 das 6 salas; a Sala de
+  // Controle (ver AREAS) fica de propósito fora da rede de câmeras.
+  { id: 'cam12', name: 'CAM 12 · Sala de Máquinas', area: 'sala_maquinas', cx: 35, cy: 50.5, vw: 15, vh: 6 },
+  { id: 'cam13', name: 'CAM 13 · Corredor de Serviço', area: 'corredor_servico', cx: 37, cy: 55.5, vw: 65, vh: 3 },
+  { id: 'cam14', name: 'CAM 14 · Manutenção', area: 'manutencao', cx: 10.5, cy: 60.5, vw: 12, vh: 6 },
+  { id: 'cam15', name: 'CAM 15 · Sala Elétrica', area: 'sala_eletrica', cx: 23.5, cy: 60.5, vw: 12, vh: 6 },
+  { id: 'cam16', name: 'CAM 16 · Estoque', area: 'estoque', cx: 37.5, cy: 60.5, vw: 14, vh: 6 },
+  { id: 'cam17', name: 'CAM 17 · Área dos Funcionários', area: 'area_funcionarios', cx: 51.5, cy: 60.5, vw: 12, vh: 6 },
 ];
 export const CAMERA_BY_ID = Object.fromEntries(CAMERAS.map((c) => [c.id, c]));
 
