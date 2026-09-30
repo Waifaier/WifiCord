@@ -170,6 +170,17 @@ export class TensionDirector {
     return 1 / (1 + n * 0.55);
   }
 
+  // Incrementa a contagem de exposição de um tipo sem os efeitos colaterais
+  // de notifyEventRan (que é específico do sistema de eventos ambientes,
+  // com o reset de tensão pra categoria 'real'). Usado por
+  // Match.resolveEncounter pra alimentar exposureFactor() com os desfechos
+  // do EncounterResolver (prefixados 'enc:' pra nunca colidir com os tipos
+  // de evento ambiente, ex. 'flicker'/'silencio') — mesmo mecanismo de
+  // raridade adaptativa, aplicado também às perseguições/aparições.
+  bumpExposure(type) {
+    this.exposure.set(type, (this.exposure.get(type) || 0) + 1);
+  }
+
   // Chamado pelo Match logo depois de executar o evento sorteado.
   notifyEventRan(type, category) {
     this.exposure.set(type, (this.exposure.get(type) || 0) + 1);

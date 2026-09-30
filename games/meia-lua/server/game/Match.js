@@ -18,7 +18,7 @@ import { areaProfile } from '../../shared/areaProfiles.js';
 import { EventChains } from './EventChains.js';
 import { PlayerAnimatronic } from './PlayerAnimatronic.js';
 import { animCountFor, pickAnimTypes, abilityDef, CHASE as ANIM_CHASE } from '../../shared/animatronicMode.js';
-import { resolveEncounter as pickEncounterOutcome } from '../ai/EncounterResolver.js';
+import { resolveEncounter as pickEncounterOutcome, OUTCOMES as ENCOUNTER_OUTCOMES } from '../ai/EncounterResolver.js';
 
 const TICK_MS = 50;
 const SNAP_EVERY = 2; // 10 snapshots/s
@@ -97,6 +97,12 @@ export class Match {
     // evento permitida a cada momento (fases calma/estranheza/tensão/...);
     // o sorteio e a execução de cada evento continuam 100% aqui no Match.
     this.director = new TensionDirector(this.duration);
+    // Variação aleatória por PARTIDA (não por evento) nos pesos do
+    // EncounterResolver — sorteada uma vez aqui e reaproveitada a noite
+    // toda (ver EncounterResolver.contextMult, ctx.jitter), pra quem joga
+    // várias noites não conseguir decorar com precisão milimétrica o
+    // comportamento de cada animatrônico.
+    this.encounterJitter = Object.fromEntries(ENCOUNTER_OUTCOMES.map((o) => [o, rnd(0.85, 1.15)]));
     // "O jogador não sabe que entrou num jogo de terror" — ver a filosofia
     // completa no topo do commit. Dois marcos controlam isso:
     //  - firstEncounterDone: já rolou a primeira aparição CALMA de um
@@ -1296,9 +1302,15 @@ export class Match {
       trigger,
       isolated: this.isolationOf(target),
       recent: this.director?.recentOutcomes(anim.id) ?? [],
+      // Raridade por exposição na partida INTEIRA (qualquer animatrônico) +
+      // viés aleatório fixo desta partida — ver EncounterResolver.js e
+      // TensionDirector.bumpExposure/exposureFactor.
+      exposureFor: (o) => this.director?.exposureFactor('enc:' + o) ?? 1,
+      jitter: this.encounterJitter,
     };
     const outcome = pickEncounterOutcome(anim.type, ctx, Math.random);
     this.director?.recordOutcome(anim.id, outcome);
+    this.director?.bumpExposure('enc:' + outcome);
     anim.encounterCd = rnd(...(ENCOUNTER_COOLDOWN[outcome] || [3, 6]));
     switch (outcome) {
       case 'chase': {

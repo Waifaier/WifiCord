@@ -24,12 +24,14 @@ export const OUTCOMES = [
   'doorManipulate', 'manifest', 'relocate', 'chase', 'flee', 'inexplicable',
 ];
 
-// Pesos-base (antes de qualquer modulação). "chase" começa como a fatia
-// individual mais comum, mas ainda pequena frente às outras 10 somadas —
-// isso sozinho já garante que perseguir nunca seja "o óbvio" (pedido #1).
+// Pesos-base (antes de qualquer modulação). "chase" era a fatia individual
+// mais comum (20) — rebaixado pra 14 (empatado com "nothing") depois do
+// pedido de deixar o terror menos previsível: mesmo no auge da tensão,
+// perseguir não deveria ser "o óbvio" com folga tão grande sobre as outras
+// 10 possibilidades.
 const BASE_WEIGHTS = {
   nothing: 14, observe: 10, vanish: 8, environmental: 11, block: 6,
-  doorManipulate: 6, manifest: 9, relocate: 4, chase: 20, flee: 6, inexplicable: 7,
+  doorManipulate: 6, manifest: 9, relocate: 4, chase: 14, flee: 6, inexplicable: 7,
 };
 
 // Multiplicadores por "filosofia comportamental" de cada animatrônico
@@ -83,11 +85,23 @@ function contextMult(outcome, ctx) {
   let m = 1;
   const t = ctx.tension ?? 0.3; // 0..1, ver TensionDirector.intensity01
 
-  if (outcome === 'chase') m *= 0.55 + t * 1.5; // raro no início, comum perto do pico
+  // Rampa de "chase" suavizada (pedido: terror menos previsível) — antes
+  // chegava a ~2.05x no pico da tensão, o que junto com o peso-base mais
+  // alto fazia perseguir virar "o esperado" assim que a tensão subia. Teto
+  // agora é ~1.55x.
+  if (outcome === 'chase') m *= 0.45 + t * 1.1;
   if (outcome === 'manifest') m *= 0.7 + t * 0.9;
   if (outcome === 'environmental') m *= 0.85 + t * 0.5;
   if (outcome === 'nothing') m *= 1.3 - t * 0.9; // mais raro no pico, nunca impossível
   if (outcome === 'observe') m *= 1.1 - t * 0.3;
+  // Proporção "susto falso" x "ameaça real" (referência de design: ~3:1 no
+  // começo da partida, ~1:1 perto do pico) — manifest/doorManipulate/
+  // inexplicable são os "quase aconteceu alguma coisa" que nunca viram
+  // perseguição de verdade, e ficam proporcionalmente mais comuns quando a
+  // tensão ainda está baixa/média, cedendo espaço ao resto perto do pico.
+  if (outcome === 'manifest' || outcome === 'doorManipulate' || outcome === 'inexplicable') {
+    m *= 1.15 - t * 0.35;
+  }
 
   // Gatilho de origem: um apagão (Gregório) pesa diferente de um simples
   // "te vi de relance" — precisa continuar genuinamente perigoso.
@@ -124,6 +138,21 @@ function contextMult(outcome, ctx) {
   const ix = recent.indexOf(outcome);
   if (ix === 0) m *= 0.22;
   else if (ix === 1) m *= 0.55;
+
+  // Raridade por EXPOSIÇÃO NA PARTIDA INTEIRA (pedido: "sustos muito
+  // repetitivos e previsíveis" — o anti-repetição acima só olha os últimos
+  // 2 encontros DESSE animatrônico; isto olha quantas vezes esse TIPO de
+  // desfecho já rolou na noite inteira, de qualquer bicho, ficando mais
+  // raro conforme se repete — ver TensionDirector.exposureFactor/
+  // bumpExposure, chamado por Match.resolveEncounter). Função injetável
+  // pra este arquivo continuar puro/testável sem importar Match aqui.
+  if (typeof ctx.exposureFor === 'function') m *= ctx.exposureFor(outcome);
+
+  // Variação por PARTIDA (não por evento): viés aleatório sorteado uma vez
+  // quando a partida começa e reaproveitado a noite toda (ver
+  // Match.encounterJitter) — pra quem joga várias noites não conseguir
+  // decorar com precisão milimétrica o comportamento de cada animatrônico.
+  if (ctx.jitter && ctx.jitter[outcome] != null) m *= ctx.jitter[outcome];
 
   return Math.max(0, m);
 }
