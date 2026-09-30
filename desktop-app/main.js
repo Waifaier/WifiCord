@@ -11,7 +11,7 @@ const { autoUpdater } = require('electron-updater');
 
 // URL do seu servidor hospedado. Pode trocar via variável de ambiente
 // WIFICORD_URL sem precisar mexer no código (útil pra testar local x produção).
-const SERVER_URL = process.env.WIFICORD_URL || 'https://wificord.onrender.com';
+const SERVER_URL = process.env.WIFICORD_URL || 'https://wificord.duckdns.org';
 
 // O som de notificação (client/js/sounds.js, padrão "message"/"notification")
 // é sintetizado via Web Audio API (AudioContext) na própria página — não é

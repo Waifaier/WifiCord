@@ -3,11 +3,11 @@
 	"appName": "WifiCord",
 	"webDir": "www",
 	"server": {
-		"url": "https://wificord.onrender.com",
+		"url": "https://wificord.duckdns.org",
 		"cleartext": false,
 		"allowNavigation": [
-			"wificord.onrender.com",
-			"*.onrender.com"
+			"wificord.duckdns.org",
+			"*.duckdns.org"
 		]
 	},
 	"android": {
