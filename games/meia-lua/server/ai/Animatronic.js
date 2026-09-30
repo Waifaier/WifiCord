@@ -360,6 +360,20 @@ export class Animatronic {
       case 'OBSERVE': this.updateObserve(dt); break;
     }
 
+    // Fora de CHASE (que já tem a própria lógica de distância/ataque) e
+    // OBSERVE (que já se afasta sozinho abaixo de 3, ver updateObserve):
+    // nada nunca impedia o animatrônico de andar POR CIMA/ATRAVÉS de um
+    // jogador rondando/investigando/procurando — sem nenhuma colisão entre
+    // os dois, a rota podia passar bem em cima de alguém parado ali. Isso
+    // sempre existiu, mas ficou muito mais visível depois do ajuste de
+    // terror que reduziu o chase automático (agora um "viu e não virou
+    // nada" é comum — ver EncounterResolver — e sem essa reação o bicho só
+    // segue a própria rota como se o jogador nem estivesse ali: "me veem,
+    // ficam me rodeando, atravessando como se eu não existisse"). Não é
+    // física de verdade, só um empurrão mínimo pra fora de um raio de
+    // "espaço pessoal" — barato e não muda nenhuma decisão de estado.
+    if (this.state !== 'CHASE' && this.state !== 'OBSERVE') this.avoidPlayerOverlap();
+
     // Maestro: pisca para perto dos jogadores quando está entediado
     if (this.def.blinks && (this.state === 'PATROL' || this.state === 'IDLE')) {
       this.blinkCd -= dt;
@@ -642,6 +656,31 @@ export class Animatronic {
     if (Number.isFinite(a)) this.dir = a;
   }
 
+  // Empurrão mínimo pra fora do "espaço pessoal" de qualquer jogador
+  // visível (não escondido) — ver o comentário grande em update() sobre
+  // por que isso existe. 0.75 fica abaixo do raio de ataque do CHASE
+  // (0.85, ver updateChase) de propósito: esse método nunca roda durante
+  // uma perseguição de verdade, então não interfere no "chegou perto o
+  // bastante pra atacar" — só evita o "atravessou andando à toa" fora
+  // disso. m.walkableFor() evita empurrar o bicho pra dentro de parede
+  // ou porta fechada; se isso acontecer (canto apertado), simplesmente
+  // não empurra nesse tick — inofensivo, tenta de novo no próximo.
+  avoidPlayerOverlap() {
+    const m = this.match;
+    const MIN_D = 0.75;
+    for (const p of m.alivePlayers()) {
+      if (p.hidden) continue;
+      const dx = this.x - p.x, dy = this.y - p.y;
+      const d = Math.hypot(dx, dy);
+      if (d >= MIN_D) continue;
+      let ux, uy;
+      if (d < 1e-4) { const a = Math.random() * Math.PI * 2; ux = Math.cos(a); uy = Math.sin(a); }
+      else { ux = dx / d; uy = dy / d; }
+      const nx = p.x + ux * MIN_D, ny = p.y + uy * MIN_D;
+      if (m.walkableFor(nx, ny)) { this.x = nx; this.y = ny; }
+    }
+  }
+
   updatePatrol(dt) {
     const done = this.followPath(dt);
     if (done || this.stateTime > this.stateDur) {
@@ -707,7 +746,7 @@ export class Animatronic {
       m.conductAlert(this, target);
     }
 
-    const dist = Math.hypot(target.x - this.x, target.y - this.y);
+    let dist = Math.hypot(target.x - this.x, target.y - this.y);
     if (dist < 0.85 && this.attackCd <= 0 && !target.hidden) {
       this.attackCd = 2.2;
       m.damagePlayer(target, this);
@@ -736,6 +775,30 @@ export class Animatronic {
       this.moving = true;
     } else {
       this.followPath(dt);
+    }
+
+    // Re-checa a distância DEPOIS de mover, no MESMO tick — antes, alcançar
+    // o alvo só "contava" pro ataque no próximo update(). Contra um jogador
+    // se afastando de verdade (o reflexo natural de quem percebeu que está
+    // sendo perseguido), isso criava uma corrida: o bicho fechava a
+    // distância nesse tick, mas como o ataque já tinha sido testado ANTES
+    // de mover (com a distância velha), só ia poder bater no tick seguinte
+    // — e se o jogador tivesse se afastado só um pouco nesse meio-tempo, a
+    // distância já voltava a ficar >= 0.85 antes de qualquer verificação
+    // nova acontecer. O resultado prático: o animatrônico ficava pra
+    // sempre "quase alcançando", passando pela posição onde o jogador tinha
+    // acabado de estar sem nunca bater de verdade — exatamente a sensação
+    // de "me rodeando, atravessando como se eu não existisse" numa
+    // perseguição de verdade (fora de CHASE, ver avoidPlayerOverlap() em
+    // update() pro mesmo problema nos outros estados).
+    if (this.state === 'CHASE') {
+      dist = Math.hypot(target.x - this.x, target.y - this.y);
+      if (dist < 0.85 && this.attackCd <= 0 && !target.hidden) {
+        this.attackCd = 2.2;
+        m.damagePlayer(target, this);
+        if (this.def.rolls && m.time < this.rollUntil) { this.stun(1.4); return; }
+        this.teleportAfterAttack(target);
+      }
     }
   }
 
