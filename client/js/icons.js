@@ -40,6 +40,16 @@
     close: svg('<path d="M6 6l12 12"/><path d="M18 6L6 18"/>'),
     megaphone: svg('<path d="M3 10v4a1 1 0 0 0 1 1h1.4l1.1 5h2l-1-5H9l10 4V6L9 10H4a1 1 0 0 0-1 1z"/><path d="M17.5 8.2a5 5 0 0 1 0 7.6"/>'),
     'check-circle': svg('<circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16 9.4"/>'),
+    volume: svg('<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 8.5a5 5 0 0 1 0 7"/><path d="M19.5 6a8.5 8.5 0 0 1 0 12"/>'),
+    trophy: svg('<path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 5H4a3 3 0 0 0 3 4M17 5h3a3 3 0 0 1-3 4"/><path d="M12 14v3M8 21h8M9 21v-2a3 3 0 0 1 3-2 3 3 0 0 1 3 2v2"/>'),
+    star: svg('<path d="M12 3l2.4 5.6 6 .5-4.6 4 1.4 6-5.2-3.3L6.8 19l1.4-6-4.6-4 6-.5z"/>'),
+    gift: svg('<rect x="3" y="9" width="18" height="12" rx="1"/><path d="M3 13h18M12 9v12"/><path d="M12 9C9.5 9 8 7.5 8 6a2 2 0 0 1 4 0v3zM12 9c2.5 0 4-1.5 4-3a2 2 0 0 0-4 0v3z"/>'),
+    rotate: svg('<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M9 20h6"/><path d="M4 8a7 7 0 0 1 12-4.9M20 16a7 7 0 0 1-12 4.9"/><path d="M4 4v4h4M20 20v-4h-4"/>'),
+    refresh: svg('<path d="M4 12a8 8 0 0 1 14-5.3L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-14 5.3L4 16"/><path d="M4 20v-4h4"/>'),
+    flag: svg('<path d="M6 3v18"/><path d="M6 4h11l-2.5 4L17 12H6"/>'),
+    // Varinha mágica + brilho: usado no botão de filtros de câmera da
+    // chamada (ver #call-toggle-filters em index.html/camera-filters.js).
+    wand: svg('<path d="M4 20L14 10"/><path d="M14 4l1.3 2.7L18 8l-2.7 1.3L14 12l-1.3-2.7L10 8l2.7-1.3z"/><path d="M19 14.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/>'),
   };
 
   function setIcon(id, name) {
@@ -74,6 +84,13 @@
     setIcon('incoming-call-accept', 'phone');
     setIcon('incoming-call-reject', 'phone-off');
     setIcon('sticker-btn', 'sparkles');
+    setIcon('chat-wallpaper-btn', 'image');
+    setIcon('pinned-messages-btn', 'pin');
+    setIcon('delete-dm-btn', 'trash');
+    setIcon('call-remote-volume-btn', 'volume');
+    setIcon('server-settings-lock', 'lock');
+    setIcon('camera-btn', 'camera');
+    setIcon('backflip-btn', 'rotate');
 
     // Qualquer elemento marcado com data-icon="nome" recebe o SVG
     // correspondente. Usado nos lugares gerados/estáticos do HTML que não

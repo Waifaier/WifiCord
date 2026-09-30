@@ -141,6 +141,14 @@
     screenSender: null, systemAudioSender: null,
     targetUserId: null, callType: 'video', inCall: false,
     micEnabled: true, camEnabled: false, headphonesOff: false,
+    // Filtros de câmera (WifiCordFilters, ver camera-filters.js): só ficam
+    // "ligados" (filterActive) depois que a pessoa escolhe pelo menos um
+    // filtro de verdade na bandeja — até lá a câmera sai crua, sem NENHUM
+    // overhead extra, pra não mudar o comportamento de quem nunca mexe
+    // nisso. filterId guarda o filtro atual só pra desenhar a bandeja
+    // (destacar o botão escolhido); quem manda de verdade é o próprio
+    // módulo (window.WifiCordFilters).
+    filterActive: false, filterId: null, filterRawTrack: null,
     pendingOffer: null, pendingCandidates: [], pendingGroupCandidates: [],
     makingOffer: false, ignoreOffer: false, polite: false,
     isSettingRemoteAnswerPending: false, reconnectTimer: null,
@@ -235,6 +243,7 @@
       toggleScreenBtn: $('call-toggle-screen'), hangupBtn: $('call-hangup'),
       micMenuBtn: $('call-mic-menu'), camMenuBtn: $('call-cam-menu'),
       micDevices: $('call-mic-devices'), camDevices: $('call-cam-devices'),
+      filtersBtn: $('call-toggle-filters'), filtersTray: $('call-filters-tray'),
       startVoiceBtn: $('start-voice-call-btn'), startVideoBtn: $('start-video-call-btn'),
       incomingModal: $('modal-incoming-call'), incomingText: $('incoming-call-text'), incomingAvatar: $('incoming-call-avatar'),
       acceptBtn: $('incoming-call-accept'), rejectBtn: $('incoming-call-reject'), callFullscreen: $('call-fullscreen'),
@@ -627,6 +636,8 @@
     if (el.toggleMicBtn) el.toggleMicBtn.setAttribute('aria-label', state.micEnabled ? 'Desativar microfone' : 'Ativar microfone');
     if (el.toggleCamBtn) el.toggleCamBtn.setAttribute('aria-label', state.camEnabled ? 'Desativar câmera' : 'Ativar câmera');
     if (el.toggleScreenBtn) el.toggleScreenBtn.setAttribute('aria-label', state.screenStream ? 'Parar compartilhamento' : 'Compartilhar tela');
+    el.filtersBtn?.classList.toggle('call-btn-active', !!state.filterId);
+    if (el.filtersBtn) el.filtersBtn.setAttribute('aria-label', state.filterId ? 'Trocar ou desligar filtro de câmera' : 'Filtros de câmera');
   }
 
   function closeModals() {
@@ -1787,6 +1798,19 @@
     state.inCall = false;
     clearTimeout(state.pc?._wifiIceStuckTimer);
     try { state.pc?.close(); } catch (_) {}
+    // Desliga o pipeline de filtros ANTES de parar as tracks do stream
+    // local: com um filtro ativo, a track de vídeo que está em
+    // state.localStream é a PROCESSADA (canvas.captureStream), não a
+    // crua da câmera — a crua fica guardada só por dentro do módulo (ver
+    // comentário em WifiCordFilters.detach()), então sem parar
+    // state.filterRawTrack aqui o dispositivo físico ficava "aceso"
+    // (LED ligado) mesmo com a chamada já encerrada.
+    if (state.filterActive) {
+      window.WifiCordFilters?.detach();
+      state.filterRawTrack?.stop();
+    }
+    state.filterActive = false; state.filterId = null; state.filterRawTrack = null;
+    el.filtersTray?.classList.add('hidden');
     state.localStream?.getTracks().forEach(t => t.stop());
     state.screenStream?.getTracks().forEach(t => t.stop());
     if (state.localAudioCtx) state.localAudioCtx.close().catch(() => {});
@@ -1839,7 +1863,19 @@
       let track = state.localStream.getVideoTracks()[0];
       if (!track) {
         const fresh = await navigator.mediaDevices.getUserMedia({ video: makeMediaConstraints(true).video, audio: false });
-        track = fresh.getVideoTracks()[0];
+        const rawTrack = fresh.getVideoTracks()[0];
+        // Se um filtro já estava ativo antes da câmera ter sido religada
+        // (ex.: desligou a câmera com um filtro escolhido, religou depois),
+        // a track nova crua passa pelo mesmo pipeline em vez de ir direto —
+        // reaproveita a track de SAÍDA já existente (ver attach() em
+        // camera-filters.js), então nenhum replaceTrack extra é necessário
+        // além do que já acontece logo abaixo.
+        if (state.filterActive && window.WifiCordFilters) {
+          track = await window.WifiCordFilters.attach(rawTrack);
+          state.filterRawTrack = rawTrack;
+        } else {
+          track = rawTrack;
+        }
         state.localStream.addTrack(track);
         if (state.groupMode) {
           for (const p of state.groupPeers.values()) {
@@ -1887,8 +1923,24 @@
       ? { audio: { deviceId: { exact: id }, echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }
       : { audio: false, video: { deviceId: { exact: id }, width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30, max: 60 } } };
     const fresh = await navigator.mediaDevices.getUserMedia(constraints);
-    const track = isAudio ? fresh.getAudioTracks()[0] : fresh.getVideoTracks()[0];
+    let track = isAudio ? fresh.getAudioTracks()[0] : fresh.getVideoTracks()[0];
     if (!track) throw new Error('O dispositivo não forneceu uma faixa utilizável.');
+    // Trocar de câmera com um filtro ativo: a track crua da câmera NOVA
+    // passa pelo mesmo pipeline de filtros antes de virar a track de
+    // verdade usada abaixo — sem isso, trocar de câmera "tiraria" o filtro
+    // sem avisar (ver attach() em camera-filters.js: reaproveita a mesma
+    // track de saída, só troca o srcObject do vídeo interno).
+    if (!isAudio && state.filterActive && window.WifiCordFilters) {
+      const oldRawTrack = state.filterRawTrack; // câmera anterior, "por dentro" do módulo de filtros
+      const rawTrack = track;
+      track = await window.WifiCordFilters.attach(rawTrack);
+      state.filterRawTrack = rawTrack;
+      // attach() só troca o srcObject internamente, nunca para a track
+      // crua antiga por conta própria (ver comentário em detach() no
+      // módulo) — sem isso a câmera anterior continuava ligada/travada
+      // mesmo depois de trocar pra outra.
+      if (oldRawTrack && oldRawTrack !== rawTrack) oldRawTrack.stop();
+    }
     const old = isAudio ? state.localStream.getAudioTracks()[0] : state.localStream.getVideoTracks()[0];
     track.enabled = isAudio ? state.micEnabled : state.camEnabled;
 
@@ -1901,9 +1953,17 @@
       const sender = isAudio ? state.pc._wifiAudioSender : state.pc._wifiVideoSender;
       if (sender) await sender.replaceTrack(track);
     }
-    if (old) old.stop();
-    if (isAudio) state.localStream.removeTrack(old); else if (old) state.localStream.removeTrack(old);
-    state.localStream.addTrack(track);
+    // Com filtro de câmera ativo, WifiCordFilters.attach() devolve sempre a
+    // MESMA track de saída de antes (ver comentário acima) — "old" e
+    // "track" acabam sendo o mesmo objeto nesse caso, e não há nada pra
+    // parar/trocar no stream local (só a entrada crua por trás dela mudou,
+    // por dentro do módulo). Sem essa checagem, old.stop() ia derrubar a
+    // própria track processada que "track" também aponta pra ela.
+    if (old !== track) {
+      if (old) old.stop();
+      if (old) state.localStream.removeTrack(old);
+      state.localStream.addTrack(track);
+    }
     if (!isAudio && !state.screenStream) ensureVideoPreview();
     const settings = window.Settings?.getMediaSettings?.() || {};
     if (isAudio) settings.audioDeviceId = id; else settings.videoDeviceId = id;
@@ -1916,6 +1976,7 @@
     const other = kind === 'audioinput' ? el.camDevices : el.micDevices;
     if (!box) return;
     other?.classList.add('hidden');
+    el.filtersTray?.classList.add('hidden');
     box.innerHTML = '<button disabled>Carregando…</button>';
     box.classList.remove('hidden');
     try {
@@ -1932,6 +1993,118 @@
         box.appendChild(b);
       });
     } catch (_) { box.classList.add('hidden'); }
+  }
+
+  // ---------------------------------------------------------------------
+  // Filtros de câmera (window.WifiCordFilters, ver client/js/camera-
+  // filters.js) — o mesmo motor de 43 filtros do protótipo cabine-de-
+  // filtros.html, adaptado pra receber a track CRUA que a própria call já
+  // capturou (nunca chama getUserMedia por conta própria) e devolver uma
+  // track PROCESSADA (canvas.captureStream) que entra no lugar da crua em
+  // tudo que já existia: state.localStream, o preview local e os
+  // _wifiVideoSender de cada peer (1:1 e grupo, replaceTrack — o mesmo
+  // mecanismo que toggleCam()/switchDevice() já usam, nenhuma rota nova).
+  //
+  // Fica "desligado" (filterActive=false) até a pessoa escolher um filtro
+  // de verdade pela primeira vez nessa chamada — só nesse momento a track
+  // crua é trocada pela processada. Quem nunca abre a bandeja de filtros
+  // não tem NENHUMA mudança de comportamento em relação a antes.
+
+  async function replaceVideoTrackOnAllSenders(track) {
+    if (state.groupMode) {
+      for (const p of state.groupPeers.values()) {
+        const sender = p.pc._wifiVideoSender;
+        if (sender) await sender.replaceTrack(track);
+      }
+    } else if (state.pc) {
+      const sender = state.pc._wifiVideoSender;
+      if (sender) await sender.replaceTrack(track);
+    }
+  }
+
+  // Liga o pipeline de filtros pela primeira vez nessa chamada: pega a
+  // track de vídeo crua que já está em uso, manda pro WifiCordFilters,
+  // troca ela pela processada em tudo (stream local, preview, senders).
+  // Chamadas seguintes (troca de filtro) NÃO passam por aqui de novo — só
+  // Window.WifiCordFilters.setFilter(id), reaproveitando a mesma track de
+  // saída (ver comentário grande em camera-filters.js: attach() é
+  // idempotente e devolve sempre a mesma track processada).
+  async function ensureFiltersAttached() {
+    if (state.filterActive) return true;
+    if (!window.WifiCordFilters) {
+      throw new Error('Filtros de câmera não estão disponíveis neste navegador.');
+    }
+    const rawTrack = state.localStream?.getVideoTracks()[0];
+    if (!rawTrack) {
+      throw new Error('Ligue a câmera antes de escolher um filtro.');
+    }
+    const processed = await window.WifiCordFilters.attach(rawTrack);
+    // Guardado pra endCall() conseguir parar o dispositivo físico de
+    // verdade — depois da troca abaixo, a track crua sai de
+    // state.localStream (só o módulo de filtros continua segurando ela
+    // por dentro), então sem essa referência a câmera ficaria "acesa" (luz
+    // do LED ligada) mesmo depois de a chamada encerrar.
+    state.filterRawTrack = rawTrack;
+    if (!processed || processed === rawTrack) { state.filterActive = true; return true; }
+    const wasEnabled = rawTrack.enabled;
+    state.localStream.removeTrack(rawTrack);
+    state.localStream.addTrack(processed);
+    processed.enabled = wasEnabled;
+    await replaceVideoTrackOnAllSenders(processed);
+    if (!state.screenStream) ensureVideoPreview();
+    state.filterActive = true;
+    return true;
+  }
+
+  // Chamado ao clicar num item da bandeja (inclusive "Original", que só
+  // desliga o filtro sem voltar pra track crua — ver passthrough em
+  // camera-filters.js, custo praticamente zero com filtro nenhum ativo).
+  async function selectFilter(id) {
+    const targetId = (id == null || id === 'original') ? null : id;
+    if (targetId == null && !state.filterActive) { renderFiltersTray(); return; } // já está "sem filtro", nada pra fazer
+    try {
+      await ensureFiltersAttached();
+      window.WifiCordFilters.setFilter(targetId);
+      state.filterId = targetId;
+      renderFiltersTray();
+      updateButtons();
+    } catch (e) {
+      window.App?.toast(e.message || 'Não foi possível aplicar o filtro.', 'error');
+    }
+  }
+
+  function renderFiltersTray() {
+    const box = el.filtersTray;
+    if (!box) return;
+    if (!window.WifiCordFilters) {
+      box.innerHTML = '<div class="call-filters-empty">Filtros indisponíveis neste navegador.</div>';
+      return;
+    }
+    const list = window.WifiCordFilters.listFilters();
+    box.innerHTML = '';
+    const noneBtn = document.createElement('button');
+    noneBtn.type = 'button';
+    noneBtn.className = 'call-filter-chip' + (state.filterId ? '' : ' active');
+    noneBtn.textContent = '🚫 Original';
+    noneBtn.addEventListener('click', () => selectFilter(null));
+    box.appendChild(noneBtn);
+    for (const f of list) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'call-filter-chip' + (state.filterId === f.id ? ' active' : '');
+      b.textContent = `${f.icon || '✨'} ${f.name}`;
+      b.addEventListener('click', () => selectFilter(f.id));
+      box.appendChild(b);
+    }
+  }
+
+  function toggleFiltersTray() {
+    if (!el.filtersTray) return;
+    const opening = el.filtersTray.classList.contains('hidden');
+    el.camDevices?.classList.add('hidden');
+    el.micDevices?.classList.add('hidden');
+    if (opening) { renderFiltersTray(); el.filtersTray.classList.remove('hidden'); }
+    else el.filtersTray.classList.add('hidden');
   }
 
   // O Chrome (e a maioria dos navegadores) simplesmente não sabe capturar
@@ -2623,6 +2796,7 @@
     el.toggleScreenBtn?.addEventListener('click', screenShare);
     el.micMenuBtn?.addEventListener('click', () => deviceMenu('audioinput'));
     el.camMenuBtn?.addEventListener('click', () => deviceMenu('videoinput'));
+    el.filtersBtn?.addEventListener('click', toggleFiltersTray);
     el.acceptBtn?.addEventListener('click', accept);
     el.rejectBtn?.addEventListener('click', reject);
     el.callFullscreen?.addEventListener('click', fullscreen);
