@@ -58,6 +58,19 @@
 
   const DEFAULT_W = 640, DEFAULT_H = 480; // fallback quando a track não informa resolução
 
+  // Teto de resolução INTERNA do pipeline de filtros (independente da
+  // resolução real da câmera). A chamada pede até 1920x1080 (ou
+  // 3840x2160 pra quem tem WFNA — ver makeMediaConstraints em call.js), e
+  // processar CADA pixel disso — detecção do MediaPipe, gradientes,
+  // partículas, remapeamento térmico pixel a pixel — em toda uma câmera
+  // 1080p/4K a cada frame é pesado demais pra qualquer celular aguentar
+  // (relato real: "meu celular só faltou explodir"). 720px no lado maior
+  // já é mais que suficiente pra uma prévia de chamada de vídeo (ninguém
+  // vê o filtro em tela cheia 4K) e derruba o custo por pixel em várias
+  // vezes comparado a 1080p/4K — a saída ainda vai pro WebRTC normalmente,
+  // só processada numa resolução menor.
+  const MAX_DIM = 720;
+
   /* =====================================================================
      ESTADO DO PIPELINE (vídeo oculto -> canvas oculto -> captureStream)
      Tudo isso é construído UMA VEZ em attach() e reaproveitado em chamadas
@@ -195,8 +208,17 @@
 
   function detectFace(ts) {
     if (!faceLandmarker || video.readyState < 2) return;
-    if (ts <= lastVideoTs) return;
-    lastVideoTs = ts;
+    // Sem isso, a detecção rodava em TODO frame de TELA (requestAnimationFrame,
+    // que em celular costuma ser 60-120Hz), mesmo a câmera só entregando um
+    // frame novo de verdade a ~30fps — reprocessando a MESMA imagem várias
+    // vezes à toa, o maior consumo de CPU/GPU do módulo inteiro (relato
+    // real: "meu celular só faltou explodir"). video.currentTime só avança
+    // quando o <video> decodifica um frame novo — comparar com ele em vez
+    // do timestamp do rAF prende a detecção no ritmo real da câmera, não
+    // da tela. `ts` (rAF) continua indo pro MediaPipe normalmente — ele só
+    // exige um número crescente, não que seja chamado em todo frame.
+    if (video.currentTime === lastVideoTs) return;
+    lastVideoTs = video.currentTime;
     let result;
     try { result = faceLandmarker.detectForVideo(video, ts); } catch (e) { return; }
     const lm = result && result.faceLandmarks && result.faceLandmarks[0];
@@ -314,8 +336,11 @@
 
   function detectHand(ts) {
     if (!handLandmarker || video.readyState < 2) return;
-    if (ts <= lastHandTs) return;
-    lastHandTs = ts;
+    // Mesmo motivo/comentário grande de detectFace() acima — prende a
+    // detecção ao ritmo real de frames da câmera (video.currentTime), não
+    // ao refresh da tela.
+    if (video.currentTime === lastHandTs) return;
+    lastHandTs = video.currentTime;
     let result;
     try { result = handLandmarker.detectForVideo(video, ts); } catch (e) { return; }
     const lm = result && result.landmarks && result.landmarks[0];
@@ -669,8 +694,9 @@
   }
   function detectSeg(ts) {
     if (!imageSegmenter || video.readyState < 2) return;
-    if (ts <= lastSegTs) return;
-    lastSegTs = ts;
+    // Mesmo motivo/comentário grande de detectFace() acima.
+    if (video.currentTime === lastSegTs) return;
+    lastSegTs = video.currentTime;
     let result;
     try { result = imageSegmenter.segmentForVideo(video, ts); } catch (e) { return; }
     const masks = result && result.confidenceMasks;
@@ -1975,11 +2001,20 @@
   /* =====================================================================
      LOOP PESADO (filtro ativo de verdade)
      ===================================================================== */
+  // Teto de ~30fps pro DESENHO pesado (detecção + partículas + gradientes
+  // etc.) — sem isso o loop rodava no refresh nativo da TELA (60-120Hz em
+  // boa parte dos celulares), fazendo o dobro/quádruplo de trabalho que
+  // qualquer chamada de vídeo realmente aproveita (a saída em si já sai
+  // limitada a CAPTURE_FPS=30 mais abaixo). Reagendar o rAF continua
+  // acontecendo todo frame (mantém o relógio fino pra próxima checagem),
+  // só o TRABALHO caro é que fica represado até passar tempo suficiente.
+  const RENDER_MIN_DT_MS = 1000 / 30;
   function renderLoop(ts) {
     if (!renderLoopRunning) return; // detach()/setFilter(null) já pararam — não reagenda
     rafId = requestAnimationFrame(renderLoop);
     if (!video || video.readyState < 2) return;
     if (!lastTs) lastTs = ts;
+    if (ts - lastTs < RENDER_MIN_DT_MS) return;
     const dt = Math.min(0.1, (ts - lastTs) / 1000);
     lastTs = ts;
 
@@ -2070,8 +2105,16 @@
     ensureElements();
 
     const settings = (typeof rawTrack.getSettings === 'function' && rawTrack.getSettings()) || {};
-    const w = settings.width || DEFAULT_W;
-    const h = settings.height || DEFAULT_H;
+    let w = settings.width || DEFAULT_W;
+    let h = settings.height || DEFAULT_H;
+    // Reduz proporcionalmente pro teto de MAX_DIM no lado maior, mantendo
+    // a proporção da câmera real (ver comentário em MAX_DIM acima).
+    const longEdge = Math.max(w, h);
+    if (longEdge > MAX_DIM) {
+      const scale = MAX_DIM / longEdge;
+      w = Math.round(w * scale);
+      h = Math.round(h * scale);
+    }
     resizeCanvas(w, h);
 
     rawStream = new MediaStream([rawTrack]);

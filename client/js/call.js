@@ -2080,7 +2080,12 @@
       box.innerHTML = '<div class="call-filters-empty">Filtros indisponíveis neste navegador.</div>';
       return;
     }
-    const list = window.WifiCordFilters.listFilters();
+    // O próprio módulo inclui um filtro 'original' na lista (é o
+    // passthrough dele, usado internamente) — o botão "Original" logo
+    // abaixo já cobre esse caso (desliga o filtro sem precisar de um id
+    // de verdade), então sem esse filtro aqui "Original" aparecia
+    // duplicado na bandeja.
+    const list = window.WifiCordFilters.listFilters().filter((f) => f.id !== 'original');
     box.innerHTML = '';
     const noneBtn = document.createElement('button');
     noneBtn.type = 'button';

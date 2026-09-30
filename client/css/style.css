@@ -2030,7 +2030,7 @@ body { min-width: 0; min-height: 100dvh; overflow: hidden; }
    .call-device-menu (posição, cores, sombra), só em grade de "chips" em vez
    de lista vertical, porque são ~44 opções e uma lista de botão por linha
    ficaria gigante/exigiria rolagem sem fim. */
-.call-filters-tray { position: absolute; bottom: calc(100% + 10px); left: 0; z-index: 100; width: min(380px, 84vw); max-height: 300px; overflow: auto; padding: 8px; border: 1px solid rgba(255,255,255,.1); border-radius: 12px; background: #171522; box-shadow: 0 18px 45px rgba(0,0,0,.5); display: flex; flex-wrap: wrap; gap: 6px; }
+.call-filters-tray { position: absolute; bottom: calc(100% + 10px); left: 0; z-index: 9999; width: min(380px, 84vw); max-height: 220px; overflow: auto; padding: 8px; border: 1px solid rgba(255,255,255,.14); border-radius: 12px; background: #171522; box-shadow: 0 18px 45px rgba(0,0,0,.6); display: flex; flex-wrap: wrap; gap: 6px; }
 .call-filter-chip { display: inline-flex; align-items: center; white-space: nowrap; padding: 7px 11px; border-radius: 999px; background: #232037; color: #eee; font-size: 13px; }
 .call-filter-chip:hover { background: #2f2a49; }
 .call-filter-chip.active { background: #22d3ee; color: #06232a; font-weight: 600; }
