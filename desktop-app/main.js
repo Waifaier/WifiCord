@@ -31,6 +31,14 @@ const SERVER_URL = process.env.WIFICORD_URL || 'https://wificord.duckdns.org';
 // política padrão do Chrome.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
+// No Electron 31 (Chromium 126) o capturador de JANELA via Windows Graphics
+// Capture falha com "NotReadableError: Could not start video source" para
+// qualquer janela escolhida no seletor — só "tela inteira" funcionava.
+// Desligar só o WGC de janela faz o Chromium usar o capturador clássico,
+// que entrega a imagem da janela normalmente (com o áudio 'loopback' junto).
+// A captura de tela inteira não é afetada.
+if (process.platform === 'win32') app.commandLine.appendSwitch('disable-features', 'AllowWgcWindowCapturer');
+
 let mainWindow = null;
 let tray = null;
 
