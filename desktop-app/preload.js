@@ -8,6 +8,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('wificordDesktop', {
+  platform: process.platform,
   onUpdateAvailable(callback) {
     ipcRenderer.on('wificord-update-available', () => {
       try { callback(); } catch (_) {}

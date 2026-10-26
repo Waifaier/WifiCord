@@ -402,10 +402,21 @@ function allowMediaPermissions() {
 // versão do Windows/macOS/Linux, mesmo sem suporte ao seletor nativo.
 function allowScreenShare() {
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    let origin;
+    try { origin = new URL(request.securityOrigin).origin; } catch (_) { callback({}); return; }
+    if (origin !== new URL(SERVER_URL).origin) { callback({}); return; }
     pickScreenSource()
-      .then((source) => { callback(source ? { video: source } : {}); })
+      .then((source) => {
+        if (!source) return callback({});
+        // Sem `audio` aqui o Electron devolve só vídeo, mesmo que o site
+        // peça áudio — era por isso que a apresentação pelo app saía muda.
+        // 'loopback' é o áudio de saída do Windows (não o microfone).
+        const streams = { video: source };
+        if (request.audioRequested && process.platform === 'win32') streams.audio = 'loopback';
+        callback(streams);
+      })
       .catch(() => callback({}));
-  }, { useSystemPicker: true });
+  }, { useSystemPicker: process.platform === 'darwin' });
 }
 
 let pickerWindow = null;
