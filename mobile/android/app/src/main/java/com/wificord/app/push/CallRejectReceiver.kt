@@ -12,6 +12,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import com.wificord.app.BuildConfig
 
 /**
  * Botão "Rejeitar" da notificação de ligação recebida — dá pra recusar
@@ -22,7 +23,7 @@ import java.io.IOException
 class CallRejectReceiver : BroadcastReceiver() {
 
     companion object {
-        private const val SERVER_BASE_URL = "https://wificord.onrender.com"
+        private const val SERVER_BASE_URL = BuildConfig.SERVER_BASE_URL
         private val http = OkHttpClient()
     }
 
@@ -30,7 +31,7 @@ class CallRejectReceiver : BroadcastReceiver() {
         val fromUserId = intent.getStringExtra("fromUserId")
         val notificationId = intent.getIntExtra("notificationId", 0)
 
-        context.getSystemService(NotificationManager::class.java)?.cancel(notificationId)
+        (context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as NotificationManager)?.cancel(notificationId)
 
         if (fromUserId.isNullOrBlank()) return
         val cookie = CookieManager.getInstance().getCookie(SERVER_BASE_URL) ?: return

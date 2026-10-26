@@ -27,6 +27,9 @@
 
         </activity>
 
+        <service android:name=".nativebridge.CallForegroundService" android:exported="false"
+            android:foregroundServiceType="microphone|camera|mediaProjection" />
+
         <!-- OBS: o serviço de primeiro plano da chamada (câmera/áudio/tela
              continuando mesmo com o app em segundo plano) entra na etapa do
              compartilhamento de tela nativo, junto com o resto do código de
@@ -91,6 +94,10 @@
 
     <!-- Manter a tela ligada durante uma chamada -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <!-- FOREGROUND_SERVICE_CAMERA/MICROPHONE/MEDIA_PROJECTION e
          SYSTEM_ALERT_WINDOW entram junto com o serviço de primeiro plano na
          etapa do compartilhamento de tela nativo. -->

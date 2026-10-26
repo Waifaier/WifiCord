@@ -16,8 +16,42 @@ import com.wificord.app.push.WifiCordFirebaseMessagingService
 import com.wificord.app.updater.UpdateCheckWorker
 import com.wificord.app.updater.UpdateManager
 import kotlinx.coroutines.launch
+import com.wificord.app.nativebridge.WifiCordNativePlugin
+import com.getcapacitor.BridgeWebChromeClient
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebChromeClient
+import android.widget.FrameLayout
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import android.content.res.Configuration
+import androidx.activity.OnBackPressedCallback
 
 class MainActivity : BridgeActivity() {
+    private var fullscreenView: View? = null
+    private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
+    private var immersiveRequested = false
+    private var fullscreenExit: (() -> Unit)? = null
+    private val fullscreenBack = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() { fullscreenExit?.invoke() }
+    }
+    override fun setImmersive(enabled: Boolean) {
+        immersiveRequested = enabled
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (enabled || fullscreenView != null) controller.hide(WindowInsetsCompat.Type.systemBars())
+        else controller.show(WindowInsetsCompat.Type.systemBars())
+    }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) setImmersive(immersiveRequested)
+    }
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        WifiCordNativePlugin.resizeScreen()
+        setImmersive(immersiveRequested)
+    }
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -27,7 +61,41 @@ class MainActivity : BridgeActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        registerPlugin(WifiCordNativePlugin::class.java)
         super.onCreate(savedInstanceState)
+        // O APK não usa @capacitor/app. Encaminha o botão físico à navegação
+        // real do cliente, sem finalizar a Activity nem interromper chamadas.
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                bridge.webView.evaluateJavascript(
+                    "(function(){if(window.WCMobileNavigation){window.WCMobileNavigation.back();}" +
+                        "else if(document.fullscreenElement){document.exitFullscreen();}})();",
+                    null
+                )
+            }
+        })
+        // Registrado depois: sair do vídeo em tela cheia tem prioridade.
+        onBackPressedDispatcher.addCallback(this, fullscreenBack)
+        // O cliente padrão do Capacitor 6 recusa CustomView. Mantém suas
+        // permissões de mídia, mas implementa a apresentação em tela cheia.
+        bridge.webView.webChromeClient = object : BridgeWebChromeClient(bridge) {
+            override fun onShowCustomView(view: View, callback: WebChromeClient.CustomViewCallback) {
+                if (fullscreenView != null) { callback.onCustomViewHidden(); return }
+                fullscreenView = view; fullscreenCallback = callback
+                fullscreenExit = { onHideCustomView() }; fullscreenBack.isEnabled = true
+                bridge.webView.visibility = View.GONE
+                (window.decorView as FrameLayout).addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                setImmersive(true)
+            }
+            override fun onHideCustomView() {
+                fullscreenView?.let { (it.parent as? ViewGroup)?.removeView(it) }
+                fullscreenView = null
+                fullscreenExit = null; fullscreenBack.isEnabled = false
+                bridge.webView.visibility = View.VISIBLE
+                fullscreenCallback?.onCustomViewHidden(); fullscreenCallback = null
+                setImmersive(false)
+            }
+        }
 
         requestNotificationPermissionIfNeeded()
         UpdateCheckWorker.schedulePeriodic(applicationContext)

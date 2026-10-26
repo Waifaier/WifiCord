@@ -1,4 +1,4 @@
-﻿package com.wificord.app.push
+package com.wificord.app.push
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -18,6 +18,12 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.wificord.app.MainActivity
+import com.wificord.app.BuildConfig
+import com.google.firebase.FirebaseApp
+import com.wificord.app.nativebridge.WifiCordNativePlugin
+import org.json.JSONObject
+import android.graphics.Color
+import android.net.Uri
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -42,7 +48,7 @@ import java.net.URL
 class WifiCordFirebaseMessagingService : FirebaseMessagingService() {
 
     companion object {
-        private const val SERVER_BASE_URL = "https://wificord.onrender.com"
+        private const val SERVER_BASE_URL = BuildConfig.SERVER_BASE_URL
         private const val CHANNEL_ID_CALLS = "wificord_incoming_calls"
         private const val CHANNEL_ID_MESSAGES = "wificord_messages"
         private const val CHANNEL_ID_ANNOUNCEMENTS = "wificord_announcements"
@@ -59,6 +65,7 @@ class WifiCordFirebaseMessagingService : FirebaseMessagingService() {
          * sessão.
          */
         fun syncTokenWithServer(context: Context) {
+            if (FirebaseApp.getApps(context).isEmpty()) return
             FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
                 registerTokenWithRetry(context.applicationContext, token, 0)
             }
@@ -105,6 +112,11 @@ class WifiCordFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
         val data = message.data
+        if (data["type"] == "incoming_call" || data["type"] == "new_message") {
+            val cookies = CookieManager.getInstance().getCookie(SERVER_BASE_URL).orEmpty()
+            if (cookies.split(';').none { it.trim().startsWith("connect.sid=") }) return
+        }
+        if (WifiCordNativePlugin.foreground && WifiCordNativePlugin.realtimeReady && data["type"] != "announcement") return
         when (data["type"]) {
             "incoming_call" -> {
                 val fromUserId = data["fromUserId"] ?: return
@@ -117,8 +129,8 @@ class WifiCordFirebaseMessagingService : FirebaseMessagingService() {
                 val fromName = data["fromName"]?.takeIf { it.isNotBlank() } ?: "Alguém"
                 val preview = data["preview"] ?: ""
                 val channelName = data["channelName"]?.takeIf { it.isNotBlank() }
-                val notificationKey = data["fromUserId"] ?: data["channelId"] ?: "msg"
-                showMessageNotification(notificationKey, fromName, preview, channelName)
+                val notificationKey = if (data["kind"] == "channel") data["channelId"] ?: "channel" else data["fromUserId"] ?: "dm"
+                showMessageNotification(notificationKey, fromName, preview, channelName, data["profile"], data["silent"] == "true")
             }
             "announcement" -> {
                 val title = data["title"]?.takeIf { it.isNotBlank() } ?: "Aviso do WifiCord"
@@ -171,15 +183,17 @@ class WifiCordFirebaseMessagingService : FirebaseMessagingService() {
 
         if (avatarBitmap != null) builder.setLargeIcon(avatarBitmap)
 
-        getSystemService(NotificationManager::class.java)?.notify(notificationId, builder.build())
+        (getSystemService(android.content.Context.NOTIFICATION_SERVICE) as NotificationManager)?.notify(notificationId, builder.build())
     }
 
-    private fun showMessageNotification(key: String, fromName: String, preview: String, channelName: String?) {
-        ensureMessageChannel()
+    private fun showMessageNotification(key: String, fromName: String, preview: String, channelName: String?, rawProfile: String?, silent: Boolean) {
+        val profile = try { JSONObject(rawProfile ?: "{}") } catch (_: Exception) { JSONObject() }
+        val preset = profile.optString("preset", "classic").takeIf { it in listOf("classic", "signal", "chime", "orbit", "arcade", "soft") } ?: "classic"
+        val channelId = ensureMessageChannel(preset)
         val notificationId = ("msg-$key").hashCode()
         val openAppPending = openAppPendingIntent(notificationId)
         val title = if (channelName != null) "$fromName em #$channelName" else fromName
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID_MESSAGES)
+        val builder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(applicationInfo.icon)
             .setContentTitle(title)
             .setContentText(preview)
@@ -188,7 +202,11 @@ class WifiCordFirebaseMessagingService : FirebaseMessagingService() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(openAppPending)
-        getSystemService(NotificationManager::class.java)?.notify(notificationId, builder.build())
+            .setSilent(silent)
+        val accent = profile.optString("accent", "#20cbd4")
+        if (Regex("^#[0-9a-fA-F]{6}$").matches(accent)) builder.setColor(Color.parseColor(accent))
+        if (Build.VERSION.SDK_INT < 26 && !silent) builder.setSound(toneUri(preset))
+        (getSystemService(android.content.Context.NOTIFICATION_SERVICE) as NotificationManager)?.notify(notificationId, builder.build())
     }
 
     private fun showAnnouncementNotification(title: String, body: String) {
@@ -203,12 +221,12 @@ class WifiCordFirebaseMessagingService : FirebaseMessagingService() {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .setContentIntent(openAppPending)
-        getSystemService(NotificationManager::class.java)?.notify(notificationId, builder.build())
+        (getSystemService(android.content.Context.NOTIFICATION_SERVICE) as NotificationManager)?.notify(notificationId, builder.build())
     }
 
     private fun ensureCallChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = getSystemService(NotificationManager::class.java) ?: return
+        val manager = (getSystemService(android.content.Context.NOTIFICATION_SERVICE) as NotificationManager) ?: return
         if (manager.getNotificationChannel(CHANNEL_ID_CALLS) != null) return
         val ringtone = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
         val audioAttrs = AudioAttributes.Builder()
@@ -223,20 +241,24 @@ class WifiCordFirebaseMessagingService : FirebaseMessagingService() {
         manager.createNotificationChannel(channel)
     }
 
-    private fun ensureMessageChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = getSystemService(NotificationManager::class.java) ?: return
-        if (manager.getNotificationChannel(CHANNEL_ID_MESSAGES) != null) return
-        val channel = NotificationChannel(CHANNEL_ID_MESSAGES, "Mensagens", NotificationManager.IMPORTANCE_HIGH).apply {
+    private fun toneUri(preset: String): Uri = Uri.parse("android.resource://$packageName/raw/notify_$preset")
+    private fun ensureMessageChannel(preset: String = "classic"): String {
+        val id = if (preset == "classic") CHANNEL_ID_MESSAGES else "${CHANNEL_ID_MESSAGES}_$preset"
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return id
+        val manager = (getSystemService(android.content.Context.NOTIFICATION_SERVICE) as NotificationManager) ?: return id
+        if (manager.getNotificationChannel(id) != null) return id
+        val channel = NotificationChannel(id, "Mensagens · $preset", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Avisa quando chega uma mensagem nova pelo WifiCord com o app fechado."
             enableVibration(true)
+            setSound(toneUri(preset), AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
         }
         manager.createNotificationChannel(channel)
+        return id
     }
 
     private fun ensureAnnouncementChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = getSystemService(NotificationManager::class.java) ?: return
+        val manager = (getSystemService(android.content.Context.NOTIFICATION_SERVICE) as NotificationManager) ?: return
         if (manager.getNotificationChannel(CHANNEL_ID_ANNOUNCEMENTS) != null) return
         val channel = NotificationChannel(CHANNEL_ID_ANNOUNCEMENTS, "Avisos do WifiCord", NotificationManager.IMPORTANCE_DEFAULT).apply {
             description = "Avisos da administração do WifiCord."
